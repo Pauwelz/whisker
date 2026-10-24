@@ -53,6 +53,8 @@ const (
 	methodChatRevoke    = "chat.revoke"
 	methodChatReact     = "chat.react"
 	methodChatTyping    = "chat.typing"
+	methodDraftGet      = "draft.get"
+	methodDraftSet      = "draft.set"
 	methodSettingsGet   = "settings.get"
 	methodSettingsSet   = "settings.set"
 	methodLogout        = "profile.logout"
@@ -260,6 +262,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					ID     string `json:"id"`
 					Emoji  string `json:"emoji"`
 					Quote  string `json:"quote"`
+					Edit   string `json:"edit"`
 					Path   string `json:"path"`
 					settings.Update
 				} `json:"params"`
@@ -286,6 +289,10 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				reply = chatsListReply(chats, req.ID, req.Params.Offset, req.Params.Limit, req.Params.Query, logOut)
 			} else if req.Method == methodChatMessages && ready {
 				reply = chatMessagesReply(chats, req.ID, req.Params.Chat, req.Params.Offset, req.Params.Limit, logOut)
+			} else if req.Method == methodDraftGet && ready {
+				reply = draftGetReply(chats, req.ID, req.Params.Chat, logOut)
+			} else if req.Method == methodDraftSet && ready {
+				reply = draftSetReply(chats, req.ID, req.Params.Chat, chatstore.Draft{Text: req.Params.Text, Quote: req.Params.Quote, Edit: req.Params.Edit}, logOut)
 			} else if req.Method == methodChatSend && ready && port.Linked() {
 				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, req.Params.Quote, logOut)
 			} else if req.Method == methodChatRetry && ready && port.Linked() {
@@ -342,6 +349,12 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			}
 			if listChanged && !send(notification("chatsChanged", nil)) {
 				return ExitError
+			}
+			// Sending or editing uses up the Draft of the Chat.
+			if (submit != nil && req.Method == methodChatSend) || (changed != nil && req.Method == methodChatEdit) {
+				if err := chats.ClearDraft(req.Params.Chat); err != nil {
+					fmt.Fprintln(logOut, "draft clear failed")
+				}
 			}
 			if submit != nil {
 				box.submit(*submit)

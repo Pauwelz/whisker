@@ -238,6 +238,7 @@ function foldChatFrame(state, frame) {
   if (frame.method === "connected") return withChanges(state, { connection: "online" })
   if (frame.method === "disconnected") return withChanges(state, { connection: "offline", activity: {} })
   if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
+  if (frame.result && frame.result.draft) return draftLoaded(state, frame.result)
   if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
   if (frame.result && frame.result.message) return upsertMessage(state, frame.result.message)
@@ -293,6 +294,48 @@ function messagesPage(state, result) {
   // shortcut: a Message with the same second as one already shown can land after it, upgrade to a (time, order) key if that shows.
   for (var i = 0; i < result.messages.length; i++) next = upsertMessage(next, result.messages[i])
   return withChanges(next, { openChat: withChanges(next.openChat, { moreMessages: result.more === true }) })
+}
+
+// The Draft of the open Chat: { text, quote, edit }. The Daemon stores it; `quote` and `edit` are Message ids or "".
+var EMPTY_DRAFT = { text: "", quote: "", edit: "" }
+
+function draftOf(state) {
+  return (state.openChat && state.openChat.draft) || EMPTY_DRAFT
+}
+
+// A draft.get result. The first one for the open Chat sets the Draft; a Draft that the user already changed stays.
+function draftLoaded(state, result) {
+  var chat = state.openChat
+  if (!chat || chat.jid !== result.chat || chat.draft !== undefined) return state
+  return withChanges(state, { openChat: withChanges(chat, { draft: result.draft }) })
+}
+
+// Changes the Draft of the open Chat. Returns the same state when nothing changes.
+function changeDraft(state, changes) {
+  if (!state.openChat) return state
+  var draft = withChanges(draftOf(state), changes)
+  var old = draftOf(state)
+  if (draft.text === old.text && draft.quote === old.quote && draft.edit === old.edit) return state
+  return withChanges(state, { openChat: withChanges(state.openChat, { draft: draft }) })
+}
+
+function clearDraft(state) {
+  return changeDraft(state, EMPTY_DRAFT)
+}
+
+// The Message that the Draft quotes (or edits, with `field` "edit"), if the Plugin has it loaded. Else null.
+function draftTarget(state, field) {
+  var id = draftOf(state)[field]
+  var messages = state.openChat ? state.openChat.messages : []
+  return id && messages.filter(function(m) { return m.id === id })[0] || null
+}
+
+function draftGetRequest(id, jid) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "draft.get", params: { chat: jid } }) + "\n"
+}
+
+function draftSetRequest(id, jid, draft) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "draft.set", params: { chat: jid, text: draft.text, quote: draft.quote, edit: draft.edit } }) + "\n"
 }
 
 // The request for one page of the Chat timeline. The next page starts at the number of Messages shown.

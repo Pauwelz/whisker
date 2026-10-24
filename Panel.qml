@@ -18,8 +18,10 @@ Panel {
   property bool showSettings: false
   property bool confirmLogout: false
   property string savingId: "" // the Message whose Save as path is being typed, or empty
-  property string editingId: "" // the Message under edit in the composer, or empty
-  property var quoting: null // the Message that the next send quotes, or null
+  // The Draft of the open Chat comes from the Daemon state. The Plugin changes it through Service.changeDraft.
+  readonly property var draft: State.draftOf(root.view)
+  readonly property string editingId: root.draft.edit // the Message under edit in the composer, or empty
+  readonly property var quoting: State.draftTarget(root.view, "quote") // the Message that the next send quotes, or null
   property string reactingId: "" // the Message whose Reaction picker is open, or empty
   readonly property var settings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
@@ -239,8 +241,6 @@ Panel {
             text: "Back: " + (root.openChat ? root.openChat.name : "")
             bordered: true
             onClicked: {
-              root.editingId = ""
-              root.quoting = null
               root.reactingId = ""
               root.whiskerService.closeChat()
             }
@@ -421,7 +421,7 @@ Panel {
                   text: "Quote"
                   bordered: true
                   onClicked: {
-                    root.quoting = modelData
+                    root.whiskerService.changeDraft({ quote: modelData.id })
                     composer.forceActiveFocus()
                   }
                 }
@@ -430,8 +430,7 @@ Panel {
                   text: "Edit"
                   bordered: true
                   onClicked: {
-                    root.editingId = modelData.id
-                    composer.text = modelData.text
+                    root.whiskerService.changeDraft({ edit: modelData.id, text: modelData.text })
                     composer.forceActiveFocus()
                   }
                 }
@@ -455,10 +454,7 @@ Panel {
             visible: root.editingId !== ""
             text: "Cancel edit"
             bordered: true
-            onClicked: {
-              root.editingId = ""
-              composer.text = ""
-            }
+            onClicked: root.whiskerService.changeDraft({ edit: "", text: "" })
           }
 
           Text {
@@ -477,7 +473,7 @@ Panel {
             visible: root.quoting !== null
             text: "Cancel quote"
             bordered: true
-            onClicked: root.quoting = null
+            onClicked: root.whiskerService.changeDraft({ quote: "" })
           }
 
           TextEdit {
@@ -488,15 +484,14 @@ Panel {
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.body
             onTextChanged: root.whiskerService.composerChanged(text)
+            readonly property string draftText: root.draft.text
+            onDraftTextChanged: if (text !== draftText) text = draftText
             Keys.onPressed: function(event) {
               var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text)
               if (action === "default") return
               event.accepted = true
               if (action === "send") {
-                root.whiskerService.submitComposer(root.editingId, text, root.quoting ? root.quoting.id : "")
-                root.editingId = ""
-                root.quoting = null
-                text = ""
+                root.whiskerService.submitComposer(text)
               }
             }
           }

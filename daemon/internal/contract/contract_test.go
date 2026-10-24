@@ -144,6 +144,18 @@ func (r *runner) finish() (int, []string, string) {
 	return code, rest, r.errOut.String()
 }
 
+// restart stops the Daemon. The next line starts a new one on the same Profile.
+func (r *runner) restart() {
+	code, rest, _ := r.finish()
+	if code != contract.ExitOK || len(rest) > 0 {
+		r.t.Errorf("restart: exit code %d, frames left %v", code, rest)
+	}
+	r.started = false
+	r.portMu.Lock()
+	r.port, r.portUsed = whatsapp.NewFake(), false // the new Daemon gets a fresh port that the fixture can script
+	r.portMu.Unlock()
+}
+
 func (r *runner) nextFrame() string {
 	r.t.Helper()
 	select {
@@ -247,6 +259,8 @@ func TestFixtures(t *testing.T) {
 					}
 				case "file":
 					r.checkFile(line)
+				case "restart":
+					r.restart()
 				case "clock":
 					r.start()
 					r.clock.Fire()

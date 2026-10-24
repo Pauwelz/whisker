@@ -57,6 +57,15 @@ Item {
     view = State.openChat(view, chat)
     syncAttention()
     daemon.write(State.messagesRequest(nextRequestId++, chat.jid, 0))
+    daemon.write(State.draftGetRequest(nextRequestId++, chat.jid))
+  }
+
+  // Called when the user changes the Draft: the composer text, or a Quote or Edit target. The Daemon stores it.
+  function changeDraft(changes) {
+    var next = State.changeDraft(view, changes)
+    if (next === view) return
+    view = next
+    daemon.write(State.draftSetRequest(nextRequestId++, view.openChat.jid, view.openChat.draft))
   }
 
   // Called by the IPC handler `openChat`, which a click on a notification runs.
@@ -79,6 +88,7 @@ Item {
   // Called by the composer when its text changes.
   function composerChanged(text) {
     if (!view.openChat) return
+    changeDraft({ text: text })
     var action = State.typingAction(typingChat !== "", text)
     if (action === "start") {
       typingChat = view.openChat.jid
@@ -198,11 +208,12 @@ Item {
     daemon.write(State.messagesRequest(nextRequestId++, view.openChat.jid, view.openChat.messages.length))
   }
 
-  // Called by the composer. `editingId` is the Message under edit, or "" for a new Message.
-  // A new Message: the Daemon stores it as pending and answers with it.
-  // `quoteId` is the Message to quote, or "" for none.
-  function submitComposer(editingId, text, quoteId) {
-    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, editingId, text, quoteId))
+  // Called by the composer. The Draft says whether this is an edit, and what the new Message quotes.
+  // The Daemon clears the Draft when it accepts the send or edit; the view clears its copy at once.
+  function submitComposer(text) {
+    var draft = State.draftOf(view)
+    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, draft.edit, text, draft.quote))
+    view = State.clearDraft(view)
   }
 
   // Called by the Reaction picker. `emoji` is the picked emoji; picking the current Reaction removes it.

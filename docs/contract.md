@@ -284,6 +284,16 @@ Params: `chat` and `id`. Same rules as `chat.edit`, without the 20 minute limit.
 
 A revoke from the phone or from the other Participant arrives as `messageChanged` with `revoked: true`. A revoke of an unknown or revoked Message sends nothing. Errors as for `chat.edit`. Fixture: `chat-revoke.jsonl`.
 
+### `draft.get`
+
+Params: `chat`. Valid once the Daemon is `ready`. The result is `{"chat": ..., "draft": {"text", "quote", "edit"}}`. A Draft is the unsent composition of one Chat: its text, the ID of the Message it quotes (`quote`) and the ID of the Message under edit (`edit`). An empty string means none. A Chat with no Draft gives three empty strings. The Daemon drops a `quote` or `edit` whose Message is gone or revoked. The Plugin sends it when it opens a Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`.
+
+### `draft.set`
+
+Params: `chat`, `text`, `quote` and `edit`. Valid once the Daemon is `ready`. It replaces the Draft of the Chat and answers with an empty result. An empty Draft removes it. The chat store keeps Drafts, so they survive a Daemon restart. The Plugin sends it on each change of the composer.
+
+Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is not a stored Message of the Chat. A successful `chat.send` or `chat.edit` clears the Draft of its Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`.
+
 ### Presence
 
 Presence flows both ways. The Daemon owns the rules; the Plugin only shows and reports.
@@ -421,6 +431,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `quoted` | `quotes` | The Go test checks the replies that the fake port has sent with a Quote so far, in order, as `"id:quotedID"`. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
 | `file` | `path`, and `content` or `missing` | The Go test checks a file: it holds `content`, or (`missing`: true) it does not exist. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
+| `restart` | none | The Go test stops the Daemon (stdin EOF, exit 0, no frame left) and starts a new one on the same Profile and settings. It gets a fresh fake port: script it again. The Plugin test ignores it. |
 | `plugin` | `openChat` | The Plugin test opens this Chat (`jid`, `name`, `kind`) as the user does. The Go test ignores it. |
 | `whatsapp` | one of the keys below | The Go test scripts the fake WhatsApp port. |
 
