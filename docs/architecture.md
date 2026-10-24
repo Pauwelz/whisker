@@ -135,7 +135,7 @@ If the download fails, the Plugin shows "Daemon download failed" with a retry ac
 ### Release flow
 
 1. Work happens on `dev`.
-2. To release version V: bump `manifest.json`, build, and publish release `vV` with the raw binary as its asset.
+2. To release version V: bump `manifest.json`, move the `[Unreleased]` entries in `CHANGELOG.md` to a `[V]` section, build, and publish release `vV` with the raw binary as its asset.
 3. Commit `SHA256SUMS` on top.
 4. Fast-forward `main` (the default branch) to that commit.
 
