@@ -109,6 +109,9 @@ func (b *outbox) flush() {
 	}
 }
 
+// chatMerged records that the LID Chat is now the phone Chat, for the sends that began in it.
+func (b *outbox) chatMerged(lid, phone string) { b.merged[lid] = phone }
+
 // done handles the end of a send. It returns false when a frame could not be written.
 func (b *outbox) done(r sendResult) bool {
 	if to, ok := b.merged[r.chat]; ok {
