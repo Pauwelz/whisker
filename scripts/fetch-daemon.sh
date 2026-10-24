@@ -7,7 +7,8 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 asset=whisker-daemon-linux-amd64
 # WHISKER_RELEASE_URL exists so the tests can use a file:// server.
 base=${WHISKER_RELEASE_URL:-https://github.com/Pauwelz/whisker/releases/download}
-version=$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$root/manifest.json")
+. "$root/scripts/manifest-version.sh"
+version=$(manifest_version "$root")
 [ -n "$version" ] || exit 20
 expected=$(sed -n "s/^\([0-9a-f]\{64\}\)  $asset\$/\1/p" "$root/SHA256SUMS" 2>/dev/null || true)
 [ -n "$expected" ] || exit 21

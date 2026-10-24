@@ -14,7 +14,8 @@ const sha = (text) => crypto.createHash("sha256").update(text).digest("hex");
 function run({ manifest = '{\n  "version": "1.2.3"\n}', sums, served = BODY } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "whisker-fetch-"));
   fs.mkdirSync(path.join(dir, "scripts"));
-  fs.copyFileSync(path.join(__dirname, "..", "scripts", "fetch-daemon.sh"), path.join(dir, "scripts", "fetch-daemon.sh"));
+  for (const script of ["fetch-daemon.sh", "manifest-version.sh"])
+    fs.copyFileSync(path.join(__dirname, "..", "scripts", script), path.join(dir, "scripts", script));
   fs.writeFileSync(path.join(dir, "manifest.json"), manifest);
   if (sums !== undefined) fs.writeFileSync(path.join(dir, "SHA256SUMS"), sums);
   const server = path.join(dir, "server", "v1.2.3");
