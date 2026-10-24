@@ -33,3 +33,15 @@ func TestHistoryAliasesReadsEveryMapping(t *testing.T) {
 		t.Errorf("historyAliases = %+v; want %+v", got, want)
 	}
 }
+
+func TestHistoryAliasesReadsConversationsThatCarryAPhone(t *testing.T) {
+	data := &waHistorySync.HistorySync{Conversations: []*waHistorySync.Conversation{
+		{ID: new("99@lid"), PnJID: new("3160@s.whatsapp.net")},
+		{ID: new("98@lid")},
+		{ID: new("3161@s.whatsapp.net"), PnJID: new("3161@s.whatsapp.net")},
+	}}
+	want := []ChatAlias{{"99@lid", "3160@s.whatsapp.net"}}
+	if got := historyAliases(data); !slices.Equal(got, want) {
+		t.Errorf("historyAliases = %+v; want %+v", got, want)
+	}
+}

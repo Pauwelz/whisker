@@ -25,6 +25,7 @@ import (
 
 // pairTimeout bounds the PairPhone network call. sendTimeout bounds one Send.
 // editTimeout bounds one Edit or Revoke, which block the Daemon loop.
+// storeTimeout bounds one call to the LID store.
 const (
 	pairTimeout = 30 * time.Second
 	sendTimeout = 90 * time.Second
@@ -32,6 +33,7 @@ const (
 	downloadTimeout = 10 * time.Minute
 	editTimeout     = 15 * time.Second
 	uploadTimeout   = 10 * time.Minute
+	storeTimeout    = 5 * time.Second
 )
 
 // Client is the whatsmeow adapter: the only place whatsmeow types appear.
@@ -460,7 +462,7 @@ func aliasOf(lid, phone types.JID) (ChatAlias, bool) {
 	return ChatAlias{LID: lid.ToNonAD().String(), Phone: phone.ToNonAD().String()}, true
 }
 
-// historyAliases are the LID to phone pairs in the mappings of a History Sync batch.
+// historyAliases are the LID to phone pairs of a History Sync batch: its mappings, then its conversations that carry a phone JID.
 func historyAliases(data *waHistorySync.HistorySync) []ChatAlias {
 	var out []ChatAlias
 	for _, m := range data.GetPhoneNumberToLidMappings() {
@@ -470,6 +472,13 @@ func historyAliases(data *waHistorySync.HistorySync) []ChatAlias {
 		}
 		if a, ok := aliasOf(lid, phoneOfConversation(m.GetPnJID())); ok {
 			out = append(out, a)
+		}
+	}
+	for _, conv := range data.GetConversations() {
+		if lid, err := types.ParseJID(conv.GetID()); err == nil {
+			if a, ok := aliasOf(lid, phoneOfConversation(conv.GetPnJID())); ok {
+				out = append(out, a)
+			}
 		}
 	}
 	return out
@@ -485,7 +494,6 @@ func (c *Client) emitLiveAlias(src types.MessageSource) {
 // historySync maps one History Sync batch, and lists the aliases that the batch taught. Chats that do not parse are dropped.
 func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []ChatAlias) {
 	batch := HistorySync{}
-	aliases := historyAliases(data)
 	for _, p := range data.GetPushnames() {
 		batch.PushNames = append(batch.PushNames, PushName{JID: c.phoneString(p.GetID()), Name: p.GetPushname()})
 	}
@@ -497,9 +505,6 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 		pn := phoneOfConversation(conv.GetPnJID())
 		if jid.Server == types.HiddenUserServer && !pn.IsEmpty() {
 			c.rememberPhone(jid, pn)
-			if a, ok := aliasOf(jid, pn); ok {
-				aliases = append(aliases, a)
-			}
 		}
 		jid = c.phone(jid, pn)
 		chat := HistoryChat{
@@ -527,7 +532,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 		}
 		batch.Chats = append(batch.Chats, chat)
 	}
-	return batch, aliases
+	return batch, historyAliases(data)
 }
 
 func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {
@@ -622,7 +627,7 @@ func (c *Client) lookupPhone(lid types.JID) (types.JID, error) {
 	if c.cli.Store.LIDs == nil {
 		return types.EmptyJID, errors.New("no LID store")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
 	defer cancel()
 	return c.cli.Store.LIDs.GetPNForLID(ctx, lid)
 }
@@ -648,7 +653,7 @@ func (c *Client) rememberPhone(lid, pn types.JID) {
 	if c.cli.Store.LIDs == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
 	defer cancel()
 	_ = c.cli.Store.LIDs.PutLIDMapping(ctx, lid.ToNonAD(), pn)
 }
