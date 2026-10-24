@@ -185,6 +185,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					Phone  string `json:"phone"`
 					Offset int    `json:"offset"`
 					Limit  int    `json:"limit"`
+					Query  string `json:"query"`
 					settings.Update
 				} `json:"params"`
 			}
@@ -204,7 +205,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			} else if req.Method == methodLinkPairCode && linking {
 				reply = pairCodeReply(port, req.ID, req.Params.Phone, logOut)
 			} else if req.Method == methodChatsList && ready {
-				reply = chatsListReply(chats, req.ID, req.Params.Offset, req.Params.Limit, logOut)
+				reply = chatsListReply(chats, req.ID, req.Params.Offset, req.Params.Limit, req.Params.Query, logOut)
 			} else if req.Method == methodSettingsGet && ready {
 				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Get() })
 			} else if req.Method == methodSettingsSet && ready {
@@ -285,12 +286,12 @@ func pairCodeReply(port whatsapp.Port, id json.RawMessage, phone string, logOut 
 	return resultReply(id, map[string]any{"code": code})
 }
 
-func chatsListReply(chats *chatstore.Store, id json.RawMessage, offset, limit int, logOut io.Writer) map[string]any {
+func chatsListReply(chats *chatstore.Store, id json.RawMessage, offset, limit int, query string, logOut io.Writer) map[string]any {
 	offset = max(offset, 0)
 	if limit <= 0 {
 		limit = defaultChatsLimit
 	}
-	page, err := chats.List(offset, min(limit, maxChatsLimit))
+	page, err := chats.List(offset, min(limit, maxChatsLimit), query)
 	if err != nil {
 		fmt.Fprintln(logOut, "chat list failed")
 		return errorReply(id, errChatStore, "chat store failed")

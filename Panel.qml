@@ -111,6 +111,16 @@ Panel {
           onClicked: root.pairMode = !root.pairMode
         }
 
+        TextInput {
+          id: searchInput
+          visible: root.view.screen === "linked" && !root.showSettings
+          width: parent.width
+          color: root.contentForeground
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+          onTextChanged: root.whiskerService.searchChats(text)
+        }
+
         Button {
           visible: root.view.screen === "linked" && !!root.settings
           text: root.showSettings ? "Back to Chats" : "Settings"

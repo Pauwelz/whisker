@@ -37,9 +37,18 @@ Item {
     daemon.write(State.pairCodeRequest(nextRequestId++, phone))
   }
 
+  // The text of the search field. It filters every Chat list request.
+  property string chatQuery: ""
+
   // Called by the "Load more" button of the Chat list.
   function loadMoreChats() {
-    daemon.write(State.chatListRequest(nextRequestId++, view.chats ? view.chats.length : 0))
+    daemon.write(State.chatListRequest(nextRequestId++, view.chats ? view.chats.length : 0, chatQuery))
+  }
+
+  // Called when the search field changes.
+  function searchChats(text) {
+    chatQuery = text
+    daemon.write(State.chatListRequest(nextRequestId++, 0, chatQuery))
   }
 
   // Called by the settings view. `changes` holds only the settings that change.
@@ -110,7 +119,7 @@ Item {
         if (!frame) return
         root.view = State.applyFrame(root.view, frame)
         if (State.requestsSettings(frame)) daemon.write(State.settingsGetRequest(root.nextRequestId++))
-        if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0))
+        if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0, root.chatQuery))
       }
     }
     stderr: SplitParser {

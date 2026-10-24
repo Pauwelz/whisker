@@ -93,7 +93,7 @@ Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-
 
 ### `chats.list`
 
-Params, both optional: `offset` (default 0) and `limit` (default 50, at most 200). Valid once the Daemon is `ready`. The result is one page of the Chat list:
+Params, all optional: `offset` (default 0), `limit` (default 50, at most 200) and `query`. Valid once the Daemon is `ready`. The result is one page of the Chat list:
 
 ```json
 {"chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":100,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0}
@@ -103,6 +103,7 @@ Params, both optional: `offset` (default 0) and `limit` (default 50, at most 200
 - `kind` is `direct`, `group` or `self`.
 - `muted` is true for a Muted Chat whose mute has not ended. `unread` is the Read Marker. `pinned`, `muted` and `unread` come from App State.
 - `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
+- `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
 - Error -32003 means the chat store failed.
 
 Name rule, resolved by the Daemon at list time:
@@ -112,7 +113,7 @@ Name rule, resolved by the Daemon at list time:
 3. Otherwise it shows the Push Name.
 4. Otherwise it shows the phone number with a leading `+`.
 
-Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chats-pages.jsonl`.
+Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chats-pages.jsonl`, `chats-search.jsonl`.
 
 ### `settings.get`
 
