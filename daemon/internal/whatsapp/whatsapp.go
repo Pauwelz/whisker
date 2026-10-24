@@ -255,6 +255,14 @@ type ChatTimer struct {
 	Seconds int64  `json:"seconds"`
 }
 
+// ChatAlias says that a LID and a phone JID are the same Participant. LID is a "@lid" JID, Phone a "@s.whatsapp.net" JID.
+// WhatsApp can send the mapping after the Chat that it concerns. The chat store then merges the LID Chat into the phone Chat.
+// The same alias can come more than once.
+type ChatAlias struct {
+	LID   string `json:"lid"`
+	Phone string `json:"phone"`
+}
+
 // Connected and Disconnected report the connection to WhatsApp.
 type Connected struct{}
 type Disconnected struct{}
@@ -262,6 +270,7 @@ type Disconnected struct{}
 func (NewMessage) isEvent()     {}
 func (Receipt) isEvent()        {}
 func (ChatTimer) isEvent()      {}
+func (ChatAlias) isEvent()      {}
 func (Presence) isEvent()       {}
 func (ChatPresence) isEvent()   {}
 func (MessageEdited) isEvent()  {}

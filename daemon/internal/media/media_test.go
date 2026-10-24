@@ -132,6 +132,26 @@ func TestIngestEncryptsWhatTheFetchWrites(t *testing.T) {
 	}
 }
 
+func TestMoveChatKeepsTheFilesOfTheTargetChat(t *testing.T) {
+	s, _, _ := newStore(t)
+	for _, c := range []struct{ chat, id, text string }{{"lid", "a", "A"}, {"lid", "dup", "from lid"}, {"phone", "dup", "from phone"}} {
+		if err := s.Put(c.chat, c.id, media.Image, key, strings.NewReader(c.text)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.MoveChat("lid", "phone")
+	if s.Has("lid", "a") || s.Has("lid", "dup") || !s.Has("phone", "a") {
+		t.Error("the files did not move")
+	}
+	path, err := s.Plain("phone", "dup", "", media.Image, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "from phone" {
+		t.Errorf("dup = %q; the target Chat file must stay", got)
+	}
+}
+
 func TestUnsafeNamesAreRejected(t *testing.T) {
 	s, _, _ := newStore(t)
 	if err := s.Put("../x", "m", media.Image, key, strings.NewReader("a")); err == nil {

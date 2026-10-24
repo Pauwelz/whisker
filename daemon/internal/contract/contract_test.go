@@ -415,6 +415,8 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.MessageRevoked](r.t, f, line.Event)
 		case "chatTimer":
 			emitJSON[whatsapp.ChatTimer](r.t, f, line.Event)
+		case "chatAlias":
+			emitJSON[whatsapp.ChatAlias](r.t, f, line.Event)
 		case "reaction":
 			emitJSON[whatsapp.Reaction](r.t, f, line.Event)
 		case "presence":

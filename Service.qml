@@ -313,6 +313,11 @@ Item {
         if (State.isNotify(frame)) Quickshell.execDetached(State.notifyCommand(frame.params))
         root.handleMediaFrame(frame)
         if (State.resendsAttention(frame)) root.syncAttention()
+        if (State.reloadsOpenChat(root.view, frame)) {
+          root.syncAttention()
+          daemon.write(State.messagesRequest(root.nextRequestId++, root.view.openChat.jid, 0))
+          daemon.write(State.draftGetRequest(root.nextRequestId++, root.view.openChat.jid))
+        }
         if (State.requestsSettings(frame)) daemon.write(State.settingsGetRequest(root.nextRequestId++))
         if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0, root.chatQuery))
       }

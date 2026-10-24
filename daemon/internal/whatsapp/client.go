@@ -336,6 +336,7 @@ func (c *Client) handle(evt any) {
 	case *events.Disconnected:
 		c.events <- Disconnected{}
 	case *events.Message:
+		c.emitLiveAlias(evt.Info.MessageSource)
 		if c.handleProtocol(evt) {
 			return
 		}
@@ -367,7 +368,11 @@ func (c *Client) handle(evt any) {
 	case *events.LoggedOut:
 		c.events <- LoggedOut{}
 	case *events.HistorySync:
-		c.events <- c.historySync(evt.Data)
+		batch, aliases := c.historySync(evt.Data)
+		c.events <- batch
+		for _, a := range aliases { // after the batch: a LID Chat of an earlier batch is in the store by then
+			c.events <- a
+		}
 	case *events.PushName:
 		c.events <- PushName{JID: c.phone(evt.JID).String(), Name: evt.NewPushName}
 	case *events.Contact:
@@ -447,9 +452,40 @@ func muteUntil(end int64) int64 {
 	return end
 }
 
-// historySync maps one History Sync batch. Chats that do not parse are dropped.
-func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
+// aliasOf is the alias of a LID and a phone JID, or false when they are not such a pair.
+func aliasOf(lid, phone types.JID) (ChatAlias, bool) {
+	if lid.Server != types.HiddenUserServer || phone.Server != types.DefaultUserServer {
+		return ChatAlias{}, false
+	}
+	return ChatAlias{LID: lid.ToNonAD().String(), Phone: phone.ToNonAD().String()}, true
+}
+
+// historyAliases are the LID to phone pairs in the mappings of a History Sync batch.
+func historyAliases(data *waHistorySync.HistorySync) []ChatAlias {
+	var out []ChatAlias
+	for _, m := range data.GetPhoneNumberToLidMappings() {
+		lid, err := types.ParseJID(m.GetLidJID())
+		if err != nil {
+			continue
+		}
+		if a, ok := aliasOf(lid, phoneOfConversation(m.GetPnJID())); ok {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// emitLiveAlias tells the chat store that the LID of a live event and the phone JID it resolved to are one Chat.
+func (c *Client) emitLiveAlias(src types.MessageSource) {
+	if a, ok := aliasOf(src.Chat, c.chatOf(src)); ok {
+		c.events <- a
+	}
+}
+
+// historySync maps one History Sync batch, and lists the aliases that the batch taught. Chats that do not parse are dropped.
+func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []ChatAlias) {
 	batch := HistorySync{}
+	aliases := historyAliases(data)
 	for _, p := range data.GetPushnames() {
 		batch.PushNames = append(batch.PushNames, PushName{JID: c.phoneString(p.GetID()), Name: p.GetPushname()})
 	}
@@ -461,6 +497,9 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 		pn := phoneOfConversation(conv.GetPnJID())
 		if jid.Server == types.HiddenUserServer && !pn.IsEmpty() {
 			c.rememberPhone(jid, pn)
+			if a, ok := aliasOf(jid, pn); ok {
+				aliases = append(aliases, a)
+			}
 		}
 		jid = c.phone(jid, pn)
 		chat := HistoryChat{
@@ -488,7 +527,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 		}
 		batch.Chats = append(batch.Chats, chat)
 	}
-	return batch
+	return batch, aliases
 }
 
 func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {

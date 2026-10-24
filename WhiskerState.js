@@ -257,6 +257,7 @@ function foldChatFrame(state, frame) {
   if (frame.method === "disconnected") return withChanges(state, { connection: "offline", activity: {} })
   if (frame.method === "messageExpired") return removeMessage(state, frame.params)
   if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
+  if (frame.method === "chatMerged") return chatMerged(state, frame.params)
   if (frame.result && frame.result.draft) return draftLoaded(state, frame.result)
   if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
@@ -303,6 +304,18 @@ function upsertMessage(state, message) {
   while (at > 0 && messages[at - 1].time > message.time) at--
   messages.splice(at, 0, message)
   return withChanges(state, { openChat: withChanges(chat, { messages: messages }) })
+}
+
+// Two Chats became one. The open Chat takes the JID of the merged Chat and shows no Messages until they load again.
+function chatMerged(state, merged) {
+  var chat = state.openChat
+  if (!chat || (chat.jid !== merged.from && chat.jid !== merged.to)) return state
+  return withChanges(state, { openChat: withChanges(chat, { jid: merged.to, messages: [], moreMessages: false }) })
+}
+
+// True when the Plugin must load the Messages and the Draft of the open Chat again after this frame. Call it with the state after the frame.
+function reloadsOpenChat(state, frame) {
+  return !!frame && frame.method === "chatMerged" && !!state.openChat && state.openChat.jid === frame.params.to
 }
 
 // Takes an expired Message out of the open Chat.

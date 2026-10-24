@@ -163,6 +163,19 @@ test("the Pair Code request keeps only the digits of the phone number", () => {
   assert.deepEqual(JSON.parse(line), { jsonrpc: "2.0", id: 3, method: "link.pairCode", params: { phone: "31612345678" } });
 });
 
+test("a merged Chat reloads the open Chat only when it is one of the two", () => {
+  const frame = { method: "chatMerged", params: { from: "1@lid", to: "2@s.whatsapp.net" } };
+  const open = (jid) => State.openChat(State.initialState(), { jid, name: "A", kind: "direct" });
+  for (const jid of ["1@lid", "2@s.whatsapp.net"]) {
+    const after = State.applyFrame(open(jid), frame);
+    assert.equal(after.openChat.jid, "2@s.whatsapp.net");
+    assert.equal(State.reloadsOpenChat(after, frame), true);
+  }
+  const other = State.applyFrame(open("3@s.whatsapp.net"), frame);
+  assert.equal(other.openChat.jid, "3@s.whatsapp.net");
+  assert.equal(State.reloadsOpenChat(other, frame), false);
+});
+
 test("the Plugin asks for the Chat list after linked and after chatsChanged only", () => {
   assert.equal(State.refreshesChats({ method: "linked" }), true);
   assert.equal(State.refreshesChats({ method: "chatsChanged" }), true);

@@ -191,6 +191,8 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		ok = s.box.reacted(ev)
 	case whatsapp.Receipt:
 		ok = s.box.receipt(ev)
+	case whatsapp.ChatAlias:
+		ok = s.merge(ev)
 	case whatsapp.Presence:
 		ok = s.send(notification("presenceChanged", map[string]any{"chat": ev.JID, "online": ev.Online, "lastSeen": ev.LastSeen}))
 	case whatsapp.ChatPresence:
@@ -209,4 +211,21 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		}
 	}
 	return exitIf(ok)
+}
+
+// merge folds the LID Chat of an alias into the phone Chat. The Plugin hears of it when something merged.
+func (s *session) merge(a whatsapp.ChatAlias) bool {
+	changed, err := s.chats.MergeChat(a.LID, a.Phone)
+	if err != nil {
+		fmt.Fprintln(s.logOut, "chat store write failed")
+		return true
+	}
+	if !changed {
+		return true
+	}
+	s.media.MoveChat(a.LID, a.Phone)
+	if s.attn.Attended() == a.LID {
+		s.attn.Set(true, a.Phone)
+	}
+	return s.send(notification("chatMerged", map[string]any{"from": a.LID, "to": a.Phone})) && s.send(notification("chatsChanged", nil))
 }

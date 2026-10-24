@@ -241,6 +241,26 @@ func (s *Store) Remove(chat, id string) {
 	}
 }
 
+// MoveChat moves the stored Media of the Chat `from` into the Chat `to`, when the two Chats merge.
+// A file whose Message id `to` already has stays as it is there. The plain copies of `from` go.
+func (s *Store) MoveChat(from, to string) {
+	if safe(from, to) != nil {
+		return
+	}
+	s.Release(from)
+	entries, err := os.ReadDir(filepath.Join(s.dir, from))
+	if err != nil {
+		return
+	}
+	os.MkdirAll(filepath.Join(s.dir, to), 0o700)
+	for _, e := range entries {
+		if !s.Has(to, e.Name()) {
+			os.Rename(s.file(from, e.Name()), s.file(to, e.Name()))
+		}
+	}
+	os.RemoveAll(filepath.Join(s.dir, from)) // the files that stayed go with the folder
+}
+
 // Wipe deletes every plain copy. Call it at start and exit.
 func (s *Store) Wipe() {
 	if filepath.IsAbs(s.plainDir) {

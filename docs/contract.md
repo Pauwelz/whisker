@@ -89,6 +89,20 @@ The chat store changed: History Sync brought Chats, or App State, a contact name
 
 Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-state.jsonl`.
 
+### `chatMerged`
+
+WhatsApp can name a contact by LID in one History Sync batch and give the phone JID in a later one. The Daemon then holds two Chats for one contact. When the port reports the pair (`ChatAlias`), the Daemon merges the LID Chat into the phone Chat and sends `chatMerged`, then `chatsChanged`. Nothing is sent when no LID Chat exists, so a repeated alias is silent.
+
+The merge moves Messages (with their Read Receipt state), Reactions, Media rows and files, and the names of the LID. For a Message id that both Chats hold, the phone Chat copy stays. The phone Chat keeps its Draft. Flags merge: latest `lastActive`, Pinned or unread if either was, the longest mute, and the timer of the phone Chat if it has one. With no phone Chat yet, the LID Chat takes the phone JID. The Attended Chat follows the merge.
+
+The Plugin points the open Chat at `to` when it shows `from` or `to`, empties its Messages, and loads Messages and Draft again.
+
+```json
+{"jsonrpc":"2.0","method":"chatMerged","params":{"from":"99@lid","to":"31600@s.whatsapp.net"}}
+```
+
+Fixture: `contract/fixtures/chats-merge-lid.jsonl`.
+
 ### Connection
 
 The Daemon sends these after `linked`. The Plugin starts as "connecting" after `linked` and shows a "Connecting…" banner until `connected`.
@@ -479,6 +493,8 @@ Keys of a `whatsapp` line. Each line has exactly one:
 The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
 
 The `event` kinds `newMessage`, `receipt`, `messageEdited`, `messageRevoked` and `reaction` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
+
+The `event` kind `chatAlias` (`lid`, `phone`) tells the Daemon that a LID and a phone JID are one contact.
 
 The `event` kind `chatTimer` (`chat`, `seconds`) sets the Disappearing timer of a Chat. A `newMessage` takes `timer` (seconds), and a `historySync` Chat takes `timer`.
 
