@@ -36,6 +36,7 @@ func (n *notifier) frame(ev whatsapp.NewMessage) map[string]any {
 	if !notifypolicy.Notifies(notifypolicy.Input{
 		FromMe:        ev.Message.FromMe,
 		Muted:         chat.Muted,
+		Mentioned:     ev.Message.MentionsMe,
 		Attended:      ev.Chat == n.attn.Attended(),
 		Notifications: prefs.Notifications,
 	}) {

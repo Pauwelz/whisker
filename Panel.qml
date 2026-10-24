@@ -302,8 +302,9 @@ Panel {
                 visible: text !== ""
                 width: parent.width
                 wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                text: State.messageBody(modelData)
+                textFormat: Text.StyledText
+                text: State.messageHtml(modelData)
+                onLinkActivated: link => root.whiskerService.openLink(link)
                 font.italic: modelData.revoked === true
                 color: root.contentForeground
                 font.family: root.contentFontFamily

@@ -331,14 +331,11 @@ func (c *Client) handle(evt any) {
 			c.events <- Reaction{Chat: evt.Info.Chat.String(), ID: r.GetKey().GetID(), Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
 			return
 		}
-		text, media := messageText(evt.Message), mediaOf(evt.Message)
-		if (text == "" && media == nil) || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
+		body, ok := contentOf(evt.Message, evt.IsViewOnce)
+		if !ok || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
 			return
 		}
-		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: Message{
-			ID: evt.Info.ID, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe,
-			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName, Quote: c.quoteOf(evt.Message), Media: media, Timer: timerOf(evt.Message),
-		}}
+		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: c.messageOf(evt.Info, evt.Message, body)}
 	case *events.Receipt:
 		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
 		if state := receiptState(evt.Type); state != "" && !evt.IsGroup {
@@ -464,21 +461,21 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 			if err != nil {
 				continue
 			}
-			chat.Messages = append(chat.Messages, Message{
-				ID:       parsed.Info.ID,
-				Sender:   parsed.Info.Sender.String(),
-				FromMe:   parsed.Info.IsFromMe,
-				Time:     parsed.Info.Timestamp.Unix(),
-				Text:     messageText(parsed.Message),
-				PushName: parsed.Info.PushName,
-				Quote:    c.quoteOf(parsed.Message),
-				Media:    mediaOf(parsed.Message),
-				Timer:    timerOf(parsed.Message),
-			})
+			if body, ok := contentOf(parsed.Message, parsed.IsViewOnce); ok {
+				chat.Messages = append(chat.Messages, c.messageOf(parsed.Info, parsed.Message, body))
+			}
 		}
 		batch.Chats = append(batch.Chats, chat)
 	}
 	return batch
+}
+
+func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {
+	return Message{
+		ID: info.ID, Sender: info.Sender.String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
+		Text: body.Text, PushName: info.PushName, Quote: c.quoteOf(m), Media: body.Media, Timer: timerOf(m),
+		Mentions: body.Mentions, MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+	}
 }
 
 func (c *Client) kindOf(jid types.JID) string {

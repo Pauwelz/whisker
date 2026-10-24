@@ -240,3 +240,24 @@ func TestSearchMatchesChatNameAndParticipantName(t *testing.T) {
 		t.Errorf("paged search = %+v", page)
 	}
 }
+
+func TestMentionsUseTheNameRuleAndRevokeClearsThem(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: "@3 and @4",
+		Mentions: []string{"3@s.whatsapp.net", "4@s.whatsapp.net"}}})
+	apply(t, s, whatsapp.PushName{JID: "3@s.whatsapp.net", Name: "Zed"})
+	m, err := s.Message("g@g.us", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Text != "@Zed and @+4" || !slices.Equal(m.Mentions, []string{"@Zed", "@+4"}) {
+		t.Fatalf("got %q %v", m.Text, m.Mentions)
+	}
+	if _, err := s.Revoke("g@g.us", "m1"); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ = s.Message("g@g.us", "m1"); m.Text != "" || len(m.Mentions) != 0 {
+		t.Fatalf("a Tombstone keeps no mentions: %q %v", m.Text, m.Mentions)
+	}
+}

@@ -187,6 +187,18 @@ Item {
     id: opener
   }
 
+  Process {
+    id: linkOpener
+  }
+
+  // Called by a click on a link in a Message. Only the map link of a location opens.
+  function openLink(url) {
+    var command = State.linkCommand(url)
+    if (command.length === 0) return
+    linkOpener.command = command
+    linkOpener.startDetached()
+  }
+
   // The child process of the voice note. Stop ends it. An exit that is not from a newer note clears playingKey.
   Process {
     id: player
