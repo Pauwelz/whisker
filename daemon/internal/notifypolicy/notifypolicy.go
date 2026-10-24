@@ -5,11 +5,12 @@ package notifypolicy
 type Input struct {
 	FromMe        bool // the user sent it from another device
 	Muted         bool // its Chat is Muted
+	Mentioned     bool // it mentions the user: a Muted Chat still notifies
 	Attended      bool // its Chat is the Attended Chat
 	Notifications bool // the notifications setting
 }
 
 // Notifies reports whether the Message raises a notification.
 func Notifies(in Input) bool {
-	return in.Notifications && !in.FromMe && !in.Muted && !in.Attended
+	return in.Notifications && !in.FromMe && (!in.Muted || in.Mentioned) && !in.Attended
 }

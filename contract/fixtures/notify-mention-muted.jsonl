@@ -1,0 +1,17 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"Crew","lastActive":10,"mutedUntil":-1,"messages":[]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"pushName","jid":"3@s.whatsapp.net","name":"Zed"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","message":{"id":"a1","sender":"2@s.whatsapp.net","time":50,"text":"quiet","pushName":"Ann"},"chatKind":"group"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"a1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"quiet","state":"","edited":false,"revoked":false}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","message":{"id":"a2","sender":"2@s.whatsapp.net","time":51,"text":"@3 look","pushName":"Ann","mentions":["3@s.whatsapp.net"],"mentionsMe":true},"chatKind":"group"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"a2","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":51,"text":"@Zed look","state":"","edited":false,"revoked":false,"mentions":["@Zed"]}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"notify","params":{"chat":"g1@g.us","kind":"group","name":"Crew","senderName":"Ann","text":"@Zed look"}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","message":{"id":"a3","sender":"2@s.whatsapp.net","time":52,"text":"@4 and @3","pushName":"Ann","mentions":["4@s.whatsapp.net","3@s.whatsapp.net"]},"chatKind":"group"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"a3","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":52,"text":"@+4 and @Zed","state":"","edited":false,"revoked":false,"mentions":["@+4","@Zed"]}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}

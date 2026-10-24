@@ -197,6 +197,18 @@ Item {
     id: opener
   }
 
+  Process {
+    id: linkOpener
+  }
+
+  // Called by a click on a link in a Message. Only the map link of a location opens.
+  function openLink(url) {
+    var command = State.linkCommand(url)
+    if (command.length === 0) return
+    linkOpener.command = command
+    linkOpener.startDetached()
+  }
+
   // The child process of the voice note. Stop ends it. An exit that is not from a newer note clears playingKey.
   Process {
     id: player
@@ -219,6 +231,11 @@ Item {
   // Called by the Reaction picker. `emoji` is the picked emoji; picking the current Reaction removes it.
   function reactToMessage(message, emoji) {
     daemon.write(State.reactRequest(nextRequestId++, view.openChat.jid, message.id, State.reactionChoice(message, emoji)))
+  }
+
+  // Called by the file picker of the composer. `url` is the picked file, the composer text is its caption.
+  function sendMedia(url, caption) {
+    daemon.write(State.sendMediaRequest(nextRequestId++, view.openChat.jid, url, caption))
   }
 
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.

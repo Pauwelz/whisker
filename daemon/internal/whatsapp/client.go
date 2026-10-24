@@ -28,6 +28,7 @@ const (
 	// shortcut: one fixed limit for every download, upgrade to a size based limit if a large video times out.
 	downloadTimeout = 10 * time.Minute
 	editTimeout     = 15 * time.Second
+	uploadTimeout   = 10 * time.Minute
 )
 
 // Client is the whatsmeow adapter: the only place whatsmeow types appear.
@@ -113,15 +114,20 @@ func (c *Client) PairCode(phone string) (string, error) {
 
 func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
 
-func (c *Client) Send(chat, id, text string, quote *Quote) error {
+func (c *Client) Send(chat, id, text string, quote *Quote, timer int64) error {
 	return c.send(chat, sendTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
 		msg := &waE2E.Message{Conversation: proto.String(text)}
-		if quote != nil {
-			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: &waE2E.ContextInfo{
-				StanzaID:      proto.String(quote.ID),
-				Participant:   proto.String(c.quoteSender(quote.Sender)),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String(quote.Text)},
-			}}}
+		if quote != nil || timer > 0 { // a quote and the timer ride in the ContextInfo of an extended text Message
+			info := &waE2E.ContextInfo{}
+			if quote != nil {
+				info.StanzaID = proto.String(quote.ID)
+				info.Participant = proto.String(c.quoteSender(quote.Sender))
+				info.QuotedMessage = &waE2E.Message{Conversation: proto.String(quote.Text)}
+			}
+			if timer > 0 {
+				info.Expiration = proto.Uint32(uint32(timer))
+			}
+			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: info}}
 		}
 		return msg, whatsmeow.SendRequestExtra{ID: id}
 	})
@@ -145,6 +151,44 @@ func (c *Client) React(chat, id, sender, emoji string) error {
 	}
 	return c.send(chat, editTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
 		return c.cli.BuildReaction(jid, senderJID, id, emoji), whatsmeow.SendRequestExtra{}
+	})
+}
+
+// SendMedia uploads plain, then sends the Media Message. A retry uses the same Message ID.
+func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption string, timer int64) error {
+	if !c.cli.IsConnected() {
+		return ErrOffline
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
+	defer cancel()
+	up, err := c.cli.UploadReader(ctx, plain, nil, whatsmeow.MediaType(m.Kind.Info()))
+	if err != nil {
+		return err
+	}
+	msg := &waE2E.Message{}
+	if m.Kind == media.Image {
+		msg.ImageMessage = &waE2E.ImageMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: proto.Uint64(up.FileLength),
+			Mimetype: proto.String(m.Mime), Caption: proto.String(caption),
+		}
+	} else {
+		msg.DocumentMessage = &waE2E.DocumentMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: proto.Uint64(up.FileLength),
+			Mimetype: proto.String(m.Mime), FileName: proto.String(m.Name), Caption: proto.String(caption),
+		}
+	}
+	if timer > 0 {
+		info := &waE2E.ContextInfo{Expiration: proto.Uint32(uint32(timer))}
+		if msg.ImageMessage != nil {
+			msg.ImageMessage.ContextInfo = info
+		} else {
+			msg.DocumentMessage.ContextInfo = info
+		}
+	}
+	return c.send(chat, sendTimeout, func(types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
+		return msg, whatsmeow.SendRequestExtra{ID: id}
 	})
 }
 
@@ -287,14 +331,11 @@ func (c *Client) handle(evt any) {
 			c.events <- Reaction{Chat: evt.Info.Chat.String(), ID: r.GetKey().GetID(), Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
 			return
 		}
-		text, media := messageText(evt.Message), mediaOf(evt.Message)
-		if (text == "" && media == nil) || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
+		body, ok := contentOf(evt.Message, evt.IsViewOnce)
+		if !ok || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
 			return
 		}
-		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: Message{
-			ID: evt.Info.ID, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe,
-			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName, Quote: c.quoteOf(evt.Message), Media: media,
-		}}
+		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: c.messageOf(evt.Info, evt.Message, body)}
 	case *events.Receipt:
 		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
 		if state := receiptState(evt.Type); state != "" && !evt.IsGroup {
@@ -342,10 +383,32 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
 		c.events <- MessageRevoked{Chat: chat, ID: id}
+	case pm.GetType() == waE2E.ProtocolMessage_EPHEMERAL_SETTING:
+		c.events <- ChatTimer{Chat: chat, Seconds: int64(pm.GetEphemeralExpiration())}
 	default:
 		return false
 	}
 	return true
+}
+
+// timerOf is the Disappearing timer in seconds that a Message carries in its ContextInfo, or 0.
+func timerOf(m *waE2E.Message) int64 {
+	var info *waE2E.ContextInfo
+	switch {
+	case m.GetExtendedTextMessage() != nil:
+		info = m.GetExtendedTextMessage().GetContextInfo()
+	case m.GetImageMessage() != nil:
+		info = m.GetImageMessage().GetContextInfo()
+	case m.GetVideoMessage() != nil:
+		info = m.GetVideoMessage().GetContextInfo()
+	case m.GetAudioMessage() != nil:
+		info = m.GetAudioMessage().GetContextInfo()
+	case m.GetStickerMessage() != nil:
+		info = m.GetStickerMessage().GetContextInfo()
+	case m.GetDocumentMessage() != nil:
+		info = m.GetDocumentMessage().GetContextInfo()
+	}
+	return int64(info.GetExpiration())
 }
 
 func receiptState(t types.ReceiptType) string {
@@ -385,6 +448,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 			LastActive: int64(max(conv.GetConversationTimestamp(), conv.GetLastMsgTimestamp())),
 			Pinned:     conv.GetPinned() != 0,
 			Unread:     conv.GetUnreadCount() > 0 || conv.GetMarkedAsUnread(),
+			Timer:      int64(conv.GetEphemeralExpiration()),
 		}
 		if chat.Kind == KindGroup {
 			chat.Subject = conv.GetName()
@@ -397,20 +461,21 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 			if err != nil {
 				continue
 			}
-			chat.Messages = append(chat.Messages, Message{
-				ID:       parsed.Info.ID,
-				Sender:   parsed.Info.Sender.String(),
-				FromMe:   parsed.Info.IsFromMe,
-				Time:     parsed.Info.Timestamp.Unix(),
-				Text:     messageText(parsed.Message),
-				PushName: parsed.Info.PushName,
-				Quote:    c.quoteOf(parsed.Message),
-				Media:    mediaOf(parsed.Message),
-			})
+			if body, ok := contentOf(parsed.Message, parsed.IsViewOnce); ok {
+				chat.Messages = append(chat.Messages, c.messageOf(parsed.Info, parsed.Message, body))
+			}
 		}
 		batch.Chats = append(batch.Chats, chat)
 	}
 	return batch
+}
+
+func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {
+	return Message{
+		ID: info.ID, Sender: info.Sender.String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
+		Text: body.Text, PushName: info.PushName, Quote: c.quoteOf(m), Media: body.Media, Timer: timerOf(m),
+		Mentions: body.Mentions, MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+	}
 }
 
 func (c *Client) kindOf(jid types.JID) string {

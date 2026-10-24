@@ -237,6 +237,7 @@ function foldChatFrame(state, frame) {
   if (!frame) return null
   if (frame.method === "connected") return withChanges(state, { connection: "online" })
   if (frame.method === "disconnected") return withChanges(state, { connection: "offline", activity: {} })
+  if (frame.method === "messageExpired") return removeMessage(state, frame.params)
   if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
   if (frame.result && frame.result.draft) return draftLoaded(state, frame.result)
   if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
@@ -283,6 +284,14 @@ function upsertMessage(state, message) {
   var at = messages.length
   while (at > 0 && messages[at - 1].time > message.time) at--
   messages.splice(at, 0, message)
+  return withChanges(state, { openChat: withChanges(chat, { messages: messages }) })
+}
+
+// Takes an expired Message out of the open Chat.
+function removeMessage(state, expired) {
+  var chat = state.openChat
+  if (!chat || chat.jid !== expired.chat) return state
+  var messages = chat.messages.filter(function (m) { return m.id !== expired.id })
   return withChanges(state, { openChat: withChanges(chat, { messages: messages }) })
 }
 
@@ -350,6 +359,12 @@ function sendRequest(id, jid, text, quoteId) {
   return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.send", params: params }) + "\n"
 }
 
+// The request to send a file as Media. `url` is the file:// URL that FileDialog gives; the Daemon needs a path.
+function sendMediaRequest(id, jid, url, caption) {
+  var path = decodeURIComponent(String(url).replace(/^file:\/\//, ""))
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.sendMedia", params: { chat: jid, path: path, caption: caption } }) + "\n"
+}
+
 function retryMessageRequest(id, jid, messageId) {
   return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.retry", params: { chat: jid, id: messageId } }) + "\n"
 }
@@ -395,6 +410,34 @@ var EDIT_WINDOW_SECONDS = 20 * 60
 
 function messageBody(message) {
   return message.revoked ? TOMBSTONE_TEXT : message.text
+}
+
+// The only links the Plugin makes clickable: the map link of a location. Other text stays plain.
+var MAP_LINK = /https:\/\/www\.openstreetmap\.org\/\?mlat=-?[0-9.]+&(?:amp;)?mlon=-?[0-9.]+#map=[0-9]+\/-?[0-9.]+\/-?[0-9.]+/g
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+// The Message text as Qt StyledText: mentions in bold, the map link of a location as a link.
+function messageHtml(message) {
+  var html = escapeHtml(messageBody(message))
+  if (!message.revoked) {
+    // Longest mention first, so "@Anna Lee" is not cut by "@Anna". Mentions are plain names from the Daemon.
+    var mentions = (message.mentions || []).slice().sort(function(a, b) { return b.length - a.length })
+    mentions.forEach(function(mention) {
+      html = html.split(escapeHtml(mention)).join("<b>" + escapeHtml(mention) + "</b>")
+    })
+    html = html.replace(MAP_LINK, function(url) { return '<a href="' + url.replace(/&amp;/g, "&") + '">' + url + "</a>" })
+  }
+  return html.replace(/\n/g, "<br>")
+}
+
+// The command that opens a map link in the browser, or [] for any other link. "--" ends the options.
+function linkCommand(url) {
+  MAP_LINK.lastIndex = 0
+  var match = MAP_LINK.exec(url)
+  return match && match[0] === url ? ["xdg-open", "--", url] : []
 }
 
 function editedLabel(message) {

@@ -302,8 +302,9 @@ Panel {
                 visible: text !== ""
                 width: parent.width
                 wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                text: State.messageBody(modelData)
+                textFormat: Text.StyledText
+                text: State.messageHtml(modelData)
+                onLinkActivated: link => root.whiskerService.openLink(link)
                 font.italic: modelData.revoked === true
                 color: root.contentForeground
                 font.family: root.contentFontFamily
@@ -455,6 +456,22 @@ Panel {
             text: "Cancel edit"
             bordered: true
             onClicked: root.whiskerService.changeDraft({ edit: "", text: "" })
+          }
+
+          // The picker loads on demand, see MediaPicker.qml. The composer text becomes the caption.
+          Loader {
+            id: picker
+            active: false
+            source: "MediaPicker.qml"
+            onLoaded: item.picked.connect(function(file) {
+              root.whiskerService.sendMedia(file, composer.text)
+              composer.text = ""
+            })
+          }
+          Button {
+            text: "Attach"
+            bordered: true
+            onClicked: { picker.active = false; picker.active = true }
           }
 
           Text {

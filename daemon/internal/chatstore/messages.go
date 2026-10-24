@@ -31,6 +31,10 @@ type Message struct {
 	Media     *MediaInfo `json:"media,omitempty"`
 	Quote     *Quote     `json:"quote,omitempty"`
 	Reactions []Reaction `json:"reactions,omitempty"` // at most one per Participant, in the order they were first set
+	// Mentions are the names in Text that the Plugin highlights, each as "@name". Text already holds them.
+	Mentions []string `json:"mentions,omitempty"`
+	// ExpiresAt is when a Disappearing Message goes (Unix seconds). It is 0 for a Message that stays.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
 }
 
 // Quote is the Message that a reply quotes: a snapshot taken when the reply was stored.
@@ -81,7 +85,7 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 const selectMessage = `
 	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
 		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, ''),
-	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, '')
+	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at
 	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN names q ON q.jid = m.quote_sender
 	LEFT JOIN media md ON md.chat_jid = m.chat_jid AND md.id = m.id `
 
@@ -125,6 +129,16 @@ func (s *Store) Pending() ([]Message, error) {
 // AddPending stores a new Message of the user in the Chat, in state pending, as a reply to quote when it is not nil.
 // The Chat must exist.
 func (s *Store) AddPending(chat, id, text string, quote *whatsapp.Quote) (Message, error) {
+	return s.addPending(chat, id, text, quote, nil)
+}
+
+// AddPendingMedia is AddPending for a Message with Media (text is the caption). The file is in the Media store already,
+// encrypted with m.Key, so the Media is ready at once and a restart or a Retry sends it again.
+func (s *Store) AddPendingMedia(chat, id, text string, m *whatsapp.Media) (Message, error) {
+	return s.addPending(chat, id, text, nil, m)
+}
+
+func (s *Store) addPending(chat, id, text string, quote *whatsapp.Quote, m *whatsapp.Media) (Message, error) {
 	q := whatsapp.Quote{}
 	if quote != nil {
 		q = *quote
@@ -138,9 +152,18 @@ func (s *Store) AddPending(chat, id, text string, quote *whatsapp.Quote) (Messag
 		if n, _ := res.RowsAffected(); n == 0 {
 			return ErrNoChat
 		}
-		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text)
-			VALUES (?, ?, '', 1, ?, ?, ?, ?, ?, ?)`,
-			chat, id, now, text, whatsapp.StatePending, q.ID, q.Sender, q.Text)
+		var timer int64
+		if err := tx.QueryRow(`SELECT timer FROM chats WHERE jid = ?`, chat).Scan(&timer); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, expires_at)
+			VALUES (?, ?, '', 1, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, id, now, text, whatsapp.StatePending, q.ID, q.Sender, q.Text, expiry(now, timer))
+		if err != nil || m == nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO media (chat_jid, id, kind, mime, name, size, media_key, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, id, m.Kind, m.Mime, m.Name, m.Size, m.Key, MediaReady)
 		return err
 	})
 	if err != nil {
@@ -185,7 +208,7 @@ func (s *Store) Edit(chat, id, sender string, fromMe bool, text string) (bool, e
 // Revoke turns a Message into a Tombstone: it empties the text and keeps the position. It reports whether the Message changed.
 // A Tombstone keeps no Media: the Media row goes, and so does the stored file (through RemoveMedia).
 func (s *Store) Revoke(chat, id string) (bool, error) {
-	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1 WHERE chat_jid = ? AND id = ? AND revoked = 0`, chat, id)
+	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1, mentions = '' WHERE chat_jid = ? AND id = ? AND revoked = 0`, chat, id)
 	if err != nil || !changed {
 		return changed, err
 	}
@@ -193,6 +216,51 @@ func (s *Store) Revoke(chat, id string) (bool, error) {
 		return true, err
 	}
 	return true, nil
+}
+
+// expiry is the end of a Disappearing Message that WhatsApp sent at time, or 0 for a timer of 0.
+func expiry(time, timer int64) int64 {
+	if timer <= 0 {
+		return 0
+	}
+	return time + timer
+}
+
+// Expired names a Message that Expire deleted.
+type Expired struct{ Chat, ID string }
+
+// Expire deletes every Disappearing Message whose timer ended at or before now (Unix seconds), with its Media.
+// A Message that expired while the Daemon was off goes at the next call. It returns the deleted Messages.
+func (s *Store) Expire(now int64) ([]Expired, error) {
+	rows, err := s.db.Query(`SELECT chat_jid, id FROM messages WHERE expires_at > 0 AND expires_at <= ?`, now)
+	if err != nil {
+		return nil, err
+	}
+	var gone []Expired
+	for rows.Next() {
+		var e Expired
+		if err := rows.Scan(&e.Chat, &e.ID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		gone = append(gone, e)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, e := range gone {
+		if _, err := s.DeleteMedia(e.Chat, e.ID); err != nil {
+			return nil, err
+		}
+		if _, err := s.db.Exec(`DELETE FROM reactions WHERE chat_jid = ? AND message_id = ?`, e.Chat, e.ID); err != nil {
+			return nil, err
+		}
+		if _, err := s.db.Exec(`DELETE FROM messages WHERE chat_jid = ? AND id = ?`, e.Chat, e.ID); err != nil {
+			return nil, err
+		}
+	}
+	return gone, nil
 }
 
 // DeleteMedia removes the Media row of a Message and calls RemoveMedia. It reports whether a row existed.
@@ -281,13 +349,14 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 	}
 	defer rows.Close()
 	var msgs []Message
-	var contact, push, qContact, qPush string
+	var raw []string // the stored mentions of each Message
+	var contact, push, qContact, qPush, mentions string
 	for rows.Next() {
 		var m Message
 		var q Quote
 		var mi MediaInfo
 		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push,
-			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State); err != nil {
+			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt); err != nil {
 			return nil, err
 		}
 		if mi.Kind != "" {
@@ -304,8 +373,34 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 			m.Quote = &q
 		}
 		msgs = append(msgs, m)
+		raw = append(raw, mentions)
 	}
-	return msgs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i, jids := range raw {
+		if err := s.nameMentions(&msgs[i], jids); err != nil {
+			return nil, err
+		}
+	}
+	return msgs, nil
+}
+
+// nameMentions replaces "@<user part>" in the text with "@<name>" (the name rule) and lists the names.
+// shortcut: a plain replace, so "@12" inside "@123" is also replaced; upgrade if mentions of near numbers appear.
+func (s *Store) nameMentions(m *Message, jids string) error {
+	for _, jid := range strings.Fields(jids) {
+		name, err := s.ParticipantName(jid)
+		if err != nil {
+			return err
+		}
+		user, _, _ := strings.Cut(jid, "@")
+		label := "@" + name
+		m.Text = strings.ReplaceAll(m.Text, "@"+user, label)
+		m.Mentions = append(m.Mentions, label)
+	}
+	return nil
 }
 
 // putMessage stores a Message that arrived live or in History Sync, and the Push Name that came with it.
@@ -319,9 +414,9 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 	if m.Quote != nil {
 		q = *m.Quote
 	}
-	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text); err != nil {
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, mentions, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text, strings.Join(m.Mentions, " "), expiry(m.Time, m.Timer)); err != nil {
 		return err
 	}
 	if m.Media != nil {

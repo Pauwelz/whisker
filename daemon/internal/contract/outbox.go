@@ -4,14 +4,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
+	"github.com/Pauwelz/whisker/daemon/internal/keystore"
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
 // Now is the clock of the chat store. Tests replace it to get fixed Message times.
 var Now = time.Now
+
+// Timers makes the timers of the Disappearing Message sweep. Tests replace it with a manual clock.
+var Timers keystore.Clock = keystore.RealClock
+
+// ExpiryInterval is how often the Daemon deletes Disappearing Messages whose timer ended.
+// shortcut: an expired Message can show for up to one interval, upgrade to a timer for the next deadline if that matters.
+const ExpiryInterval = time.Minute
 
 // ConnectRetryDelay is the wait before the Daemon connects again after a failed connect.
 var ConnectRetryDelay = 5 * time.Second
@@ -31,6 +41,7 @@ type outbox struct {
 	results  chan sendResult
 	incoming func(whatsapp.NewMessage)                // runs after a new Message is stored, may be nil
 	notice   func(whatsapp.NewMessage) map[string]any // the `notify` frame of a new Message, or nil; may be nil
+	store    *media.Store                             // holds the files of Media to send
 }
 
 type sendResult struct {
@@ -50,11 +61,39 @@ func (b *outbox) submit(m chatstore.Message) {
 	}
 	b.inflight[m.ID] = true
 	gen := b.gen
+	timer := max(m.ExpiresAt-m.Time, 0)
+	if m.Media != nil {
+		ref, err := b.chats.MediaOf(m.Chat, m.ID)
+		go func() {
+			if err == nil {
+				err = b.sendMedia(m, ref.Media, timer)
+			}
+			b.results <- sendResult{m.Chat, m.ID, gen, err}
+		}()
+		return
+	}
 	var quote *whatsapp.Quote
 	if m.Quote != nil {
 		quote = &whatsapp.Quote{ID: m.Quote.ID, Sender: m.Quote.Sender, Text: m.Quote.Text}
 	}
-	go func() { b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text, quote)} }()
+	go func() {
+		b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text, quote, timer)}
+	}()
+}
+
+// sendMedia decrypts the stored file to a plain copy for the upload and removes the copy after.
+func (b *outbox) sendMedia(m chatstore.Message, ref whatsapp.Media, timer int64) error {
+	path, err := b.store.Plain(m.Chat, m.ID, extension(ref), ref.Kind, ref.Key)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return b.port.SendMedia(m.Chat, m.ID, ref, f, m.Text, timer)
 }
 
 // flush starts the send of every pending Message, oldest first.
