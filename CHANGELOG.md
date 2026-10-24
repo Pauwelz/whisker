@@ -7,6 +7,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-10-24
+
 ### Added
 
 - A bar icon with a pop-out that shows when the Daemon is ready.
