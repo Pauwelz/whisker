@@ -349,6 +349,8 @@ test("the composer sends an edit when a Message is under edit, otherwise a new M
 
 test("sendMediaRequest turns a file URL into a path", () => {
   assert.deepEqual(JSON.parse(State.sendMediaRequest(7, direct.jid, "file:///home/me/My%20Doc%C3%A9.pdf", "hi")), { jsonrpc: "2.0", id: 7, method: "chat.sendMedia", params: { chat: direct.jid, path: "/home/me/My Docé.pdf", caption: "hi" } });
+});
+
 test("presenceLabel shows Online and Last Seen in a Direct Chat only", () => {
   const now = Math.floor(new Date(2026, 9, 24, 15, 0).getTime() / 1000);
   const seen = Math.floor(new Date(2026, 9, 24, 14, 5).getTime() / 1000);

@@ -405,7 +405,6 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `keyring` | `state` | The Go test sets the fake keyring: `missing` (calls fail), `ok`, `locked` (calls block) or `unlocked`. |
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
 | `read` | `receipts`, `plays`, `markers` | The Go test checks the Read Receipts and the Played receipts (`chat`, `sender`, `ids`) and the Chats whose Read Marker the fake port cleared, all so far, in order. |
->>>>>>> dev
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
 | `sent` | `ids` | The Go test checks the Message IDs that the fake port has sent so far, in order. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
