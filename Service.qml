@@ -159,6 +159,18 @@ Item {
     id: opener
   }
 
+  Process {
+    id: linkOpener
+  }
+
+  // Called by a click on a link in a Message. Only the map link of a location opens.
+  function openLink(url) {
+    var command = State.linkCommand(url)
+    if (command.length === 0) return
+    linkOpener.command = command
+    linkOpener.startDetached()
+  }
+
   // Called by the "Load older" button of the open Chat.
   function loadOlderMessages() {
     daemon.write(State.messagesRequest(nextRequestId++, view.openChat.jid, view.openChat.messages.length))

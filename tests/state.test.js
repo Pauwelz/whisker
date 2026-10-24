@@ -324,6 +324,20 @@ test("the Plugin sends the pop-out state again when the Daemon is ready", () => 
 
 const sentMessage = (extra) => Object.assign({ id: "m1", chat: direct.jid, fromMe: true, time: 1000, text: "hi", state: "sent", edited: false, revoked: false }, extra);
 
+test("a mention is bold, a map link is a link, other text is escaped", () => {
+  const url = "https://www.openstreetmap.org/?mlat=51.500000&mlon=-0.120000#map=17/51.500000/-0.120000";
+  assert.equal(State.messageHtml(sentMessage({ text: "@Zed <b>look</b>", mentions: ["@Zed"] })), "<b>@Zed</b> &lt;b&gt;look&lt;/b&gt;");
+  assert.equal(State.messageHtml(sentMessage({ text: "Location: Cafe\n" + url })), `Location: Cafe<br><a href="${url}">${url.replace(/&/g, "&amp;")}</a>`);
+  assert.equal(State.messageHtml(sentMessage({ text: "", revoked: true, mentions: ["@Zed"] })), "This message was deleted");
+});
+
+test("only a map link opens", () => {
+  const url = "https://www.openstreetmap.org/?mlat=51.5&mlon=-0.12#map=17/51.5/-0.12";
+  assert.equal(JSON.stringify(State.linkCommand(url)), JSON.stringify(["xdg-open", "--", url]));
+  assert.equal(State.linkCommand("https://evil.example/").length, 0);
+  assert.equal(State.linkCommand(url + " ; rm").length, 0);
+});
+
 test("a Tombstone shows a fixed text, an edited Message shows Edited", () => {
   assert.equal(State.messageBody(sentMessage({ revoked: true, text: "" })), "This message was deleted");
   assert.equal(State.messageBody(sentMessage()), "hi");

@@ -111,6 +111,9 @@ type Message struct {
 	Text     string `json:"text"`
 	PushName string `json:"pushName"` // the author's Push Name as sent with the Message, may be empty
 	Media    *Media `json:"media"`
+	// Mentions are the JIDs that Text mentions as "@<user part>". MentionsMe tells that one of them is the user.
+	Mentions   []string `json:"mentions"`
+	MentionsMe bool     `json:"mentionsMe"`
 }
 
 // HistoryChat is one Chat of a History Sync batch, with the App State that came with it.

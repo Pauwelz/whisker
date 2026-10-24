@@ -246,15 +246,11 @@ func (c *Client) handle(evt any) {
 		if c.handleProtocol(evt) {
 			return
 		}
-		// Reactions have no text: they are skipped until their ticket.
-		text, media := messageText(evt.Message), mediaOf(evt.Message)
-		if (text == "" && media == nil) || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
+		body, ok := contentOf(evt.Message, evt.IsViewOnce)
+		if !ok || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
 			return
 		}
-		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: Message{
-			ID: evt.Info.ID, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe,
-			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName, Media: media,
-		}}
+		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: c.messageOf(evt.Info, body)}
 	case *events.Receipt:
 		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
 		if state := receiptState(evt.Type); state != "" && !evt.IsGroup {
@@ -357,19 +353,21 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 			if err != nil {
 				continue
 			}
-			chat.Messages = append(chat.Messages, Message{
-				ID:       parsed.Info.ID,
-				Sender:   parsed.Info.Sender.String(),
-				FromMe:   parsed.Info.IsFromMe,
-				Time:     parsed.Info.Timestamp.Unix(),
-				Text:     messageText(parsed.Message),
-				PushName: parsed.Info.PushName,
-				Media:    mediaOf(parsed.Message),
-			})
+			if body, ok := contentOf(parsed.Message, parsed.IsViewOnce); ok {
+				chat.Messages = append(chat.Messages, c.messageOf(parsed.Info, body))
+			}
 		}
 		batch.Chats = append(batch.Chats, chat)
 	}
 	return batch
+}
+
+func (c *Client) messageOf(info types.MessageInfo, body content) Message {
+	return Message{
+		ID: info.ID, Sender: info.Sender.String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
+		Text: body.Text, PushName: info.PushName, Media: body.Media,
+		Mentions: body.Mentions, MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+	}
 }
 
 func (c *Client) kindOf(jid types.JID) string {

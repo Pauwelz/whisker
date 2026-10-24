@@ -129,11 +129,11 @@ The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies u
 | Rule | Fixture |
 |---|---|
 | The notifications setting is off. | `notify-off.jsonl` |
-| The Chat is Muted. | `notify-muted.jsonl` |
+| The Chat is Muted, and the Message does not mention the user. | `notify-muted.jsonl`, `notify-mention-muted.jsonl` |
 | The Chat is the Attended Chat. | `notify-attended.jsonl` |
 | The user sent the Message from another device. | `notify-own-message.jsonl` |
 
-`notify-new.jsonl` shows a Message that notifies. The Plugin shows the notification with `omarchy-notification-send`. An `--exec` action runs the Plugin IPC handler `openChat` with the Chat id (`omarchy-shell pauwelz.whisker openChat <chat>`). A click opens the pop-out on that Chat. Mentions in a Muted Group Chat join later.
+`notify-new.jsonl` shows a Message that notifies. The Plugin shows the notification with `omarchy-notification-send`. An `--exec` action runs the Plugin IPC handler `openChat` with the Chat id (`omarchy-shell pauwelz.whisker openChat <chat>`). A click opens the pop-out on that Chat. A Message that mentions the user notifies in a Muted Chat too (`mentionsMe` on the port Message), but not in the Attended Chat.
 
 ## Methods (Plugin to Daemon)
 
@@ -222,6 +222,8 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 - Offset 0 is the newest page. A page is in time order, oldest first. `more` is true when older Messages exist at `offset + limit`.
 - `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it. It is empty for the Messages of the user.
 - `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
+- Text that WhatsApp cannot show gets a one-line text, so no Message is blank: `Poll: <name>. Open it on your phone.`, `Event: ...`, `View-once media. ...`, `Contact: <name>, <number>` (one line per card), `Location: <place>` with a map link on the next line, and `Unsupported message. ...`. The port adapter makes these lines. Reactions, poll votes and protocol Messages show nothing. Fixture: `message-types.jsonl`.
+- `mentions` lists the mentioned names, each as `@name` (name rule). `text` already holds them: the Daemon replaces `@<number>`. Only Messages with a mention have the key.
 - `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
 - `media` is present only for a Message with Media, see Media below. It never holds a path or bytes.
 - Error -32003 means the chat store failed.

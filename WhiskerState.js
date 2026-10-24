@@ -351,6 +351,34 @@ function messageBody(message) {
   return message.revoked ? TOMBSTONE_TEXT : message.text
 }
 
+// The only links the Plugin makes clickable: the map link of a location. Other text stays plain.
+var MAP_LINK = /https:\/\/www\.openstreetmap\.org\/\?mlat=-?[0-9.]+&(?:amp;)?mlon=-?[0-9.]+#map=[0-9]+\/-?[0-9.]+\/-?[0-9.]+/g
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+// The Message text as Qt StyledText: mentions in bold, the map link of a location as a link.
+function messageHtml(message) {
+  var html = escapeHtml(messageBody(message))
+  if (!message.revoked) {
+    // Longest mention first, so "@Anna Lee" is not cut by "@Anna". Mentions are plain names from the Daemon.
+    var mentions = (message.mentions || []).slice().sort(function(a, b) { return b.length - a.length })
+    mentions.forEach(function(mention) {
+      html = html.split(escapeHtml(mention)).join("<b>" + escapeHtml(mention) + "</b>")
+    })
+    html = html.replace(MAP_LINK, function(url) { return '<a href="' + url.replace(/&amp;/g, "&") + '">' + url + "</a>" })
+  }
+  return html.replace(/\n/g, "<br>")
+}
+
+// The command that opens a map link in the browser, or [] for any other link. "--" ends the options.
+function linkCommand(url) {
+  MAP_LINK.lastIndex = 0
+  var match = MAP_LINK.exec(url)
+  return match && match[0] === url ? ["xdg-open", "--", url] : []
+}
+
 function editedLabel(message) {
   return message.edited && !message.revoked ? "Edited" : ""
 }
