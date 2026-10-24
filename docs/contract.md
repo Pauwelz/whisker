@@ -79,7 +79,40 @@ Reasons of `linkFailed`. The Go source of truth is `daemon/internal/whatsapp/wha
 
 Fixtures: `contract/fixtures/link-qr.jsonl`, `link-failed.jsonl`, `link-unlinked.jsonl`.
 
+### `chatsChanged`
+
+The chat store changed: History Sync brought Chats, or App State, a contact name or a Push Name changed. The Plugin asks for the Chat list again (`chats.list`, offset 0). The Plugin also asks once after `linked`.
+
+```json
+{"jsonrpc":"2.0","method":"chatsChanged","params":{}}
+```
+
+Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-state.jsonl`.
+
 ## Methods (Plugin to Daemon)
+
+### `chats.list`
+
+Params, both optional: `offset` (default 0) and `limit` (default 50, at most 200). Valid once the Daemon is `ready`. The result is one page of the Chat list:
+
+```json
+{"chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":100,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0}
+```
+
+- Order: Pinned Chats first, then newest `lastActive` first (Unix seconds). A Chat with no activity is not listed.
+- `kind` is `direct`, `group` or `self`.
+- `muted` is true for a Muted Chat whose mute has not ended. `unread` is the Read Marker. `pinned`, `muted` and `unread` come from App State.
+- `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
+- Error -32003 means the chat store failed.
+
+Name rule, resolved by the Daemon at list time:
+
+1. A Group Chat shows its subject.
+2. Any other Chat shows the name that the phone contacts hold for the Participant.
+3. Otherwise it shows the Push Name.
+4. Otherwise it shows the phone number with a leading `+`.
+
+Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chats-pages.jsonl`.
 
 ### `link.pairCode`
 
@@ -103,8 +136,21 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32601 | method not found | The method does not exist, or is not valid now (for example `link.pairCode` on a linked Profile). |
 | -32001 | invalid phone number | `link.pairCode` got a number that is too short or not international. |
 | -32002 | pair code failed | WhatsApp did not give a Pair Code. |
+| -32003 | chat store failed | `chats.list` could not read the chat store. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
+
+## Chat store schema
+
+The chat store (`chat.db`) is versioned by `PRAGMA user_version`. The migrations are the SQL files in `daemon/internal/chatstore/migrations/`.
+
+To change the schema (a new table or column):
+
+1. Add `NNNN_name.sql` with the next free number. Write plain SQL.
+2. Do not edit a file that a release has shipped. Add a new one.
+3. Two branches can pick the same number. Rename one file when you merge.
+
+`chatstore.Migrate` runs each missing file in order, each in one transaction. `profile.Open` calls it. A store from a newer Daemon makes `Open` fail.
 
 ## Golden fixtures
 
@@ -128,6 +174,8 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `pairCode` | The code that the next `link.pairCode` returns. |
 | `pairError` | `invalid-phone`, or any text: the next `link.pairCode` fails. |
 | `event` | The fake port plays this event now. `kind` is `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`) or `loggedOut`. |
+
+The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
 
 The events are the event kinds of the WhatsApp port (`daemon/internal/whatsapp`). A new port event kind gets a new `event` kind here. A new port method that a fixture must script gets a new key.
 

@@ -1,0 +1,10 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[],"more":false,"offset":0}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","lastActive":100,"messages":[{"id":"m1","sender":"1111@s.whatsapp.net","time":100,"text":"hello"}]},{"jid":"2222-3@g.us","kind":"group","subject":"Family","lastActive":300,"mutedUntil":-1,"unread":true},{"jid":"9999@s.whatsapp.net","kind":"self","lastActive":50,"pinned":true},{"jid":"3333@s.whatsapp.net","kind":"direct","lastActive":200,"pinned":true}],"pushNames":[{"jid":"1111@s.whatsapp.net","name":"Ann"}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chats":[{"jid":"3333@s.whatsapp.net","kind":"direct","name":"+3333","lastActive":200,"pinned":true,"muted":false,"unread":false},{"jid":"9999@s.whatsapp.net","kind":"self","name":"+9999","lastActive":50,"pinned":true,"muted":false,"unread":false},{"jid":"2222-3@g.us","kind":"group","name":"Family","lastActive":300,"pinned":false,"muted":true,"unread":true},{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":100,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0}}}
+{"dir":"view","expect":{"screen":"linked","moreChats":false}}

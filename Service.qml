@@ -37,6 +37,11 @@ Item {
     daemon.write(State.pairCodeRequest(nextRequestId++, phone))
   }
 
+  // Called by the "Load more" button of the Chat list.
+  function loadMoreChats() {
+    daemon.write(State.chatListRequest(nextRequestId++, view.chats ? view.chats.length : 0))
+  }
+
   // Called by the Retry button.
   function retry() {
     var kind = State.retryKind(view)
@@ -92,7 +97,9 @@ Item {
     stdout: SplitParser {
       onRead: function(line) {
         var frame = State.parseLine(line)
-        if (frame) root.view = State.applyFrame(root.view, frame)
+        if (!frame) return
+        root.view = State.applyFrame(root.view, frame)
+        if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0))
       }
     }
     stderr: SplitParser {

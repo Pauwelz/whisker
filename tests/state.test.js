@@ -17,7 +17,8 @@ for (const name of fs.readdirSync(fixtureDir).filter((f) => f.endsWith(".jsonl")
       const line = JSON.parse(text);
       if (line.dir === "out") state = State.applyFrame(state, line.frame);
       if (line.dir === "view") {
-        for (const [key, value] of Object.entries(line.expect)) assert.equal(state[key], value, key);
+        // The JSON round trip drops the prototypes of the vm context, so deep equality works.
+        for (const [key, value] of Object.entries(line.expect)) assert.deepEqual(JSON.parse(JSON.stringify(state[key] ?? null)), value, key);
       }
     }
   });
@@ -159,6 +160,26 @@ test("the Pair Code request keeps only the digits of the phone number", () => {
   const line = State.pairCodeRequest(3, "+31 6 1234-5678");
   assert.ok(line.endsWith("\n"));
   assert.deepEqual(JSON.parse(line), { jsonrpc: "2.0", id: 3, method: "link.pairCode", params: { phone: "31612345678" } });
+});
+
+test("the Plugin asks for the Chat list after linked and after chatsChanged only", () => {
+  assert.equal(State.refreshesChats({ method: "linked" }), true);
+  assert.equal(State.refreshesChats({ method: "chatsChanged" }), true);
+  assert.equal(State.refreshesChats({ method: "ready" }), false);
+  assert.equal(State.refreshesChats({ id: 1, result: {} }), false);
+});
+
+test("the Chat list request carries the offset", () => {
+  const line = State.chatListRequest(5, 50);
+  assert.ok(line.endsWith("\n"));
+  assert.deepEqual(JSON.parse(line), { jsonrpc: "2.0", id: 5, method: "chats.list", params: { offset: 50 } });
+});
+
+test("the Chat list survives a chatsChanged frame and goes away on unlinked", () => {
+  let state = State.applyFrame(State.initialState(), { method: "linked" });
+  state = State.applyFrame(state, { id: 1, result: { chats: [{ jid: "a" }], more: false, offset: 0 } });
+  assert.equal(State.applyFrame(state, { method: "chatsChanged" }).chats.length, 1);
+  assert.equal(State.applyFrame(state, { method: "unlinked" }).chats, undefined);
 });
 
 test("Retry on the linking screen restarts linking", () => {

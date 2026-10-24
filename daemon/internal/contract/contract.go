@@ -4,14 +4,17 @@ package contract
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"rsc.io/qr"
 
+	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
@@ -31,6 +34,13 @@ const (
 	methodKeyringRetry = "keyring.retry"
 	methodLinkPairCode = "link.pairCode"
 	methodLinkRetry    = "link.retry"
+	methodChatsList    = "chats.list"
+)
+
+// Page size of chats.list: the default, and the most a request can ask for.
+const (
+	defaultChatsLimit = 50
+	maxChatsLimit     = 200
 )
 
 const (
@@ -38,15 +48,17 @@ const (
 	errMethodNotFound = -32601
 	errInvalidPhone   = -32001
 	errPairCode       = -32002
+	errChatStore      = -32003
 )
 
 // qrScale is the pixel size of one QR module.
 const qrScale = 8
 
-// Profile is what Run needs from the Profile: open the stores, and delete the Profile.
-// Open returns keystore.ErrUnavailable when the keyring does not answer.
+// Profile is what Run needs from the Profile: open the stores, the chat store, and delete the Profile.
+// Open returns keystore.ErrUnavailable when the keyring does not answer. Chat is valid after Open.
 type Profile interface {
 	Open() error
+	Chat() *sql.DB
 	Delete() error
 }
 
@@ -68,6 +80,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 	ready := false
 	var port whatsapp.Port
 	var events <-chan whatsapp.Event // nil (never ready) until a port exists
+	var chats *chatstore.Store       // nil until the Profile is open
 
 	// connect connects the port. An unlinked Profile starts linking, and a failure ends it with `linkFailed`.
 	connect := func() bool {
@@ -97,6 +110,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 				return ExitError
 			}
 			events = port.Events()
+			chats = chatstore.New(profile.Chat(), time.Now)
 			ready = true
 			if !send(notification("ready", nil)) || !startPort() {
 				return ExitError
@@ -131,10 +145,10 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 	for {
 		select {
 		case ev := <-events:
-			if code := handleEvent(ev, logOut, send, func() int {
+			if code := handleEvent(ev, logOut, send, chats, func() int {
 				// The phone removed the Companion Device: delete the Profile and link again as on a fresh one.
 				port.Disconnect()
-				ready, port, events = false, nil, nil
+				ready, port, events, chats = false, nil, nil, nil
 				if err := profile.Delete(); err != nil {
 					fmt.Fprintln(logOut, "profile delete failed")
 					return ExitError
@@ -154,7 +168,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 				ID     json.RawMessage `json:"id"`
 				Method string          `json:"method"`
 				Params struct {
-					Phone string `json:"phone"`
+					Phone  string `json:"phone"`
+					Offset int    `json:"offset"`
+					Limit  int    `json:"limit"`
 				} `json:"params"`
 			}
 			var reply map[string]any
@@ -172,6 +188,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 				retryLink = true
 			} else if req.Method == methodLinkPairCode && linking {
 				reply = pairCodeReply(port, req.ID, req.Params.Phone, logOut)
+			} else if req.Method == methodChatsList && ready {
+				reply = chatsListReply(chats, req.ID, req.Params.Offset, req.Params.Limit, logOut)
 			} else {
 				reply = errorReply(req.ID, errMethodNotFound, "method not found")
 			}
@@ -192,7 +210,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 
 // handleEvent turns a WhatsApp event into frames. unlink runs the delete-the-Profile routine.
 // It returns an exit code, or -1 to go on.
-func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) bool, unlink func() int) int {
+func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) bool, chats *chatstore.Store, unlink func() int) int {
 	ok := true
 	switch ev := ev.(type) {
 	case whatsapp.QRCode:
@@ -209,6 +227,12 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 		ok = send(notification("linkFailed", map[string]any{"reason": ev.Reason}))
 	case whatsapp.LoggedOut:
 		return unlink()
+	case whatsapp.HistorySync, whatsapp.PushName, whatsapp.ContactName, whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker:
+		if err := chats.Apply(ev); err != nil {
+			fmt.Fprintln(logOut, "chat store write failed") // the error text could hold names
+		} else {
+			ok = send(notification("chatsChanged", nil))
+		}
 	}
 	if !ok {
 		return ExitError
@@ -227,6 +251,19 @@ func pairCodeReply(port whatsapp.Port, id json.RawMessage, phone string, logOut 
 		return errorReply(id, errPairCode, "pair code failed")
 	}
 	return resultReply(id, map[string]any{"code": code})
+}
+
+func chatsListReply(chats *chatstore.Store, id json.RawMessage, offset, limit int, logOut io.Writer) map[string]any {
+	offset = max(offset, 0)
+	if limit <= 0 {
+		limit = defaultChatsLimit
+	}
+	page, err := chats.List(offset, min(limit, maxChatsLimit))
+	if err != nil {
+		fmt.Fprintln(logOut, "chat list failed")
+		return errorReply(id, errChatStore, "chat store failed")
+	}
+	return resultReply(id, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset})
 }
 
 // qrDataURI renders a WhatsApp QR code string as a PNG data: URI.

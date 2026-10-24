@@ -95,11 +95,33 @@ function applyFrame(state, frame) {
     var reason = frame.params.reason
     return linking(state, { qr: "", reason: reason, message: LINK_FAILURES[reason] || LINK_FAILURES.unexpected, canRetry: true })
   }
+  if (frame && frame.result && frame.result.chats)
+    return chatListPage(state, frame.result)
   if (frame && frame.result && frame.result.code)
     return linking(state, { pairCode: frame.result.code, message: "Enter this code in WhatsApp: Linked devices, Link with phone number." })
   if (frame && frame.error && PAIR_CODE_ERRORS[frame.error.code])
     return linking(state, { message: PAIR_CODE_ERRORS[frame.error.code] })
   return state
+}
+
+// A chats.list result. Page 0 replaces the Chat list, a later page extends it.
+function chatListPage(state, result) {
+  var next = {}
+  for (var key in state) next[key] = state[key]
+  next.chats = result.offset > 0 ? (state.chats || []).concat(result.chats) : result.chats
+  next.moreChats = result.more === true
+  return next
+}
+
+// True when the Plugin must ask for the first page of the Chat list after this frame.
+// A refresh shows page 0 only: a Chat list the user scrolled further falls back to it.
+function refreshesChats(frame) {
+  return !!frame && (frame.method === "linked" || frame.method === "chatsChanged")
+}
+
+// The request for one page of the Chat list. The next page starts at the number of Chats shown.
+function chatListRequest(id, offset) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chats.list", params: { offset: offset } }) + "\n"
 }
 
 // The linking screen keeps the QR code and the Pair Code unless a frame changes them.

@@ -106,6 +106,49 @@ Panel {
           onClicked: root.pairMode = !root.pairMode
         }
 
+        // The Chat list: the Daemon sends the Chats in order, with the name and the marks.
+        ListView {
+          visible: root.view.screen === "linked"
+          width: parent.width
+          height: visible ? Style.space(320) : 0
+          clip: true
+          model: root.view.chats || []
+          delegate: Row {
+            width: ListView.view.width
+            spacing: Style.space(8)
+            Text {
+              text: modelData.unread ? "●" : " "
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+            Text {
+              width: parent.width - Style.space(100)
+              elide: Text.ElideRight
+              textFormat: Text.PlainText
+              text: modelData.name
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+              font.bold: modelData.unread
+            }
+            Text {
+              text: (modelData.pinned ? "pinned " : "") + (modelData.muted ? "muted" : "")
+              color: root.contentForeground
+              opacity: 0.6
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+          }
+        }
+
+        Button {
+          visible: root.view.screen === "linked" && root.view.moreChats === true
+          text: "Load more"
+          bordered: true
+          onClicked: root.whiskerService.loadMoreChats()
+        }
+
         Button {
           id: retryButton
           visible: root.view.canRetry === true

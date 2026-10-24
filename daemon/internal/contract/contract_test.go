@@ -227,7 +227,20 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 		if err := json.Unmarshal(line.Event, &e); err != nil {
 			r.t.Fatal(err)
 		}
+		// The kinds historySync to readMarker carry the JSON fields of their whatsapp type.
 		switch e.Kind {
+		case "historySync":
+			emitJSON[whatsapp.HistorySync](r.t, f, line.Event)
+		case "pushName":
+			emitJSON[whatsapp.PushName](r.t, f, line.Event)
+		case "contactName":
+			emitJSON[whatsapp.ContactName](r.t, f, line.Event)
+		case "pin":
+			emitJSON[whatsapp.Pin](r.t, f, line.Event)
+		case "mute":
+			emitJSON[whatsapp.Mute](r.t, f, line.Event)
+		case "readMarker":
+			emitJSON[whatsapp.ReadMarker](r.t, f, line.Event)
 		case "qr":
 			f.Emit(whatsapp.QRCode{Code: e.Code})
 		case "pairSuccess":
@@ -344,4 +357,14 @@ func TestContractDocListsLinkFailureReasons(t *testing.T) {
 			t.Errorf("docs/contract.md has no row for link failure reason %s", reason)
 		}
 	}
+}
+
+// emitJSON plays an event whose fields are the JSON keys of its whatsapp type.
+func emitJSON[T whatsapp.Event](t *testing.T, f *whatsapp.Fake, raw json.RawMessage) {
+	t.Helper()
+	var ev T
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		t.Fatal(err)
+	}
+	f.Emit(ev)
 }

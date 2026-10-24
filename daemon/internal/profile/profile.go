@@ -13,6 +13,7 @@ import (
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	waLog "go.mau.fi/whatsmeow/util/log"
 
+	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 )
 
@@ -59,8 +60,8 @@ func (p *Profile) Open() error {
 		p.Close()
 		return err
 	}
-	// Reading the header proves the key is right.
-	if err := p.chat.QueryRow("PRAGMA user_version").Scan(new(int)); err != nil {
+	// Migrate reads the header first, which proves the key is right.
+	if err := chatstore.Migrate(p.chat); err != nil {
 		p.Close()
 		return err
 	}
