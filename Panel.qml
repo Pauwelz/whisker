@@ -106,6 +106,16 @@ Panel {
           onClicked: root.pairMode = !root.pairMode
         }
 
+        TextInput {
+          id: searchInput
+          visible: root.view.screen === "linked"
+          width: parent.width
+          color: root.contentForeground
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+          onTextChanged: root.whiskerService.searchChats(text)
+        }
+
         // The Chat list: the Daemon sends the Chats in order, with the name and the marks.
         ListView {
           visible: root.view.screen === "linked"

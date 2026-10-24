@@ -175,6 +175,11 @@ test("the Chat list request carries the offset", () => {
   assert.deepEqual(JSON.parse(line), { jsonrpc: "2.0", id: 5, method: "chats.list", params: { offset: 50 } });
 });
 
+test("the Chat list request carries the search query only when it is set", () => {
+  assert.deepEqual(JSON.parse(State.chatListRequest(6, 0, "ann")).params, { offset: 0, query: "ann" });
+  assert.deepEqual(JSON.parse(State.chatListRequest(7, 0, "")).params, { offset: 0 });
+});
+
 test("the Chat list survives a chatsChanged frame and goes away on unlinked", () => {
   let state = State.applyFrame(State.initialState(), { method: "linked" });
   state = State.applyFrame(state, { id: 1, result: { chats: [{ jid: "a" }], more: false, offset: 0 } });

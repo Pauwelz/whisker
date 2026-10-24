@@ -120,8 +120,11 @@ function refreshesChats(frame) {
 }
 
 // The request for one page of the Chat list. The next page starts at the number of Chats shown.
-function chatListRequest(id, offset) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chats.list", params: { offset: offset } }) + "\n"
+// A non-empty query asks for the Chats that match the search field.
+function chatListRequest(id, offset, query) {
+  var params = { offset: offset }
+  if (query) params.query = query
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chats.list", params: params }) + "\n"
 }
 
 // The linking screen keeps the QR code and the Pair Code unless a frame changes them.

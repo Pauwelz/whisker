@@ -15,6 +15,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - Linking errors show in the pop-out with Retry.
 - After linking, History Sync fills the chat store. The pop-out shows the Chat list: Pinned Chats first, then newest first, with marks for Muted and unread Chats.
 - The Chat list shows the phone contact name, then the Push Name, then the phone number. The pop-out loads more Chats on request.
+- A search field above the Chat list filters the Chats by Chat name and by the name of a Participant who wrote in them.
 - When the phone removes the Companion Device, the Daemon deletes the Profile and the pop-out goes back to linking.
 
 ## [1.0.0-rc.1] - 2026-10-24
