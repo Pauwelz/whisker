@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- A voice note has a Play and Stop button in the pop-out. It plays with `mpv --no-video`. Closing the pop-out stops it. The sender sees the note as played, unless Read Receipts is Off. In On interaction mode, playing also sends Read for that note only.
 - A fresh Profile shows a QR code in the pop-out. The code refreshes while the user waits.
 - A switch in the pop-out links with a Pair Code instead.
 - The pop-out leaves the linking screen when the phone authorizes the Companion Device.

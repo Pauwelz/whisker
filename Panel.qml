@@ -290,7 +290,7 @@ Panel {
                 }
                 Button {
                   visible: State.canOpenMedia(modelData)
-                  text: "Open"
+                  text: State.openLabel(modelData, root.whiskerService.playingKey)
                   bordered: true
                   onClicked: root.whiskerService.openMedia(modelData)
                 }

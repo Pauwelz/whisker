@@ -282,6 +282,20 @@ Params: `chat` and `id`. Valid for Media in state `ready`. The result is `{"chat
 
 Params: `chat`, `id` and `path` (absolute). The Daemon writes a plain copy to `path` (mode 0600) and answers an empty `result`. This is an explicit export: the Daemon does not delete it. Errors as for `media.open`, and -32008 for a relative `path`.
 
+#### `media.played`
+
+Params: `chat` and `id`. The Plugin sends it when a voice note starts to play. Valid for a `ready` voice note of another Participant. Error -32008 means anything else. The Daemon answers an empty `result` and the policy (`receiptpolicy.Played`) decides what goes out:
+
+| Read Receipts | Sent |
+|---|---|
+| `off` | Nothing. |
+| `onOpen` | `Played`. Read went out when the Chat became attended. |
+| `onInteraction` | `Read` and `Played` for that Message only. The rest of the Chat stays unread for the sender. |
+
+A repeat play of the same note sends nothing (the Daemon remembers until restart). A receipt that fails (offline) is logged and sent again at the next play.
+
+Fixtures: `played-off.jsonl`, `played-on-open.jsonl`, `played-on-interaction.jsonl`, `played-invalid.jsonl`.
+
 #### `media.release`
 
 Params: `chat`. The Daemon deletes the plain copies of that Chat and answers an empty `result`. The Plugin sends it when the Chat closes.
@@ -315,7 +329,7 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
 | -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. |
 | -32007 | send failed | `chat.edit` or `chat.revoke` could not reach WhatsApp. The Message is unchanged. |
-| -32008 | invalid media | `media.download`, `media.open`, `media.save` got Media that does not exist or is in the wrong state, or a relative `path`. |
+| -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
@@ -343,7 +357,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `view` | `expect` | After the `out` frames above it, the Plugin view state holds every key of `expect`. |
 | `keyring` | `state` | The Go test sets the fake keyring: `missing` (calls fail), `ok`, `locked` (calls block) or `unlocked`. |
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
-| `read` | `receipts`, `markers` | The Go test checks the Read Receipts (`chat`, `sender`, `ids`) and the Chats whose Read Marker the fake port cleared, both so far, in order. |
+| `read` | `receipts`, `plays`, `markers` | The Go test checks the Read Receipts and the Played receipts (`chat`, `sender`, `ids`) and the Chats whose Read Marker the fake port cleared, all so far, in order. |
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
 | `sent` | `ids` | The Go test checks the Message IDs that the fake port has sent so far, in order. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |

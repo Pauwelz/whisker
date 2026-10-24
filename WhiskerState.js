@@ -443,9 +443,30 @@ function canOpenMedia(message) {
   return !!message.media && message.media.state === "ready"
 }
 
-// The command that opens a plain copy: video in mpv, everything else in the default app.
+// The command that opens a plain copy: video in mpv, a voice note in mpv without a window, everything else in the default app.
 function openCommand(message, path) {
+  if (message.media.kind === "voice") return ["mpv", "--no-video", path]
   return message.media.kind === "video" ? ["mpv", path] : ["xdg-open", path]
+}
+
+// Voice notes play in the pop-out. `playingKey` is the mediaKey of the note that plays now, or "".
+function isVoice(message) {
+  return !!message.media && message.media.kind === "voice"
+}
+
+function isPlaying(playingKey, message) {
+  return playingKey !== "" && playingKey === mediaKey(message.chat, message.id)
+}
+
+// The label of the button that opens Media: Play or Stop for a voice note, Open for the rest.
+function openLabel(message, playingKey) {
+  if (!isVoice(message)) return "Open"
+  return isPlaying(playingKey, message) ? "Stop" : "Play"
+}
+
+// The Daemon sends Played (and Read for that Message in On interaction mode) when playback starts.
+function playedRequest(id, message) {
+  return mediaRequest(id, "media.played", { chat: message.chat, id: message.id })
 }
 
 function mediaRequest(id, method, params) {

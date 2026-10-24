@@ -28,6 +28,7 @@ type Fake struct {
 	readErr    error
 	reads      []Read
 	chatReads  []string
+	plays      []Read
 	edits      []string
 	revokes    []string
 }
@@ -115,6 +116,24 @@ func (f *Fake) Reads() []Read {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]Read{}, f.reads...)
+}
+
+// Plays lists the MarkPlayed calls that worked, in order. Each has one ID.
+func (f *Fake) Plays() []Read {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Read{}, f.plays...)
+}
+
+// MarkPlayed fails with the read error, like MarkRead.
+func (f *Fake) MarkPlayed(chat, sender, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.readErr != nil {
+		return f.readErr
+	}
+	f.plays = append(f.plays, Read{chat, sender, []string{id}})
+	return nil
 }
 
 // ChatReads lists the Chats of the MarkChatRead calls, in order.
