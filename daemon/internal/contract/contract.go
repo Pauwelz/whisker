@@ -19,6 +19,7 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/attention"
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
@@ -35,20 +36,24 @@ const (
 const MaxLineBytes = 1 << 20
 
 const (
-	methodKeyringRetry = "keyring.retry"
-	methodLinkPairCode = "link.pairCode"
-	methodLinkRetry    = "link.retry"
-	methodChatsList    = "chats.list"
-	methodChatMessages = "chat.messages"
-	methodChatSend     = "chat.send"
-	methodChatRetry    = "chat.retry"
-	methodAttentionSet = "attention.set"
-	methodChatEdit     = "chat.edit"
-	methodChatRevoke   = "chat.revoke"
-	methodChatTyping   = "chat.typing"
-	methodSettingsGet  = "settings.get"
-	methodSettingsSet  = "settings.set"
-	methodLogout       = "profile.logout"
+	methodKeyringRetry  = "keyring.retry"
+	methodLinkPairCode  = "link.pairCode"
+	methodLinkRetry     = "link.retry"
+	methodChatsList     = "chats.list"
+	methodChatMessages  = "chat.messages"
+	methodChatSend      = "chat.send"
+	methodChatRetry     = "chat.retry"
+	methodAttentionSet  = "attention.set"
+	methodMediaDownload = "media.download"
+	methodMediaOpen     = "media.open"
+	methodMediaSave     = "media.save"
+	methodMediaRelease  = "media.release"
+	methodChatEdit      = "chat.edit"
+	methodChatRevoke    = "chat.revoke"
+	methodChatTyping    = "chat.typing"
+	methodSettingsGet   = "settings.get"
+	methodSettingsSet   = "settings.set"
+	methodLogout        = "profile.logout"
 )
 
 // Page size of chats.list and chat.messages: the default, and the most a request can ask for.
@@ -70,6 +75,8 @@ const (
 	errLogout         = -32005
 	errMessage        = -32006
 	errSendFailed     = -32007
+	errMedia          = -32008
+	errMediaFailed    = -32009
 )
 
 // qrScale is the pixel size of one QR module.
@@ -80,6 +87,7 @@ const qrScale = 8
 type Profile interface {
 	Open() error
 	Chat() *sql.DB
+	Media() *media.Store
 	Delete() error
 }
 
@@ -109,6 +117,14 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	var attn attention.Attention      // the pop-out state: it outlives the Profile, so a new link keeps it
 	var sent <-chan sendResult        // the results of the sends, nil until the Profile is open
 	var retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
+	var loader *mediaLoader           // nil until the Profile is open
+	var mediaDone <-chan mediaResult  // the results of the Media downloads, nil until the Profile is open
+	// The plain copies of Media never outlive the Daemon.
+	defer func() {
+		if loader != nil {
+			loader.store.Wipe()
+		}
+	}()
 
 	// connect connects the port. An unlinked Profile starts linking, and a failure ends it with `linkFailed`.
 	connect := func() bool {
@@ -143,6 +159,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			chats = chatstore.New(profile.Chat(), Now)
 			box = newOutbox(chats, port, send, logOut)
 			sent = box.results
+			loader = newMediaLoader(chats, port, profile.Media(), box.notify, logOut)
+			mediaDone = loader.results
 			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut}
 			box.incoming = read.incoming
 			pres = newPresenter(port, prefs, &attn, logOut)
@@ -169,7 +187,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	// `by` is "user" for Log out. It is empty when the phone removed the Companion Device.
 	unlink := func(by string) int {
 		port.Disconnect()
-		ready, port, events, chats, box, read, pres, sent, retryConnect = false, nil, nil, nil, nil, nil, nil, nil, nil
+		loader.store.Wipe()
+		ready, port, events, chats, box, read, pres, sent, retryConnect, loader, mediaDone = false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 		attn.Set(attn.Open(), "") // the Chat is gone with the Profile
 		if err := profile.Delete(); err != nil {
 			fmt.Fprintln(logOut, "profile delete failed")
@@ -203,8 +222,12 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			if _, ok := ev.(whatsapp.Connected); ok {
 				pres.connected() // before the `connected` frame
 			}
-			if code := handleEvent(ev, logOut, send, chats, box, func() int { return unlink("") }); code >= 0 {
+			if code := handleEvent(ev, logOut, send, chats, box, loader, func() int { return unlink("") }); code >= 0 {
 				return code
+			}
+		case r := <-mediaDone:
+			if !loader.done(r) {
+				return ExitError
 			}
 		case r := <-sent:
 			if !box.done(r) {
@@ -232,6 +255,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					Open   bool   `json:"open"`
 					Typing bool   `json:"typing"`
 					ID     string `json:"id"`
+					Path   string `json:"path"`
 					settings.Update
 				} `json:"params"`
 			}
@@ -239,6 +263,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			retryKeyring, retryLink, logout, listChanged := false, false, false, false
 			var submit *chatstore.Message  // a pending Message to send after the reply
 			var changed *chatstore.Message // an edited or revoked Message to announce after the reply
+			var download func()            // the start of a Media download, after the reply
 			linking := ready && !port.Linked()
 			if err := json.Unmarshal(line, &req); err != nil {
 				reply = errorReply(nil, errParse, "parse error")
@@ -260,6 +285,19 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, logOut)
 			} else if req.Method == methodChatRetry && ready && port.Linked() {
 				reply, submit = chatRetryReply(chats, req.ID, req.Params.Chat, req.Params.ID, logOut)
+			} else if req.Method == methodMediaDownload && ready && port.Linked() {
+				var started bool
+				if reply, started = loader.downloadReply(req.ID, req.Params.Chat, req.Params.ID); started {
+					chat, msgID := req.Params.Chat, req.Params.ID
+					download = func() { loader.start(chat, msgID) }
+				}
+			} else if req.Method == methodMediaOpen && ready {
+				reply = loader.openReply(req.ID, req.Params.Chat, req.Params.ID)
+			} else if req.Method == methodMediaSave && ready {
+				reply = loader.saveReply(req.ID, req.Params.Chat, req.Params.ID, req.Params.Path)
+			} else if req.Method == methodMediaRelease && ready {
+				loader.store.Release(req.Params.Chat)
+				reply = resultReply(req.ID, map[string]any{})
 			} else if req.Method == methodAttentionSet && ready {
 				listChanged = read.setAttention(req.Params.Open, req.Params.Chat)
 				pres.sync()
@@ -302,6 +340,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					read.interaction(submit.Chat) // a sent Message is the interaction
 				}
 			}
+			if download != nil {
+				download()
+			}
 			if changed != nil && !send(notification("messageChanged", map[string]any{"message": *changed})) {
 				return ExitError
 			}
@@ -324,7 +365,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 
 // handleEvent turns a WhatsApp event into frames. unlink runs the delete-the-Profile routine.
 // It returns an exit code, or -1 to go on.
-func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) bool, chats *chatstore.Store, box *outbox, unlink func() int) int {
+func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) bool, chats *chatstore.Store, box *outbox, loader *mediaLoader, unlink func() int) int {
 	ok := true
 	switch ev := ev.(type) {
 	case whatsapp.QRCode:
@@ -343,6 +384,9 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 		return unlink()
 	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt, whatsapp.MessageEdited, whatsapp.MessageRevoked:
 		ok = box.handle(ev)
+		if nm, isNew := ev.(whatsapp.NewMessage); isNew {
+			loader.autoStart(nm)
+		}
 	case whatsapp.Presence:
 		ok = send(notification("presenceChanged", map[string]any{"chat": ev.JID, "online": ev.Online, "lastSeen": ev.LastSeen}))
 	case whatsapp.ChatPresence:

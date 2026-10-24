@@ -16,6 +16,8 @@ import (
 type Store struct {
 	db  *sql.DB
 	now func() time.Time
+	// RemoveMedia deletes the stored file of a Message whose Media row was deleted. The Daemon sets it once the Media store exists.
+	RemoveMedia func(chat, id string)
 }
 
 func New(db *sql.DB, now func() time.Time) *Store { return &Store{db: db, now: now} }
@@ -228,7 +230,7 @@ func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 		return err
 	}
 	for _, m := range c.Messages {
-		if err := putMessage(tx, c.JID, m); err != nil {
+		if err := putMessage(tx, c.JID, m, MediaNone); err != nil {
 			return err
 		}
 	}

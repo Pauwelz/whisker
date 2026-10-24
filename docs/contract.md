@@ -112,7 +112,7 @@ A Message was added or changed: it arrived, the user sent it, or its Delivery St
 
 An edit and a revoke also send `messageChanged`, whether the user, another device or the other Participant made them. See `chat.edit` and `chat.revoke`.
 
-Later tickets (Reaction, Quote, Media) add keys to the Message and send `messageChanged` for each change.
+Later tickets (Reaction, Quote) add keys to the Message and send `messageChanged` for each change.
 
 Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`, `chat-edit.jsonl`, `chat-revoke.jsonl`.
 
@@ -204,6 +204,7 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 - `senderName` follows the name rule for Participants. It is empty for the Messages of the user.
 - `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
 - `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
+- `media` is present only for a Message with Media, see Media below. It never holds a path or bytes.
 - Error -32003 means the chat store failed.
 
 Delivery State of a Message of the user:
@@ -267,6 +268,46 @@ Outgoing (Plugin to Daemon):
 
 Fixtures: `presence-incoming.jsonl`, `presence-online.jsonl`, `presence-typing.jsonl`.
 
+### Media
+
+A Message with Media has a `media` object: `{"kind","mime","name","size","state"}`. `text` holds the caption. `size` is in bytes. `name` is the file name of a document, else empty.
+
+| `kind` | Download |
+|---|---|
+| `image`, `sticker`, `voice` | Automatic, when the Message arrives. |
+| `video`, `audio`, `document` | On `media.download`. |
+
+The automatic rule is fixed. Media from History Sync never downloads by itself.
+
+| `state` | Meaning |
+|---|---|
+| `none` | Not downloaded. |
+| `downloading` | The download runs. |
+| `ready` | Stored in the Profile, encrypted. `media.open` and `media.save` work. |
+| `failed` | The download failed. `media.download` tries again. |
+
+Every state change sends `messageChanged`. A revoked Message (Tombstone) has no `media`, and its stored file is deleted. The Daemon sets Media that was `downloading` at a restart back to `none`.
+
+The Daemon stores received Media encrypted again in the Profile, in WhatsApp's CDN format (see architecture, section 5). It makes a plain copy only on `media.open`, in `$XDG_RUNTIME_DIR/whisker/media/<chat>/`. It checks the HMAC first. A changed byte gives error -32009 and no copy. It deletes the copies of a Chat on `media.release`, and all copies at start and at exit. Logs never hold a Chat, a name or a path.
+
+#### `media.download`
+
+Params: `chat` and `id`. Valid for Media in state `none` or `failed`. The Daemon answers `{"message": {...}}` with state `downloading`, then sends `messageChanged` with `ready` or `failed`. Error -32008 means no such Media, or it is already `downloading` or `ready`.
+
+#### `media.open`
+
+Params: `chat` and `id`. Valid for Media in state `ready`. The result is `{"chat","id","path"}`: the path of a plain copy. Error -32008 means no such Media, or it is not `ready`. Error -32009 means the integrity check failed, or the copy failed.
+
+#### `media.save`
+
+Params: `chat`, `id` and `path` (absolute). The Daemon writes a plain copy to `path` (mode 0600) and answers an empty `result`. This is an explicit export: the Daemon does not delete it. Errors as for `media.open`, and -32008 for a relative `path`.
+
+#### `media.release`
+
+Params: `chat`. The Daemon deletes the plain copies of that Chat and answers an empty `result`. The Plugin sends it when the Chat closes.
+
+Fixtures: `media-auto.jsonl`, `media-open.jsonl`, `media-click.jsonl`, `media-revoke.jsonl`.
+
 ### `link.pairCode`
 
 Params: `phone` (digits, international, no `+`). Valid only while the Profile is not linked. The result is `{"code": "ABCD-1234"}`: the Pair Code as text. The user types it on the phone. Success then follows as `linked`. Errors: -32001 and -32002 (see Errors). Fixtures: `link-pair-code.jsonl`, `link-pair-code-invalid.jsonl`.
@@ -294,6 +335,8 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
 | -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. |
 | -32007 | send failed | `chat.edit` or `chat.revoke` could not reach WhatsApp. The Message is unchanged. |
+| -32008 | invalid media | `media.download`, `media.open`, `media.save` got Media that does not exist or is in the wrong state, or a relative `path`. |
+| -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 
@@ -326,6 +369,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `sent` | `ids` | The Go test checks the Message IDs that the fake port has sent so far, in order. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
+| `file` | `path`, and `content` or `missing` | The Go test checks a file: it holds `content`, or (`missing`: true) it does not exist. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
 | `plugin` | `openChat` | The Plugin test opens this Chat (`jid`, `name`, `kind`) as the user does. The Go test ignores it. |
 | `whatsapp` | one of the keys below | The Go test scripts the fake WhatsApp port. |
 
@@ -337,6 +381,8 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `pairCode` | The code that the next `link.pairCode` returns. |
 | `pairError` | `invalid-phone`, or any text: the next `link.pairCode` fails. |
 | `sendError` | `offline`, any other text, or empty: the fake port fails every send, edit and revoke with that error, or works again (empty). |
+| `download` | The plain Media that the next downloads write. |
+| `downloadError` | Any text, or empty: the fake port fails every download with that error, or works again (empty). |
 | `readError` | `offline`, or empty: the fake port fails every Read Receipt, or works again (empty). |
 | `event` | The fake port plays this event now (also `presence` and `chatPresence`, with the JSON keys of their type). `kind` is `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`), `loggedOut`, `connected` or `disconnected`. |
 

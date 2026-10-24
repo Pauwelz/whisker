@@ -3,7 +3,12 @@
 // Only the adapter in client.go imports whatsmeow, and it maps whatsmeow types to these types.
 package whatsapp
 
-import "errors"
+import (
+	"errors"
+	"os"
+
+	"github.com/Pauwelz/whisker/daemon/internal/media"
+)
 
 // Port is what the Daemon needs from WhatsApp.
 type Port interface {
@@ -25,6 +30,9 @@ type Port interface {
 	// Send sends a text Message to a Chat. It returns ErrOffline when there is no connection.
 	// It can block for a long time: call it off the Daemon loop.
 	Send(chat, id, text string) error
+	// Download downloads the plain Media into dst, and checks it against its hashes.
+	// It can block for a long time: call it off the Daemon loop.
+	Download(ref Media, dst *os.File) error
 	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.
 	// It returns ErrOffline when there is no connection.
 	MarkRead(chat, sender string, ids []string) error
@@ -81,7 +89,20 @@ const (
 	KindSelf   = "self"
 )
 
+// Media is what a Message carries to fetch its file later. Key, DirectPath and the hashes stay in the chat store.
+type Media struct {
+	Kind          media.Kind `json:"kind"`
+	Mime          string     `json:"mime"`
+	Name          string     `json:"name"` // the file name of a document, else empty
+	Size          int64      `json:"size"`
+	Key           []byte     `json:"key"`
+	DirectPath    string     `json:"directPath"`
+	FileSHA256    []byte     `json:"fileSha256"`
+	FileEncSHA256 []byte     `json:"fileEncSha256"`
+}
+
 // Message is one Message of a History Sync batch. Times are Unix seconds.
+// Text is the text, or the caption of Media. Media is nil for a text Message.
 type Message struct {
 	ID       string `json:"id"`
 	Sender   string `json:"sender"` // JID of the author
@@ -89,6 +110,7 @@ type Message struct {
 	Time     int64  `json:"time"`
 	Text     string `json:"text"`
 	PushName string `json:"pushName"` // the author's Push Name as sent with the Message, may be empty
+	Media    *Media `json:"media"`
 }
 
 // HistoryChat is one Chat of a History Sync batch, with the App State that came with it.

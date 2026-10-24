@@ -60,6 +60,8 @@ Item {
 
   function closeChat() {
     stopTyping()
+    // The Daemon deletes the plain Media copies of the Chat.
+    daemon.write(State.mediaReleaseRequest(nextRequestId++, view.openChat.jid))
     view = State.closeChat(view)
     syncAttention()
   }
@@ -98,6 +100,57 @@ Item {
   function syncAttention() {
     if (!daemon.running) return
     daemon.write(State.attentionRequest(nextRequestId++, popoutOpen, view.openChat ? view.openChat.jid : ""))
+  }
+
+  // Media the user clicked to open, by key, until its path arrives.
+  property var pendingOpen: ({})
+
+  // Called by the Download button.
+  function downloadMedia(message) {
+    daemon.write(State.mediaDownloadRequest(nextRequestId++, message))
+  }
+
+  // Called by Open and by a tap on an image. A path that is already known opens at once.
+  function openMedia(message) {
+    var path = State.mediaPath(view, message)
+    if (path !== "") {
+      launch(message, path)
+      return
+    }
+    pendingOpen[State.mediaKey(message.chat, message.id)] = message
+    daemon.write(State.mediaOpenRequest(nextRequestId++, message))
+  }
+
+  // Called by Save as, with an absolute path.
+  function saveMedia(message, path) {
+    daemon.write(State.mediaSaveRequest(nextRequestId++, message, path))
+  }
+
+  // video in mpv, the rest in the default app
+  function launch(message, path) {
+    opener.command = State.openCommand(message, path)
+    opener.startDetached()
+  }
+
+  // Asks for the path of each image and sticker that is ready, and opens Media that the user clicked.
+  function handleMediaFrame(frame) {
+    var result = frame.result
+    if (result && result.path) {
+      var key = State.mediaKey(result.chat, result.id)
+      var message = pendingOpen[key]
+      if (message) {
+        delete pendingOpen[key]
+        launch(message, result.path)
+      }
+    }
+    var todo = State.mediaToLoad(view)
+    if (todo.length === 0) return
+    view = State.markMediaRequested(view, todo)
+    todo.forEach(function(m) { daemon.write(State.mediaOpenRequest(nextRequestId++, m)) })
+  }
+
+  Process {
+    id: opener
   }
 
   // Called by the "Load older" button of the open Chat.
@@ -188,6 +241,7 @@ Item {
         var frame = State.parseLine(line)
         if (!frame) return
         root.view = State.applyFrame(root.view, frame)
+        root.handleMediaFrame(frame)
         if (State.resendsAttention(frame)) root.syncAttention()
         if (State.requestsSettings(frame)) daemon.write(State.settingsGetRequest(root.nextRequestId++))
         if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0, root.chatQuery))

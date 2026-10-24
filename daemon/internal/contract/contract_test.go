@@ -30,19 +30,25 @@ type fixtureLine struct {
 	State string          `json:"state"`
 
 	// Fake WhatsApp lines (dir "whatsapp"): a start-up setting or an event, see docs/contract.md.
-	Linked     *bool           `json:"linked"`
-	PairCode   string          `json:"pairCode"`
-	PairError  string          `json:"pairError"`
-	SendError  *string         `json:"sendError"`  // "" lets sends work again
-	ReadError  *string         `json:"readError"`  // "" lets Read Receipts work again
-	Receipts   []whatsapp.Read `json:"receipts"`   // dir "read": the Read Receipts the fake port has sent so far
-	Markers    []string        `json:"markers"`    // dir "read": the Chats whose Read Marker the fake port has cleared
-	IDs        []string        `json:"ids"`        // dir "sent" and "revoked": the Message IDs
-	Edits      []string        `json:"edits"`      // dir "edited": "id:text" of each edit the fake port has sent so far
-	Online     []bool          `json:"online"`     // dir "presence": the availability calls so far
-	Typing     []string        `json:"typing"`     // dir "presence": "chat:composing" or "chat:paused" calls so far
-	Subscribed []string        `json:"subscribed"` // dir "presence": the Presence subscriptions so far
-	Event      json.RawMessage `json:"event"`
+	Linked    *bool           `json:"linked"`
+	PairCode  string          `json:"pairCode"`
+	PairError string          `json:"pairError"`
+	SendError *string         `json:"sendError"` // "" lets sends work again
+	ReadError *string         `json:"readError"` // "" lets Read Receipts work again
+	Receipts  []whatsapp.Read `json:"receipts"`  // dir "read": the Read Receipts the fake port has sent so far
+	Markers   []string        `json:"markers"`   // dir "read": the Chats whose Read Marker the fake port has cleared
+	IDs       []string        `json:"ids"`       // dir "sent" and "revoked": the Message IDs
+	Edits     []string        `json:"edits"`     // dir "edited": "id:text" of each edit the fake port has sent so far
+	Event     json.RawMessage `json:"event"`
+
+	Download      *string  `json:"download"`      // dir "whatsapp": the plain Media the next downloads return
+	DownloadError *string  `json:"downloadError"` // dir "whatsapp": "" lets downloads work again
+	Path          string   `json:"path"`          // dir "file"
+	Content       string   `json:"content"`       // dir "file": the content the file must hold
+	Missing       bool     `json:"missing"`       // dir "file": the file must not exist
+	Online        []bool   `json:"online"`        // dir "presence": the availability calls so far
+	Typing        []string `json:"typing"`        // dir "presence": "chat:composing" or "chat:paused" calls so far
+	Subscribed    []string `json:"subscribed"`    // dir "presence": the Presence subscriptions so far
 }
 
 // runner runs the Daemon on pipes, with a fake keyring, a manual clock and a Profile in a temp dir.
@@ -51,6 +57,7 @@ type runner struct {
 	fake    *keystore.Fake
 	clock   *keystore.ManualClock
 	dir     string
+	runtime string // $XDG_RUNTIME_DIR of the Daemon
 	in      *io.PipeWriter
 	frames  chan string
 	done    chan int
@@ -67,7 +74,9 @@ func newRunner(t *testing.T) *runner {
 	oldNow := contract.Now
 	contract.Now = func() time.Time { return time.Unix(1000, 0) } // fixed Message times for the fixtures
 	t.Cleanup(func() { contract.Now = oldNow })
-	return &runner{t: t, fake: keystore.NewFake(), clock: keystore.NewManualClock(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
+	runtime := t.TempDir()
+	t.Setenv("XDG_RUNTIME_DIR", runtime)
+	return &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: keystore.NewManualClock(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
 }
 
 func (r *runner) currentPort() *whatsapp.Fake {
@@ -170,11 +179,12 @@ func TestFixtures(t *testing.T) {
 					if json.Unmarshal(line.Frame, &text) != nil {
 						text = string(line.Frame) // an object frame is sent as it is
 					}
+					text = strings.ReplaceAll(text, "$RUNTIME", r.runtime)
 					r.send(text)
 				case "out":
 					r.start()
 					var want, got any
-					if err := json.Unmarshal(line.Frame, &want); err != nil {
+					if err := json.Unmarshal(bytes.ReplaceAll(line.Frame, []byte("$RUNTIME"), []byte(r.runtime)), &want); err != nil {
 						t.Fatal(err)
 					}
 					text := r.nextFrame()
@@ -221,6 +231,8 @@ func TestFixtures(t *testing.T) {
 					if got, want := mustJSON(f.Subscribed()), mustJSON(append([]string{}, line.Subscribed...)); got != want {
 						t.Errorf("subscriptions = %s, want %s", got, want)
 					}
+				case "file":
+					r.checkFile(line)
 				case "clock":
 					r.start()
 					r.clock.Fire()
@@ -235,6 +247,18 @@ func TestFixtures(t *testing.T) {
 				t.Errorf("extra frames: %v", rest)
 			}
 		})
+	}
+}
+
+// checkFile checks a plain Media copy in the runtime folder: its content, or that it is gone.
+func (r *runner) checkFile(line fixtureLine) {
+	path := strings.ReplaceAll(line.Path, "$RUNTIME", r.runtime)
+	got, err := os.ReadFile(path)
+	switch {
+	case line.Missing && err == nil:
+		r.t.Errorf("a plain Media copy stayed behind: %s", line.Path)
+	case !line.Missing && (err != nil || string(got) != line.Content):
+		r.t.Errorf("file %s = %q (%v), want %q", line.Path, got, err, line.Content)
 	}
 }
 
@@ -268,6 +292,14 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			f.SetSendError(whatsapp.ErrOffline)
 		} else {
 			f.SetSendError(errors.New(*line.SendError))
+		}
+	case line.Download != nil:
+		f.SetDownload(*line.Download, nil)
+	case line.DownloadError != nil:
+		if *line.DownloadError == "" {
+			f.SetDownload("", nil)
+		} else {
+			f.SetDownload("", errors.New(*line.DownloadError))
 		}
 	case line.ReadError != nil:
 		if *line.ReadError == "" {
@@ -410,6 +442,7 @@ func TestSendOfflineErrorKeepsTheMessagePending(t *testing.T) {
 func run(t *testing.T, input string) (int, string, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	p := profile.New(filepath.Join(t.TempDir(), "whisker"), keystore.New(keystore.NewFake(), keystore.NewManualClock()))
 	code := contract.Run(strings.NewReader(input), &out, &errOut, p, settings.New(filepath.Join(t.TempDir(), "settings.json")), func() (whatsapp.Port, error) { return whatsapp.NewFake(), nil })
 	p.Close()
