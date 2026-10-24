@@ -16,6 +16,7 @@ for (const name of fs.readdirSync(fixtureDir).filter((f) => f.endsWith(".jsonl")
     for (const text of lines) {
       const line = JSON.parse(text);
       if (line.dir === "out") state = State.applyFrame(state, line.frame);
+      if (line.dir === "plugin" && line.openChat) state = State.openChat(state, line.openChat);
       if (line.dir === "view") {
         // The JSON round trip drops the prototypes of the vm context, so deep equality works.
         for (const [key, value] of Object.entries(line.expect)) assert.deepEqual(JSON.parse(JSON.stringify(state[key] ?? null)), value, key);
@@ -222,4 +223,90 @@ test("the Plugin reads the Profile Settings after ready only", () => {
 
 test("the settings view lists the Read Receipt modes of the Daemon", () => {
   assert.deepEqual(JSON.parse(JSON.stringify(State.READ_RECEIPT_MODES.map((m) => m.value))), ["off", "onOpen", "onInteraction"]);
+});
+
+const direct = { jid: "1@s.whatsapp.net", name: "Ann", kind: "direct" };
+const group = { jid: "g1@g.us", name: "Team", kind: "group" };
+const theirs = { id: "a", chat: group.jid, sender: "2@s.whatsapp.net", senderName: "Bob", fromMe: false, time: 5, text: "hi", state: "" };
+const mine = { id: "b", chat: group.jid, sender: "", senderName: "", fromMe: true, time: 6, text: "yo", state: "pending" };
+
+test("the connection starts as connecting after linked and follows the Daemon", () => {
+  let state = State.applyFrame(State.initialState(), { method: "linked" });
+  assert.equal(state.connection, "connecting");
+  assert.equal(State.connectionBanner(state), "Connecting…");
+  state = State.applyFrame(state, { method: "connected" });
+  assert.equal(State.connectionBanner(state), "");
+  state = State.applyFrame(state, { method: "disconnected" });
+  assert.equal(State.connectionBanner(state), "Offline");
+});
+
+test("the bar icon dims on a screen that is not ready or linked, and while offline", () => {
+  const linked = State.applyFrame(State.initialState(), { method: "linked" });
+  assert.equal(State.barDimmed(State.initialState()), true);
+  assert.equal(State.barDimmed(linked), false);
+  assert.equal(State.barDimmed(State.applyFrame(linked, { method: "disconnected" })), true);
+  assert.equal(State.barDimmed(State.applyFrame(linked, { method: "connected" })), false);
+});
+
+test("Enter sends, Shift+Enter adds a line, an empty Enter does nothing", () => {
+  assert.equal(State.composerAction(State.KEY_RETURN, false, "hi"), "send");
+  assert.equal(State.composerAction(State.KEY_ENTER, false, "hi"), "send");
+  assert.equal(State.composerAction(State.KEY_RETURN, true, "hi"), "default");
+  assert.equal(State.composerAction(State.KEY_RETURN, false, " \n "), "swallow");
+  assert.equal(State.composerAction(0x41, false, "hi"), "default");
+});
+
+test("a Group Chat shows the sender name on each Message of others", () => {
+  assert.equal(State.senderLabel(group, theirs), "Bob");
+  assert.equal(State.senderLabel(group, mine), "");
+  assert.equal(State.senderLabel(direct, { fromMe: false, senderName: "Ann" }), "");
+});
+
+test("the Delivery State shows for the Messages of the user only, and Failed has Retry", () => {
+  const labels = ["pending", "sent", "delivered", "read", "played", "failed"].map((state) => State.deliveryLabel({ fromMe: true, state }));
+  assert.deepEqual(labels, ["Sending…", "Sent", "Delivered", "Read", "Played", "Failed"]);
+  assert.equal(State.deliveryLabel(theirs), "");
+  assert.equal(State.canRetryMessage({ fromMe: true, state: "failed" }), true);
+  assert.equal(State.canRetryMessage({ fromMe: true, state: "sent" }), false);
+});
+
+test("a Message of another Chat or an unopened Chat does not change the view", () => {
+  const opened = State.openChat(State.applyFrame(State.initialState(), { method: "linked" }), direct);
+  const other = State.applyFrame(opened, { method: "messageChanged", params: { message: theirs } });
+  assert.equal(other.openChat.messages.length, 0);
+  const none = State.applyFrame(State.applyFrame(State.initialState(), { method: "linked" }), { method: "messageChanged", params: { message: theirs } });
+  assert.equal(none.openChat, undefined);
+});
+
+test("Messages keep their time order and a repeat replaces the Message", () => {
+  let state = State.openChat(State.applyFrame(State.initialState(), { method: "linked" }), group);
+  state = State.applyFrame(state, { method: "messageChanged", params: { message: mine } });
+  state = State.applyFrame(state, { method: "messageChanged", params: { message: theirs } });
+  assert.deepEqual([...state.openChat.messages.map((m) => m.id)], ["a", "b"]);
+  state = State.applyFrame(state, { method: "messageChanged", params: { message: Object.assign({}, mine, { state: "sent" }) } });
+  assert.deepEqual([...state.openChat.messages.map((m) => m.state)], ["", "sent"]);
+});
+
+test("a page of another Chat is dropped", () => {
+  const opened = State.openChat(State.applyFrame(State.initialState(), { method: "linked" }), direct);
+  const state = State.applyFrame(opened, { id: 1, result: { chat: group.jid, messages: [theirs], more: false, offset: 0 } });
+  assert.equal(state.openChat.messages.length, 0);
+});
+
+test("closing the Chat leaves the Chat list", () => {
+  const opened = State.openChat(State.applyFrame(State.initialState(), { method: "linked" }), direct);
+  assert.equal(State.closeChat(opened).openChat, undefined);
+});
+
+test("the Chat requests are JSON-RPC lines", () => {
+  assert.deepEqual(JSON.parse(State.messagesRequest(1, direct.jid, 50)), { jsonrpc: "2.0", id: 1, method: "chat.messages", params: { chat: direct.jid, offset: 50 } });
+  assert.deepEqual(JSON.parse(State.sendRequest(2, direct.jid, "hi\nthere")), { jsonrpc: "2.0", id: 2, method: "chat.send", params: { chat: direct.jid, text: "hi\nthere" } });
+  assert.deepEqual(JSON.parse(State.retryMessageRequest(3, direct.jid, "m1")), { jsonrpc: "2.0", id: 3, method: "chat.retry", params: { chat: direct.jid, id: "m1" } });
+  assert.ok(State.sendRequest(2, direct.jid, "hi").endsWith("\n"));
+});
+
+test("the contract doc lists the Chat methods and the message error code", () => {
+  const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
+  for (const needle of ["`chat.messages`", "`chat.send`", "`chat.retry`", "`messageChanged`", "`connected`", "`disconnected`", "| -32006 |"])
+    assert.ok(doc.includes(needle), needle);
 });

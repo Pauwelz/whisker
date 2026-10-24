@@ -51,6 +51,31 @@ Item {
     daemon.write(State.chatListRequest(nextRequestId++, 0, chatQuery))
   }
 
+  // Called when the user picks a Chat of the Chat list. `chat` is a row of the list.
+  function openChat(chat) {
+    view = State.openChat(view, chat)
+    daemon.write(State.messagesRequest(nextRequestId++, chat.jid, 0))
+  }
+
+  function closeChat() {
+    view = State.closeChat(view)
+  }
+
+  // Called by the "Load older" button of the open Chat.
+  function loadOlderMessages() {
+    daemon.write(State.messagesRequest(nextRequestId++, view.openChat.jid, view.openChat.messages.length))
+  }
+
+  // Called by the composer. The Daemon stores the Message as pending and answers with it.
+  function sendText(text) {
+    daemon.write(State.sendRequest(nextRequestId++, view.openChat.jid, text))
+  }
+
+  // Called by the Retry button of a failed Message.
+  function retryMessage(messageId) {
+    daemon.write(State.retryMessageRequest(nextRequestId++, view.openChat.jid, messageId))
+  }
+
   // Called by the settings view. `changes` holds only the settings that change.
   function changeSettings(changes) {
     daemon.write(State.settingsSetRequest(nextRequestId++, changes))

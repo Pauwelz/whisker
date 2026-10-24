@@ -86,6 +86,8 @@ function applyFrame(state, frame) {
 }
 
 function foldFrame(state, frame) {
+  var chatState = foldChatFrame(state, frame)
+  if (chatState) return chatState
   if (frame && frame.result && frame.result.readReceipts !== undefined) {
     var withSettings = {}
     for (var key in state) withSettings[key] = state[key]
@@ -104,7 +106,7 @@ function foldFrame(state, frame) {
   if (frame && frame.method === "linkQr")
     return linking(state, { qr: frame.params.qr, reason: "", message: "Scan this QR code in WhatsApp: Linked devices, Link a device.", canRetry: false })
   if (frame && frame.method === "linked")
-    return { screen: "linked", reason: "", message: "whisker is linked.", canRetry: false }
+    return { screen: "linked", reason: "", message: "whisker is linked.", canRetry: false, connection: "connecting" }
   if (frame && frame.method === "unlinked" && frame.params && frame.params.by === "user")
     return { screen: "linking", reason: "logged-out", message: "You logged out. Link whisker again.", qr: "", pairCode: "", canRetry: false }
   if (frame && frame.method === "unlinked")
@@ -206,4 +208,122 @@ function settingsSetRequest(id, changes) {
 // The request for Log out. The Plugin sends it only after the user confirmed.
 function logoutRequest(id) {
   return JSON.stringify({ jsonrpc: "2.0", id: id, method: "profile.logout" }) + "\n"
+}
+
+// Qt key codes of the two Enter keys. The composer sends the code of the key that was pressed.
+var KEY_RETURN = 0x01000004
+
+var KEY_ENTER = 0x01000005
+
+// The Delivery State labels of the Messages of the user. Mirror of docs/contract.md.
+var DELIVERY_LABELS = {
+  pending: "Sending…",
+  sent: "Sent",
+  delivered: "Delivered",
+  read: "Read",
+  played: "Played",
+  failed: "Failed"
+}
+
+function withChanges(state, changes) {
+  var next = {}
+  for (var key in state) next[key] = state[key]
+  for (var change in changes) next[change] = changes[change]
+  return next
+}
+
+// Frames about the connection and the open Chat. Returns null when the frame is about something else.
+function foldChatFrame(state, frame) {
+  if (!frame) return null
+  if (frame.method === "connected") return withChanges(state, { connection: "online" })
+  if (frame.method === "disconnected") return withChanges(state, { connection: "offline" })
+  if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
+  if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
+  if (frame.result && frame.result.message) return upsertMessage(state, frame.result.message)
+  return null
+}
+
+// "Connecting…" or "Offline" while the connection is not up, otherwise "".
+function connectionBanner(state) {
+  if (state.connection === "connecting") return "Connecting…"
+  return state.connection === "offline" ? "Offline" : ""
+}
+
+// The bar icon dims unless the Plugin is ready or linked, and while offline.
+function barDimmed(state) {
+  if (state.screen !== "ready" && state.screen !== "linked") return true
+  return state.connection === "offline"
+}
+
+// Opens a Chat of the Chat list. `chat` is a Chat of the list: jid, name, kind. Messages arrive with chat.messages.
+function openChat(state, chat) {
+  return withChanges(state, { openChat: { jid: chat.jid, name: chat.name, kind: chat.kind, messages: [], moreMessages: false } })
+}
+
+function closeChat(state) {
+  var next = withChanges(state, {})
+  delete next.openChat
+  return next
+}
+
+// Puts a Message in the open Chat: it replaces the Message with that id, or goes after the last Message that is not newer.
+function upsertMessage(state, message) {
+  var chat = state.openChat
+  if (!chat || chat.jid !== message.chat) return state
+  var messages = chat.messages.slice()
+  for (var i = 0; i < messages.length; i++) {
+    if (messages[i].id === message.id) {
+      messages[i] = message
+      return withChanges(state, { openChat: withChanges(chat, { messages: messages }) })
+    }
+  }
+  var at = messages.length
+  while (at > 0 && messages[at - 1].time > message.time) at--
+  messages.splice(at, 0, message)
+  return withChanges(state, { openChat: withChanges(chat, { messages: messages }) })
+}
+
+// A chat.messages result for the open Chat. A page of another Chat is dropped.
+function messagesPage(state, result) {
+  var chat = state.openChat
+  if (!chat || chat.jid !== result.chat) return state
+  var next = state
+  // shortcut: a Message with the same second as one already shown can land after it, upgrade to a (time, order) key if that shows.
+  for (var i = 0; i < result.messages.length; i++) next = upsertMessage(next, result.messages[i])
+  return withChanges(next, { openChat: withChanges(next.openChat, { moreMessages: result.more === true }) })
+}
+
+// The request for one page of the Chat timeline. The next page starts at the number of Messages shown.
+function messagesRequest(id, jid, offset) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.messages", params: { chat: jid, offset: offset } }) + "\n"
+}
+
+function sendRequest(id, jid, text) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.send", params: { chat: jid, text: text } }) + "\n"
+}
+
+function retryMessageRequest(id, jid, messageId) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.retry", params: { chat: jid, id: messageId } }) + "\n"
+}
+
+// What the composer does with a key press: "send", "swallow" (Enter with nothing to send) or "default" (the text field handles it).
+// Enter sends and Shift+Enter adds a line. These keybindings are fixed.
+function composerAction(key, shift, text) {
+  if (key !== KEY_RETURN && key !== KEY_ENTER) return "default"
+  if (shift) return "default"
+  return String(text).trim() === "" ? "swallow" : "send"
+}
+
+// The sender name shown on a Message: only on the Messages of others in a Group Chat.
+function senderLabel(chat, message) {
+  return chat.kind === "group" && !message.fromMe ? message.senderName : ""
+}
+
+// The Delivery State label of a Message. Messages of others have none.
+function deliveryLabel(message) {
+  return message.fromMe ? DELIVERY_LABELS[message.state] || "" : ""
+}
+
+function canRetryMessage(message) {
+  return message.fromMe === true && message.state === "failed"
 }

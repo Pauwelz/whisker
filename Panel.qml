@@ -17,6 +17,8 @@ Panel {
   property bool showSettings: false
   property bool confirmLogout: false
   readonly property var settings: root.view.settings || null
+  // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
+  readonly property var openChat: root.view.openChat || null
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
@@ -29,7 +31,7 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: ""
-    dimmed: root.view.screen !== "ready" && root.view.screen !== "linked"
+    dimmed: State.barDimmed(root.view)
     tooltipText: root.view.message
     onPressed: function(b) { root.toggle() }
   }
@@ -66,6 +68,17 @@ Panel {
           color: root.view.screen === "error" ? Color.urgent : root.contentForeground
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
+        }
+
+        // "Connecting…" or "Offline" while the connection is not up.
+        Text {
+          visible: root.view.screen === "linked" && State.connectionBanner(root.view) !== ""
+          width: parent.width
+          text: State.connectionBanner(root.view)
+          color: root.view.connection === "offline" ? Color.urgent : root.contentForeground
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+          font.bold: true
         }
 
         // The Daemon sends the QR code as a data: URI.
@@ -113,7 +126,7 @@ Panel {
 
         TextInput {
           id: searchInput
-          visible: root.view.screen === "linked" && !root.showSettings
+          visible: root.view.screen === "linked" && !root.showSettings && !root.openChat
           width: parent.width
           color: root.contentForeground
           font.family: root.contentFontFamily
@@ -122,7 +135,7 @@ Panel {
         }
 
         Button {
-          visible: root.view.screen === "linked" && !!root.settings
+          visible: root.view.screen === "linked" && !!root.settings && !root.openChat
           text: root.showSettings ? "Back to Chats" : "Settings"
           bordered: true
           onClicked: {
@@ -193,9 +206,95 @@ Panel {
           }
         }
 
+        // The open Chat: its timeline, newest at the bottom, and the composer. Enter sends, Shift+Enter adds a line.
+        Column {
+          visible: root.view.screen === "linked" && !root.showSettings && !!root.openChat
+          width: parent.width
+          spacing: Style.space(8)
+          onVisibleChanged: if (visible) composer.forceActiveFocus()
+
+          Button {
+            text: "Back: " + (root.openChat ? root.openChat.name : "")
+            bordered: true
+            onClicked: root.whiskerService.closeChat()
+          }
+
+          Button {
+            visible: !!root.openChat && root.openChat.moreMessages === true
+            text: "Load older"
+            bordered: true
+            onClicked: root.whiskerService.loadOlderMessages()
+          }
+
+          ListView {
+            width: parent.width
+            height: Style.space(260)
+            clip: true
+            verticalLayoutDirection: ListView.BottomToTop
+            model: root.openChat ? root.openChat.messages.slice().reverse() : []
+            delegate: Column {
+              width: ListView.view.width
+              spacing: Style.space(2)
+              Text {
+                visible: text !== ""
+                text: State.senderLabel(root.openChat, modelData)
+                textFormat: Text.PlainText
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+              }
+              Text {
+                width: parent.width
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+                text: modelData.text
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+              }
+              Row {
+                spacing: Style.space(8)
+                Text {
+                  visible: text !== ""
+                  text: State.deliveryLabel(modelData)
+                  color: modelData.state === "failed" ? Color.urgent : root.contentForeground
+                  opacity: 0.6
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                }
+                Button {
+                  visible: State.canRetryMessage(modelData)
+                  text: "Retry"
+                  bordered: true
+                  onClicked: root.whiskerService.retryMessage(modelData.id)
+                }
+              }
+            }
+          }
+
+          TextEdit {
+            id: composer
+            width: parent.width
+            wrapMode: TextEdit.Wrap
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.body
+            Keys.onPressed: function(event) {
+              var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text)
+              if (action === "default") return
+              event.accepted = true
+              if (action === "send") {
+                root.whiskerService.sendText(text)
+                text = ""
+              }
+            }
+          }
+        }
+
         // The Chat list: the Daemon sends the Chats in order, with the name and the marks.
         ListView {
-          visible: root.view.screen === "linked" && !root.showSettings
+          visible: root.view.screen === "linked" && !root.showSettings && !root.openChat
           width: parent.width
           height: visible ? Style.space(320) : 0
           clip: true
@@ -203,6 +302,7 @@ Panel {
           delegate: Row {
             width: ListView.view.width
             spacing: Style.space(8)
+            TapHandler { onTapped: root.whiskerService.openChat(modelData) }
             Text {
               text: modelData.unread ? "●" : " "
               color: root.contentForeground
@@ -230,7 +330,7 @@ Panel {
         }
 
         Button {
-          visible: root.view.screen === "linked" && root.view.moreChats === true
+          visible: root.view.screen === "linked" && root.view.moreChats === true && !root.openChat
           text: "Load more"
           bordered: true
           onClicked: root.whiskerService.loadMoreChats()

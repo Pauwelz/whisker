@@ -89,6 +89,31 @@ The chat store changed: History Sync brought Chats, or App State, a contact name
 
 Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-state.jsonl`.
 
+### Connection
+
+The Daemon sends these after `linked`. The Plugin starts as "connecting" after `linked` and shows a "Connecting…" banner until `connected`.
+
+| Notification | Params | Meaning |
+|---|---|---|
+| `connected` | none | The connection to WhatsApp is up. The Daemon then sends every `pending` Message. |
+| `disconnected` | none | The connection is down, or a connect of a linked Profile failed. The Plugin shows "Offline" and dims the bar icon. |
+
+After a failed connect of a linked Profile, the Daemon sends `disconnected` and connects again after 5 s, again and again. WhatsApp reconnects by itself after a connection that was up.
+
+Fixture: `contract/fixtures/connection.jsonl`.
+
+### `messageChanged`
+
+A Message was added or changed: it arrived, the user sent it, or its Delivery State moved. `params.message` is a Message (see `chat.messages`). The Plugin puts it in the open Chat when `message.chat` is that Chat, and replaces a Message with the same `id`. A new Message also brings `chatsChanged`.
+
+```json
+{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"3EB0","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"sent"}}}
+```
+
+Later tickets (edit, Reaction, revoke, Quote, Media) add keys to the Message and send `messageChanged` for each change.
+
+Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`.
+
 ## Methods (Plugin to Daemon)
 
 ### `chats.list`
@@ -142,6 +167,46 @@ Params: any of the settings above. A key that is left out stays as it is. The Da
 
 No params. Valid only once the Daemon is `ready` and the Profile is linked. The Daemon asks WhatsApp to remove the Companion Device, so the phone no longer lists it. It then answers with an empty `result` and runs the delete-the-Profile routine (`Profile.Delete`). `unlinked` with `by: "user"` and `ready` follow, then linking starts. Profile Settings stay. If WhatsApp cannot be reached, the Daemon gives error -32005 and keeps the Profile. The Plugin asks the user to confirm before it sends this request. Fixture: `logout.jsonl`.
 
+### `chat.messages`
+
+Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and optional `offset` (default 0) and `limit` (default 50, at most 200). Valid once the Daemon is `ready`. A Chat with no Messages, or an unknown one, gives an empty page.
+
+```json
+{"chat":"g1@g.us","messages":[{"id":"m1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Bob","fromMe":false,"time":10,"text":"one","state":""}],"more":true,"offset":0}
+```
+
+- Offset 0 is the newest page. A page is in time order, oldest first. `more` is true when older Messages exist at `offset + limit`.
+- `senderName` follows the name rule for Participants. It is empty for the Messages of the user.
+- `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
+- Error -32003 means the chat store failed.
+
+Delivery State of a Message of the user:
+
+| State | Meaning |
+|---|---|
+| `pending` | Stored, not sent yet. It waits for the connection. |
+| `sent` | WhatsApp accepted it. |
+| `delivered` | The recipient device has it. |
+| `read` | The recipient read it. |
+| `played` | The recipient played the voice or audio Media. |
+| `failed` | The send failed. Retry with `chat.retry`. |
+
+A state only moves forward in this order. Receipts in a Group Chat are not used yet, so a Message there stays `sent`.
+
+Fixtures: `chat-messages.jsonl`, `chat-receive.jsonl`.
+
+### `chat.send`
+
+Params: `chat` (JID of a stored Chat) and `text` (not blank, at most 65536 characters). Valid once the Daemon is `ready` and linked. The Daemon stores the Message as `pending`, answers `{"message": {...}}` at once, and sends it when the connection is up. `messageChanged` reports `sent`, or `failed`.
+
+The Message has its WhatsApp ID from the start. A reconnect or a retry sends that same ID, so a Message never shows twice. Error -32006 means a blank or too long text, or an unknown Chat.
+
+Fixtures: `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`.
+
+### `chat.retry`
+
+Params: `chat` and `id` of a `failed` Message. The Daemon makes it `pending`, answers `{"message": {...}}` and sends it. Error -32006 means no such failed Message. Fixture: `chat-failed.jsonl`.
+
 ### `link.pairCode`
 
 Params: `phone` (digits, international, no `+`). Valid only while the Profile is not linked. The result is `{"code": "ABCD-1234"}`: the Pair Code as text. The user types it on the phone. Success then follows as `linked`. Errors: -32001 and -32002 (see Errors). Fixtures: `link-pair-code.jsonl`, `link-pair-code-invalid.jsonl`.
@@ -164,9 +229,10 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32601 | method not found | The method does not exist, or is not valid now (for example `link.pairCode` on a linked Profile). |
 | -32001 | invalid phone number | `link.pairCode` got a number that is too short or not international. |
 | -32002 | pair code failed | WhatsApp did not give a Pair Code. |
-| -32003 | chat store failed | `chats.list` could not read the chat store. |
+| -32003 | chat store failed | `chats.list`, `chat.messages`, `chat.send` or `chat.retry` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
 | -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
+| -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 
@@ -194,6 +260,8 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `keyring` | `state` | The Go test sets the fake keyring: `missing` (calls fail), `ok`, `locked` (calls block) or `unlocked`. |
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
+| `sent` | `ids` | The Go test checks the Message IDs that the fake port has sent so far, in order. |
+| `plugin` | `openChat` | The Plugin test opens this Chat (`jid`, `name`, `kind`) as the user does. The Go test ignores it. |
 | `whatsapp` | one of the keys below | The Go test scripts the fake WhatsApp port. |
 
 Keys of a `whatsapp` line. Each line has exactly one:
@@ -203,9 +271,12 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `linked` | `true` or `false`: the Profile is linked at start-up. Put the line before the first `out`. |
 | `pairCode` | The code that the next `link.pairCode` returns. |
 | `pairError` | `invalid-phone`, or any text: the next `link.pairCode` fails. |
-| `event` | The fake port plays this event now. `kind` is `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`) or `loggedOut`. |
+| `sendError` | `offline`, any other text, or empty: the fake port fails every send with that error, or works again (empty). |
+| `event` | The fake port plays this event now. `kind` is `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`), `loggedOut`, `connected` or `disconnected`. |
 
 The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
+
+The `event` kinds `newMessage` and `receipt` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
 
 The events are the event kinds of the WhatsApp port (`daemon/internal/whatsapp`). A new port event kind gets a new `event` kind here. A new port method that a fixture must script gets a new key.
 
