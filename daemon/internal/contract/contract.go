@@ -45,6 +45,7 @@ const (
 	methodAttentionSet = "attention.set"
 	methodChatEdit     = "chat.edit"
 	methodChatRevoke   = "chat.revoke"
+	methodChatTyping   = "chat.typing"
 	methodSettingsGet  = "settings.get"
 	methodSettingsSet  = "settings.set"
 	methodLogout       = "profile.logout"
@@ -104,6 +105,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	var chats *chatstore.Store        // nil until the Profile is open
 	var box *outbox                   // nil until the Profile is open
 	var read *reader                  // clears Read Markers and sends Read Receipts, nil until the Profile is open
+	var pres *presenter               // sends Presence, nil until the Profile is open
 	var attn attention.Attention      // the pop-out state: it outlives the Profile, so a new link keeps it
 	var sent <-chan sendResult        // the results of the sends, nil until the Profile is open
 	var retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
@@ -143,6 +145,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			sent = box.results
 			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut}
 			box.incoming = read.incoming
+			pres = newPresenter(port, prefs, &attn, logOut)
 			ready = true
 			if !send(notification("ready", nil)) || !startPort() {
 				return ExitError
@@ -166,7 +169,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	// `by` is "user" for Log out. It is empty when the phone removed the Companion Device.
 	unlink := func(by string) int {
 		port.Disconnect()
-		ready, port, events, chats, box, read, sent, retryConnect = false, nil, nil, nil, nil, nil, nil, nil
+		ready, port, events, chats, box, read, pres, sent, retryConnect = false, nil, nil, nil, nil, nil, nil, nil, nil
 		attn.Set(attn.Open(), "") // the Chat is gone with the Profile
 		if err := profile.Delete(); err != nil {
 			fmt.Fprintln(logOut, "profile delete failed")
@@ -197,6 +200,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	for {
 		select {
 		case ev := <-events:
+			if _, ok := ev.(whatsapp.Connected); ok {
+				pres.connected() // before the `connected` frame
+			}
 			if code := handleEvent(ev, logOut, send, chats, box, func() int { return unlink("") }); code >= 0 {
 				return code
 			}
@@ -224,6 +230,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					Chat   string `json:"chat"`
 					Text   string `json:"text"`
 					Open   bool   `json:"open"`
+					Typing bool   `json:"typing"`
 					ID     string `json:"id"`
 					settings.Update
 				} `json:"params"`
@@ -255,15 +262,23 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				reply, submit = chatRetryReply(chats, req.ID, req.Params.Chat, req.Params.ID, logOut)
 			} else if req.Method == methodAttentionSet && ready {
 				listChanged = read.setAttention(req.Params.Open, req.Params.Chat)
+				pres.sync()
 				reply = resultReply(req.ID, map[string]any{})
 			} else if req.Method == methodChatEdit && ready && port.Linked() {
 				reply, changed = chatEditReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, req.Params.Text, logOut)
 			} else if req.Method == methodChatRevoke && ready && port.Linked() {
 				reply, changed = chatRevokeReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, logOut)
+			} else if req.Method == methodChatTyping && ready && port.Linked() {
+				pres.typing(req.Params.Chat, req.Params.Typing)
+				reply = resultReply(req.ID, map[string]any{})
 			} else if req.Method == methodSettingsGet && ready {
 				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Get() })
 			} else if req.Method == methodSettingsSet && ready {
-				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Set(req.Params.Update) })
+				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) {
+					cur, err := prefs.Set(req.Params.Update)
+					pres.sync() // "send online" may have changed
+					return cur, err
+				})
 			} else if req.Method == methodLogout && ready && port.Linked() {
 				if err := port.Logout(); err != nil {
 					fmt.Fprintln(logOut, "logout failed") // the error text could name hosts
@@ -328,6 +343,15 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 		return unlink()
 	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt, whatsapp.MessageEdited, whatsapp.MessageRevoked:
 		ok = box.handle(ev)
+	case whatsapp.Presence:
+		ok = send(notification("presenceChanged", map[string]any{"chat": ev.JID, "online": ev.Online, "lastSeen": ev.LastSeen}))
+	case whatsapp.ChatPresence:
+		name, err := chats.ParticipantName(ev.Sender)
+		if err != nil {
+			fmt.Fprintln(logOut, "chat store read failed")
+			break
+		}
+		ok = send(notification("activityChanged", map[string]any{"chat": ev.Chat, "participant": ev.Sender, "name": name, "state": ev.State}))
 	case whatsapp.HistorySync, whatsapp.PushName, whatsapp.ContactName, whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker:
 		if err := chats.Apply(ev); err != nil {
 			fmt.Fprintln(logOut, "chat store write failed") // the error text could hold names

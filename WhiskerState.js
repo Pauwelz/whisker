@@ -86,7 +86,7 @@ function applyFrame(state, frame) {
 }
 
 function foldFrame(state, frame) {
-  var chatState = foldChatFrame(state, frame)
+  var chatState = foldChatFrame(state, frame) || foldPresenceFrame(state, frame)
   if (chatState) return chatState
   if (frame && frame.result && frame.result.readReceipts !== undefined) {
     var withSettings = {}
@@ -236,7 +236,7 @@ function withChanges(state, changes) {
 function foldChatFrame(state, frame) {
   if (!frame) return null
   if (frame.method === "connected") return withChanges(state, { connection: "online" })
-  if (frame.method === "disconnected") return withChanges(state, { connection: "offline" })
+  if (frame.method === "disconnected") return withChanges(state, { connection: "offline", activity: {} })
   if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
   if (frame.result && frame.result.message) return upsertMessage(state, frame.result.message)
@@ -373,4 +373,66 @@ function revokeRequest(id, jid, messageId) {
 // The request for the composer text: an edit of `editingId`, or a new Message when `editingId` is empty.
 function composerRequest(id, jid, editingId, text) {
   return editingId ? editRequest(id, jid, editingId, text) : sendRequest(id, jid, text)
+}
+
+// Presence. `presence[jid]` is { online, lastSeen } of a Participant of a Direct Chat.
+// `activity[chat]` lists who is composing or recording there: { participant, name, state }.
+function foldPresenceFrame(state, frame) {
+  if (!frame) return null
+  if (frame.method === "presenceChanged") {
+    var presence = withChanges(state.presence || {}, {})
+    presence[frame.params.chat] = { online: frame.params.online, lastSeen: frame.params.lastSeen }
+    return withChanges(state, { presence: presence })
+  }
+  if (frame.method === "activityChanged") {
+    var p = frame.params
+    var activity = withChanges(state.activity || {}, {})
+    var others = (activity[p.chat] || []).filter(function(a) { return a.participant !== p.participant })
+    if (p.state !== "paused") others.push({ participant: p.participant, name: p.name, state: p.state })
+    activity[p.chat] = others
+    return withChanges(state, { activity: activity })
+  }
+  return null
+}
+
+function pad2(n) {
+  return (n < 10 ? "0" : "") + n
+}
+
+// The header line of a Direct Chat: "Online", "last seen at 14:05" (within a day), "last seen 2026-10-23", or "".
+function presenceLabel(state, nowSeconds) {
+  var chat = state.openChat
+  var p = chat && chat.kind !== "group" && state.presence ? state.presence[chat.jid] : null
+  if (!p) return ""
+  if (p.online) return "Online"
+  if (!p.lastSeen) return ""
+  var d = new Date(p.lastSeen * 1000)
+  if (nowSeconds - p.lastSeen < 24 * 3600) return "last seen at " + pad2(d.getHours()) + ":" + pad2(d.getMinutes())
+  return "last seen " + d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate())
+}
+
+// "typing…" or "recording…" in a Direct Chat; "Bob is typing…" in a Group Chat. Empty when nobody is active.
+function activityLabel(state) {
+  var chat = state.openChat
+  var list = chat && state.activity ? state.activity[chat.jid] || [] : []
+  return list.map(function(a) {
+    var verb = a.state === "recording" ? "recording…" : "typing…"
+    return chat.kind === "group" ? a.name + " is " + verb : verb
+  }).join(", ")
+}
+
+// What the composer text means for the outgoing Composing: "start", "stop" or "" (no change).
+function typingAction(wasTyping, text) {
+  var typing = String(text).trim() !== ""
+  if (typing === wasTyping) return ""
+  return typing ? "start" : "stop"
+}
+
+function typingRequest(id, jid, typing) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.typing", params: { chat: jid, typing: typing } }) + "\n"
+}
+
+// The line under the Chat header: the activity ("typing…") wins over Online and Last Seen.
+function chatStatusLabel(state, nowSeconds) {
+  return activityLabel(state) || presenceLabel(state, nowSeconds)
 }

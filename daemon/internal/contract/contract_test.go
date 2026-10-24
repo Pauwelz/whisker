@@ -30,16 +30,19 @@ type fixtureLine struct {
 	State string          `json:"state"`
 
 	// Fake WhatsApp lines (dir "whatsapp"): a start-up setting or an event, see docs/contract.md.
-	Linked    *bool           `json:"linked"`
-	PairCode  string          `json:"pairCode"`
-	PairError string          `json:"pairError"`
-	SendError *string         `json:"sendError"` // "" lets sends work again
-	ReadError *string         `json:"readError"` // "" lets Read Receipts work again
-	Receipts  []whatsapp.Read `json:"receipts"`  // dir "read": the Read Receipts the fake port has sent so far
-	Markers   []string        `json:"markers"`   // dir "read": the Chats whose Read Marker the fake port has cleared
-	IDs       []string        `json:"ids"`       // dir "sent" and "revoked": the Message IDs
-	Edits     []string        `json:"edits"`     // dir "edited": "id:text" of each edit the fake port has sent so far
-	Event     json.RawMessage `json:"event"`
+	Linked     *bool           `json:"linked"`
+	PairCode   string          `json:"pairCode"`
+	PairError  string          `json:"pairError"`
+	SendError  *string         `json:"sendError"`  // "" lets sends work again
+	ReadError  *string         `json:"readError"`  // "" lets Read Receipts work again
+	Receipts   []whatsapp.Read `json:"receipts"`   // dir "read": the Read Receipts the fake port has sent so far
+	Markers    []string        `json:"markers"`    // dir "read": the Chats whose Read Marker the fake port has cleared
+	IDs        []string        `json:"ids"`        // dir "sent" and "revoked": the Message IDs
+	Edits      []string        `json:"edits"`      // dir "edited": "id:text" of each edit the fake port has sent so far
+	Online     []bool          `json:"online"`     // dir "presence": the availability calls so far
+	Typing     []string        `json:"typing"`     // dir "presence": "chat:composing" or "chat:paused" calls so far
+	Subscribed []string        `json:"subscribed"` // dir "presence": the Presence subscriptions so far
+	Event      json.RawMessage `json:"event"`
 }
 
 // runner runs the Daemon on pipes, with a fake keyring, a manual clock and a Profile in a temp dir.
@@ -207,6 +210,17 @@ func TestFixtures(t *testing.T) {
 					if got := r.currentPort().Revokes(); !reflect.DeepEqual(got, append([]string{}, line.IDs...)) {
 						t.Errorf("revokes = %v, want %v", got, line.IDs)
 					}
+				case "presence":
+					f := r.currentPort()
+					if got, want := mustJSON(f.OnlineCalls()), mustJSON(append([]bool{}, line.Online...)); got != want {
+						t.Errorf("availability calls = %s, want %s", got, want)
+					}
+					if got, want := mustJSON(f.TypingCalls()), mustJSON(append([]string{}, line.Typing...)); got != want {
+						t.Errorf("typing calls = %s, want %s", got, want)
+					}
+					if got, want := mustJSON(f.Subscribed()), mustJSON(append([]string{}, line.Subscribed...)); got != want {
+						t.Errorf("subscriptions = %s, want %s", got, want)
+					}
 				case "clock":
 					r.start()
 					r.clock.Fire()
@@ -293,6 +307,10 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.MessageEdited](r.t, f, line.Event)
 		case "messageRevoked":
 			emitJSON[whatsapp.MessageRevoked](r.t, f, line.Event)
+		case "presence":
+			emitJSON[whatsapp.Presence](r.t, f, line.Event)
+		case "chatPresence":
+			emitJSON[whatsapp.ChatPresence](r.t, f, line.Event)
 		case "connected":
 			f.Emit(whatsapp.Connected{})
 		case "disconnected":

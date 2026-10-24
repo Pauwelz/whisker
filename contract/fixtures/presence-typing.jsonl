@@ -1,0 +1,16 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","lastActive":10,"messages":[]},{"jid":"g1@g.us","kind":"group","subject":"Team","lastActive":9,"messages":[{"id":"m1","sender":"2@s.whatsapp.net","time":9,"text":"hey","pushName":"Bob"}]}],"pushNames":[{"jid":"2@s.whatsapp.net","name":"Bob"}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.typing","params":{"chat":"1@s.whatsapp.net","typing":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{}}}
+{"dir":"presence","online":[],"typing":["1@s.whatsapp.net:composing"],"subscribed":[]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.typing","params":{"chat":"1@s.whatsapp.net","typing":false}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{}}}
+{"dir":"presence","online":[],"typing":["1@s.whatsapp.net:composing","1@s.whatsapp.net:paused"],"subscribed":[]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"settings.set","params":{"sendTyping":false}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":false,"notifications":true}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.typing","params":{"chat":"1@s.whatsapp.net","typing":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{}}}
+{"dir":"presence","online":[false],"typing":["1@s.whatsapp.net:composing","1@s.whatsapp.net:paused"],"subscribed":[]}
