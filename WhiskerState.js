@@ -97,35 +97,73 @@ function applyFrame(state, frame) {
   return next
 }
 
+// What each Daemon notification does to the Plugin. One row per method of docs/contract.md; the helpers below read this table.
+//   fold(state, params): the new view state.
+//   refreshesChats, requestsSettings, resendsAttention: the Plugin sends that request after the frame.
+// A notification with no row changes nothing.
+var NOTIFICATIONS = {
+  ready: {
+    fold: function (state) { return { screen: SCREEN.READY, reason: "", message: "The Daemon is ready.", canRetry: false } },
+    requestsSettings: true,
+    resendsAttention: true
+  },
+  keyringUnavailable: {
+    fold: function (state) {
+      return {
+        screen: SCREEN.KEYRING_UNAVAILABLE,
+        reason: "keyring-unavailable",
+        message: "The keyring is unavailable. Unlock the keyring, then select Retry.",
+        canRetry: true
+      }
+    }
+  },
+  linkQr: {
+    fold: function (state, params) {
+      return linking(state, { qr: params.qr, reason: "", message: "Scan this QR code in WhatsApp: Linked devices, Link a device.", canRetry: false })
+    }
+  },
+  linked: {
+    fold: function (state) { return { screen: SCREEN.LINKED, reason: "", message: "whisker is linked.", canRetry: false, connection: "connecting" } },
+    refreshesChats: true
+  },
+  unlinked: {
+    fold: function (state, params) {
+      if (params && params.by === "user")
+        return { screen: SCREEN.LINKING, reason: "logged-out", message: "You logged out. Link whisker again.", qr: "", pairCode: "", canRetry: false }
+      return { screen: SCREEN.LINKING, reason: "unlinked", message: "Your phone removed this device. Link whisker again.", qr: "", pairCode: "", canRetry: false }
+    }
+  },
+  linkFailed: {
+    fold: function (state, params) {
+      return linking(state, { qr: "", reason: params.reason, message: LINK_FAILURES[params.reason] || LINK_FAILURES.unexpected, canRetry: true })
+    }
+  },
+  chatsChanged: { refreshesChats: true },
+  connected: { fold: function (state) { return withChanges(state, { connection: "online" }) } },
+  disconnected: { fold: function (state) { return withChanges(state, { connection: "offline", activity: {} }) } },
+  messageExpired: { fold: removeMessage },
+  messageChanged: { fold: function (state, params) { return upsertMessage(state, params.message) } },
+  chatMerged: { fold: chatMerged },
+  presenceChanged: { fold: presenceChanged },
+  activityChanged: { fold: activityChanged }
+}
+
+// The row of a notification, or null for a response and for a method with no row.
+function effectsOf(frame) {
+  if (!frame || !Object.prototype.hasOwnProperty.call(NOTIFICATIONS, frame.method)) return null
+  return NOTIFICATIONS[frame.method]
+}
+
 function foldFrame(state, frame) {
-  var chatState = foldChatFrame(state, frame) || foldPresenceFrame(state, frame)
+  var effects = effectsOf(frame)
+  if (effects && effects.fold) return effects.fold(state, frame.params)
+  var chatState = foldChatResult(state, frame)
   if (chatState) return chatState
   if (frame && frame.result && frame.result.readReceipts !== undefined) {
     var withSettings = {}
     for (var key in state) withSettings[key] = state[key]
     withSettings.settings = frame.result
     return withSettings
-  }
-  if (frame && frame.method === "ready")
-    return { screen: SCREEN.READY, reason: "", message: "The Daemon is ready.", canRetry: false }
-  if (frame && frame.method === "keyringUnavailable")
-    return {
-      screen: SCREEN.KEYRING_UNAVAILABLE,
-      reason: "keyring-unavailable",
-      message: "The keyring is unavailable. Unlock the keyring, then select Retry.",
-      canRetry: true
-    }
-  if (frame && frame.method === "linkQr")
-    return linking(state, { qr: frame.params.qr, reason: "", message: "Scan this QR code in WhatsApp: Linked devices, Link a device.", canRetry: false })
-  if (frame && frame.method === "linked")
-    return { screen: SCREEN.LINKED, reason: "", message: "whisker is linked.", canRetry: false, connection: "connecting" }
-  if (frame && frame.method === "unlinked" && frame.params && frame.params.by === "user")
-    return { screen: SCREEN.LINKING, reason: "logged-out", message: "You logged out. Link whisker again.", qr: "", pairCode: "", canRetry: false }
-  if (frame && frame.method === "unlinked")
-    return { screen: SCREEN.LINKING, reason: "unlinked", message: "Your phone removed this device. Link whisker again.", qr: "", pairCode: "", canRetry: false }
-  if (frame && frame.method === "linkFailed") {
-    var reason = frame.params.reason
-    return linking(state, { qr: "", reason: reason, message: LINK_FAILURES[reason] || LINK_FAILURES.unexpected, canRetry: true })
   }
   if (frame && frame.result && frame.result.chats)
     return chatListPage(state, frame.result)
@@ -149,7 +187,8 @@ function chatListPage(state, result) {
 // True when the Plugin must ask for the first page of the Chat list after this frame.
 // A refresh shows page 0 only: a Chat list the user scrolled further falls back to it.
 function refreshesChats(frame) {
-  return !!frame && (frame.method === "linked" || frame.method === "chatsChanged")
+  var effects = effectsOf(frame)
+  return !!effects && effects.refreshesChats === true
 }
 
 // The request for one page of the Chat list. The next page starts at the number of Chats shown.
@@ -206,7 +245,8 @@ var READ_RECEIPT_MODES = [
 
 // True when the Plugin must read the Profile Settings after this frame.
 function requestsSettings(frame) {
-  return !!frame && frame.method === "ready"
+  var effects = effectsOf(frame)
+  return !!effects && effects.requestsSettings === true
 }
 
 function settingsGetRequest(id) {
@@ -250,14 +290,9 @@ function withChanges(state, changes) {
   return next
 }
 
-// Frames about the connection and the open Chat. Returns null when the frame is about something else.
-function foldChatFrame(state, frame) {
+// Responses about the open Chat. Returns null when the frame is about something else.
+function foldChatResult(state, frame) {
   if (!frame) return null
-  if (frame.method === "connected") return withChanges(state, { connection: "online" })
-  if (frame.method === "disconnected") return withChanges(state, { connection: "offline", activity: {} })
-  if (frame.method === "messageExpired") return removeMessage(state, frame.params)
-  if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
-  if (frame.method === "chatMerged") return chatMerged(state, frame.params)
   if (frame.result && frame.result.draft) return draftLoaded(state, frame.result)
   if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
@@ -470,7 +505,8 @@ function attentionRequest(id, open, jid) {
 
 // True when the Plugin must send the pop-out state again after this frame: a new Daemon starts with a closed pop-out.
 function resendsAttention(frame) {
-  return !!frame && frame.method === "ready"
+  var effects = effectsOf(frame)
+  return !!effects && effects.resendsAttention === true
 }
 
 // The text of a Tombstone, shown at the position of the revoked Message.
@@ -651,22 +687,18 @@ function chatByJid(state, jid) {
 
 // Presence. `presence[jid]` is { online, lastSeen } of a Participant of a Direct Chat.
 // `activity[chat]` lists who is composing or recording there: { participant, name, state }.
-function foldPresenceFrame(state, frame) {
-  if (!frame) return null
-  if (frame.method === "presenceChanged") {
-    var presence = withChanges(state.presence || {}, {})
-    presence[frame.params.chat] = { online: frame.params.online, lastSeen: frame.params.lastSeen }
-    return withChanges(state, { presence: presence })
-  }
-  if (frame.method === "activityChanged") {
-    var p = frame.params
-    var activity = withChanges(state.activity || {}, {})
-    var others = (activity[p.chat] || []).filter(function(a) { return a.participant !== p.participant })
-    if (p.state !== "paused") others.push({ participant: p.participant, name: p.name, state: p.state })
-    activity[p.chat] = others
-    return withChanges(state, { activity: activity })
-  }
-  return null
+function presenceChanged(state, params) {
+  var presence = withChanges(state.presence || {}, {})
+  presence[params.chat] = { online: params.online, lastSeen: params.lastSeen }
+  return withChanges(state, { presence: presence })
+}
+
+function activityChanged(state, p) {
+  var activity = withChanges(state.activity || {}, {})
+  var others = (activity[p.chat] || []).filter(function(a) { return a.participant !== p.participant })
+  if (p.state !== "paused") others.push({ participant: p.participant, name: p.name, state: p.state })
+  activity[p.chat] = others
+  return withChanges(state, { activity: activity })
 }
 
 function pad2(n) {

@@ -385,6 +385,24 @@ test("EDIT_WINDOW_SECONDS agrees with EditWindow in Go", () => {
   assert.equal(State.EDIT_WINDOW_SECONDS, minutes * 60);
 });
 
+const goStrings = (file, name) => {
+  const go = fs.readFileSync(path.join(root, "daemon", "internal", ...file), "utf8");
+  return Array.from(go.matchAll(new RegExp(`\\b${name}\\w* += "(\\w+)"`, "g")), (m) => m[1]).sort();
+};
+
+test("MEDIA_STATE agrees with the Media states in Go", () => {
+  assert.deepEqual(Object.values(State.MEDIA_STATE).sort(), goStrings(["chatstore", "messages.go"], "Media"));
+});
+
+test("READ_RECEIPT_MODES agrees with the Read Receipt modes in Go", () => {
+  assert.deepEqual(Array.from(State.READ_RECEIPT_MODES, (m) => m.value).sort(), goStrings(["settings", "settings.go"], "ReadReceipts"));
+});
+
+test("every notification with an effect is documented in docs/contract.md", () => {
+  const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
+  for (const method of Object.keys(State.NOTIFICATIONS)) assert.ok(doc.includes("`" + method + "`"), method);
+});
+
 test("REACTION_EMOJI agrees with ReactionEmoji in Go", () => {
   const go = fs.readFileSync(path.join(root, "daemon", "internal", "contract", "react.go"), "utf8");
   const list = /ReactionEmoji = \[\]string\{([^}]*)\}/.exec(go)[1];
