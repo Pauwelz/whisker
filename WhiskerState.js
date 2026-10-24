@@ -471,9 +471,16 @@ function messageHtml(message) {
     mentions.forEach(function(mention) {
       html = html.split(escapeHtml(mention)).join("<b>" + escapeHtml(mention) + "</b>")
     })
-    html = html.replace(MAP_LINK, function(url) { return '<a href="' + url.replace(/&amp;/g, "&") + '">' + url + "</a>" })
   }
   return html.replace(/\n/g, "<br>")
+}
+
+// The map link of a location Message, for its Open map button, or "".
+function mapLink(message) {
+  if (message.revoked) return ""
+  MAP_LINK.lastIndex = 0
+  var match = MAP_LINK.exec(message.text || "")
+  return match ? match[0] : ""
 }
 
 // The command that opens a map link in the browser, or [] for any other link. "--" ends the options.

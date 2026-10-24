@@ -337,11 +337,19 @@ test("the Plugin sends the pop-out state again when the Daemon is ready", () => 
 
 const sentMessage = (extra) => Object.assign({ id: "m1", chat: direct.jid, fromMe: true, time: 1000, text: "hi", state: "sent", edited: false, revoked: false }, extra);
 
-test("a mention is bold, a map link is a link, other text is escaped", () => {
+test("a mention is bold, other text is escaped", () => {
   const url = "https://www.openstreetmap.org/?mlat=51.500000&mlon=-0.120000#map=17/51.500000/-0.120000";
   assert.equal(State.messageHtml(sentMessage({ text: "@Zed <b>look</b>", mentions: ["@Zed"] })), "<b>@Zed</b> &lt;b&gt;look&lt;/b&gt;");
-  assert.equal(State.messageHtml(sentMessage({ text: "Location: Cafe\n" + url })), `Location: Cafe<br><a href="${url}">${url.replace(/&/g, "&amp;")}</a>`);
+  assert.equal(State.messageHtml(sentMessage({ text: "Location: Cafe\n" + url })), `Location: Cafe<br>${url.replace(/&/g, "&amp;")}`);
   assert.equal(State.messageHtml(sentMessage({ text: "", revoked: true, mentions: ["@Zed"] })), "This message was deleted");
+});
+
+// The map link opens from a button: a link inside the Message text did not take clicks in the pop-out.
+test("a location has a map link for its Open map button", () => {
+  const url = "https://www.openstreetmap.org/?mlat=51.500000&mlon=-0.120000#map=17/51.500000/-0.120000";
+  assert.equal(State.mapLink(sentMessage({ text: "Location: Cafe\n" + url })), url);
+  assert.equal(State.mapLink(sentMessage({ text: "see https://evil.example/" })), "");
+  assert.equal(State.mapLink(sentMessage({ text: "Location: Cafe\n" + url, revoked: true })), "");
 });
 
 test("only a map link opens", () => {

@@ -1,3 +1,4 @@
+import QtQuick
 import QtQuick.Dialogs
 
 // The file picker of the composer. Panel.qml loads it with a Loader, because QtQuick.Dialogs is an optional Qt plugin.

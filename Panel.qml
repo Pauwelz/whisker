@@ -330,11 +330,16 @@ Panel {
                 wrapMode: Text.Wrap
                 textFormat: Text.StyledText
                 text: State.messageHtml(modelData)
-                onLinkActivated: link => root.whiskerService.openLink(link)
                 font.italic: modelData.revoked === true
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
+              }
+              Button {
+                visible: State.mapLink(modelData) !== ""
+                text: "Open map"
+                bordered: true
+                onClicked: root.whiskerService.openLink(State.mapLink(modelData))
               }
               // Media: an image or sticker shows here once the Daemon holds it. The path comes from media.open, never bytes.
               Image {

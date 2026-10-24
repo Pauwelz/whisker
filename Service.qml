@@ -196,7 +196,7 @@ Item {
     id: linkOpener
   }
 
-  // Called by a click on a link in a Message. Only the map link of a location opens.
+  // Called by the Open map button of a location. Only a map link opens.
   function openLink(url) {
     var command = State.linkCommand(url)
     if (command.length === 0) return
