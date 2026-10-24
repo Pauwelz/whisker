@@ -354,7 +354,7 @@ test("a location has a map link for its Open map button", () => {
 
 test("only a map link opens", () => {
   const url = "https://www.openstreetmap.org/?mlat=51.5&mlon=-0.12#map=17/51.5/-0.12";
-  assert.equal(JSON.stringify(State.linkCommand(url)), JSON.stringify(["xdg-open", "--", url]));
+  assert.equal(JSON.stringify(State.linkCommand(url)), JSON.stringify(["xdg-open", url])); // xdg-open rejects "--"
   assert.equal(State.linkCommand("https://evil.example/").length, 0);
   assert.equal(State.linkCommand(url + " ; rm").length, 0);
 });

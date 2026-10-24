@@ -483,11 +483,12 @@ function mapLink(message) {
   return match ? match[0] : ""
 }
 
-// The command that opens a map link in the browser, or [] for any other link. "--" ends the options.
+// The command that opens a map link in the browser, or [] for any other link.
+// No "--": xdg-open rejects it. A full match starts with "https://", so it cannot pass as an option.
 function linkCommand(url) {
   MAP_LINK.lastIndex = 0
   var match = MAP_LINK.exec(url)
-  return match && match[0] === url ? ["xdg-open", "--", url] : []
+  return match && match[0] === url ? ["xdg-open", url] : []
 }
 
 function editedLabel(message) {
