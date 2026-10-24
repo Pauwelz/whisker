@@ -113,14 +113,43 @@ func (c *Client) PairCode(phone string) (string, error) {
 
 func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
 
-func (c *Client) Send(chat, id, text string, timer int64) error {
+func (c *Client) Send(chat, id, text string, quote *Quote, timer int64) error {
 	return c.send(chat, sendTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
 		msg := &waE2E.Message{Conversation: proto.String(text)}
-		if timer > 0 { // the timer rides in the ContextInfo of an extended text Message
-			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text),
-				ContextInfo: &waE2E.ContextInfo{Expiration: proto.Uint32(uint32(timer))}}}
+		if quote != nil || timer > 0 { // a quote and the timer ride in the ContextInfo of an extended text Message
+			info := &waE2E.ContextInfo{}
+			if quote != nil {
+				info.StanzaID = proto.String(quote.ID)
+				info.Participant = proto.String(c.quoteSender(quote.Sender))
+				info.QuotedMessage = &waE2E.Message{Conversation: proto.String(quote.Text)}
+			}
+			if timer > 0 {
+				info.Expiration = proto.Uint32(uint32(timer))
+			}
+			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: info}}
 		}
 		return msg, whatsmeow.SendRequestExtra{ID: id}
+	})
+}
+
+// quoteSender is the JID that WhatsApp expects for the author of a quoted Message. The Quote holds none for the user's own Messages.
+func (c *Client) quoteSender(sender string) string {
+	if sender == "" && c.cli.Store.ID != nil {
+		return c.cli.Store.ID.ToNonAD().String()
+	}
+	return sender
+}
+
+func (c *Client) React(chat, id, sender, emoji string) error {
+	senderJID := types.EmptyJID
+	if sender != "" {
+		var err error
+		if senderJID, err = types.ParseJID(sender); err != nil {
+			return err
+		}
+	}
+	return c.send(chat, editTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
+		return c.cli.BuildReaction(jid, senderJID, id, emoji), whatsmeow.SendRequestExtra{}
 	})
 }
 
@@ -259,14 +288,17 @@ func (c *Client) handle(evt any) {
 		if c.handleProtocol(evt) {
 			return
 		}
-		// Reactions have no text: they are skipped until their ticket.
+		if r := evt.Message.GetReactionMessage(); r != nil {
+			c.events <- Reaction{Chat: evt.Info.Chat.String(), ID: r.GetKey().GetID(), Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
+			return
+		}
 		text, media := messageText(evt.Message), mediaOf(evt.Message)
 		if (text == "" && media == nil) || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
 			return
 		}
 		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: Message{
 			ID: evt.Info.ID, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe,
-			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName, Media: media, Timer: timerOf(evt.Message),
+			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName, Quote: c.quoteOf(evt.Message), Media: media, Timer: timerOf(evt.Message),
 		}}
 	case *events.Receipt:
 		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
@@ -400,6 +432,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 				Time:     parsed.Info.Timestamp.Unix(),
 				Text:     messageText(parsed.Message),
 				PushName: parsed.Info.PushName,
+				Quote:    c.quoteOf(parsed.Message),
 				Media:    mediaOf(parsed.Message),
 				Timer:    timerOf(parsed.Message),
 			})
@@ -417,6 +450,19 @@ func (c *Client) kindOf(jid types.JID) string {
 		return KindSelf
 	}
 	return KindDirect
+}
+
+// quoteOf is the Quote that a Message carries, or nil. The user's own JID maps to the empty sender.
+func (c *Client) quoteOf(m *waE2E.Message) *Quote {
+	ctx := m.GetExtendedTextMessage().GetContextInfo()
+	if ctx.GetStanzaID() == "" {
+		return nil
+	}
+	sender := ctx.GetParticipant()
+	if jid, err := types.ParseJID(sender); err == nil && c.cli.Store.ID != nil && jid.User == c.cli.Store.ID.User {
+		sender = ""
+	}
+	return &Quote{ID: ctx.GetStanzaID(), Sender: sender, Text: messageText(ctx.GetQuotedMessage())}
 }
 
 // messageText is the text of a Message, or the caption of its Media. System Messages have none yet.

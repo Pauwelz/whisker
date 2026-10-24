@@ -112,7 +112,14 @@ A Message was added or changed: it arrived, the user sent it, or its Delivery St
 
 An edit and a revoke also send `messageChanged`, whether the user, another device or the other Participant made them. See `chat.edit` and `chat.revoke`.
 
-Later tickets (Reaction, Quote) add keys to the Message and send `messageChanged` for each change.
+A Reaction, whether the user or another Participant set or removed it, also sends `messageChanged`. See `chat.react`.
+
+A Message can carry two more keys. Both are left out when empty:
+
+- `quote`: the Message that this one replies to, as a snapshot: `{id, sender, senderName, fromMe, text}`. `text` is the preview. `sender` and `senderName` are empty and `fromMe` is true when the quoted Message is the user's.
+- `reactions`: a list of `{sender, senderName, fromMe, emoji}`, one per Participant, in the order the Participants first reacted. `sender` is empty for the user.
+
+Later tickets add keys to the Message and send `messageChanged` for each change.
 
 Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`, `chat-edit.jsonl`, `chat-revoke.jsonl`.
 
@@ -223,7 +230,7 @@ A new Message of another Participant sets the Read Marker (`unread`) of its Chat
 | `onOpen` | When the Chat becomes attended (all unread Messages), and for each new Message while it stays attended. |
 | `onInteraction` | After the user sends a Message (`chat.send`) in the Chat, for all unread Messages at that moment. |
 
-Edit, Revoke, typing and opening Media are not interactions. Reactions and Quotes join later: add a `receiptpolicy.Interaction` call for each. A Read Receipt that fails (offline) stays due and goes out with the next one for that Chat.
+Edit, Revoke, typing and opening Media are not interactions. A Reaction of the user (`chat.react`) and a reply with a Quote (`chat.send` with `quote`) are interactions: both call `reader.interaction`. A Reaction that someone else sets is not. A Read Receipt that fails (offline) stays due and goes out with the next one for that Chat.
 
 Fixtures: `read-on-open.jsonl`, `read-off.jsonl`, `read-on-interaction.jsonl`, `read-group.jsonl`, `read-offline.jsonl`, `attention-closed.jsonl`.
 
@@ -259,11 +266,13 @@ Fixtures: `chat-messages.jsonl`, `chat-receive.jsonl`.
 
 ### `chat.send`
 
-Params: `chat` (JID of a stored Chat) and `text` (not blank, at most 65536 characters). Valid once the Daemon is `ready` and linked. The Daemon stores the Message as `pending`, answers `{"message": {...}}` at once, and sends it when the connection is up. `messageChanged` reports `sent`, or `failed`.
+Params: `chat` (JID of a stored Chat), `text` (not blank, at most 65536 characters) and optional `quote` (the ID of a Message of the same Chat). Valid once the Daemon is `ready` and linked. The Daemon stores the Message as `pending`, answers `{"message": {...}}` at once, and sends it when the connection is up. `messageChanged` reports `sent`, or `failed`.
 
-The Message has its WhatsApp ID from the start. A reconnect or a retry sends that same ID, so a Message never shows twice. Error -32006 means a blank or too long text, or an unknown Chat.
+The Message has its WhatsApp ID from the start. A reconnect or a retry sends that same ID, so a Message never shows twice. Error -32006 means a blank or too long text, an unknown Chat, or a `quote` that is unknown or a Tombstone.
 
-Fixtures: `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`.
+With `quote`, the Message is a reply. The Daemon keeps a snapshot of the quoted Message (author and text) and sends it to WhatsApp with the reply. Incoming replies carry the same `quote` key.
+
+Fixtures: `chat-quote.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`.
 
 ### `chat.retry`
 
@@ -276,6 +285,14 @@ Params: `chat`, `id` and `text` (not blank, at most 65536 characters). Valid onc
 Error -32006 means the Message cannot be edited (unknown, not the user's, not sent yet, a Tombstone, too old, or a blank or too long text). Error -32007 means WhatsApp could not be reached (offline or a failed call): nothing changed. The call blocks the Daemon for up to 15 s.
 
 An edit from another device, or from another Participant, arrives as `messageChanged` with `edited: true`. The Daemon drops an edit from someone other than the author. Fixture: `chat-edit.jsonl`.
+
+### `chat.react`
+
+Params: `chat`, `id` and `emoji`. Valid once the Daemon is `ready` and linked. The `emoji` is one of the six defaults of WhatsApp (👍 ❤️ 😂 😮 😢 🙏), or empty to remove the Reaction. The Go list is `ReactionEmoji` in `daemon/internal/contract/react.go`; the Plugin mirrors it as `REACTION_EMOJI`.
+
+A Participant has one Reaction per Message, so a new `emoji` replaces the old one. The Message can be anyone's, but not a Tombstone. The Daemon sends the Reaction to WhatsApp, stores it, answers `{"message": {...}}` and sends `messageChanged`.
+
+A Reaction from another device or another Participant arrives as `messageChanged` too. A Reaction on an unknown Message sends nothing. Error -32006 means an unknown or revoked Message or an emoji that is not allowed. Error -32007 means WhatsApp could not be reached: nothing changed. Fixtures: `chat-reaction.jsonl`, `read-reaction-quote.jsonl`.
 
 ### `chat.revoke`
 
@@ -382,8 +399,8 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32003 | chat store failed | `chats.list`, `chat.messages`, `chat.send` or `chat.retry` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
 | -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
-| -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. |
-| -32007 | send failed | `chat.edit` or `chat.revoke` could not reach WhatsApp. The Message is unchanged. |
+| -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.react` got an unknown or revoked Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown or revoked. |
+| -32007 | send failed | `chat.edit`, `chat.revoke` or `chat.react` could not reach WhatsApp. The Message is unchanged. |
 | -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
 
@@ -416,6 +433,8 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
 | `sent` | `ids`, `timers` (optional) | The Go test checks the Message IDs that the fake port has sent so far, in order. With `timers`, it also checks the Disappearing timer of each, in seconds. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
+| `reacted` | `reactions` | The Go test checks the Reactions that the fake port has sent so far, in order, as `"id:emoji"`. An empty emoji is a removal. |
+| `quoted` | `quotes` | The Go test checks the replies that the fake port has sent with a Quote so far, in order, as `"id:quotedID"`. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
 | `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest sweep timer of Disappearing Messages. Without it, the line fires the keyring timeout as above. |
 | `restart` | `now` (optional) | The Go test stops the Daemon like a closed stdin and starts it again on the same Profile, with a new fake WhatsApp port. `now` sets the Daemon time while it was off. Put the `whatsapp` start-up lines after it. |
@@ -438,7 +457,7 @@ Keys of a `whatsapp` line. Each line has exactly one:
 
 The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
 
-The `event` kinds `newMessage`, `receipt`, `messageEdited` and `messageRevoked` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
+The `event` kinds `newMessage`, `receipt`, `messageEdited`, `messageRevoked` and `reaction` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
 
 The `event` kind `chatTimer` (`chat`, `seconds`) sets the Disappearing timer of a Chat. A `newMessage` takes `timer` (seconds), and a `historySync` Chat takes `timer`.
 
