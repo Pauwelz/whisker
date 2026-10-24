@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
 )
@@ -24,7 +25,7 @@ func (instantClock) After(time.Duration) <-chan time.Time {
 
 func newProfile(t *testing.T, fake *keystore.Fake) *profile.Profile {
 	t.Helper()
-	return profile.New(filepath.Join(t.TempDir(), "whisker"), keystore.New(fake, keystore.RealClock))
+	return profile.New(filepath.Join(t.TempDir(), "whisker"), keystore.New(fake, clock.Real))
 }
 
 func TestStoreFilesHoldNoPlaintext(t *testing.T) {

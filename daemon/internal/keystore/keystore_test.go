@@ -4,11 +4,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 )
 
 func TestLoadCreatesAKeyOnce(t *testing.T) {
-	s := keystore.New(keystore.NewFake(), keystore.NewManualClock())
+	s := keystore.New(keystore.NewFake(), clock.NewManual())
 	key, created, err := s.Load()
 	if err != nil || !created || len(key) != 32 {
 		t.Fatalf("first Load = %d bytes, created %v, err %v", len(key), created, err)
@@ -21,7 +22,7 @@ func TestLoadCreatesAKeyOnce(t *testing.T) {
 
 func TestLoadStoresBase64(t *testing.T) {
 	fake := keystore.NewFake()
-	key, _, _ := keystore.New(fake, keystore.NewManualClock()).Load()
+	key, _, _ := keystore.New(fake, clock.NewManual()).Load()
 	stored, _ := fake.Get()
 	if len(stored) != 44 || stored == string(key) {
 		t.Errorf("stored value %q is not the base64 of a 32-byte key", stored)
@@ -31,7 +32,7 @@ func TestLoadStoresBase64(t *testing.T) {
 func TestMissingKeyringIsUnavailable(t *testing.T) {
 	fake := keystore.NewFake()
 	fake.Fail(errors.New("no secret service"))
-	_, _, err := keystore.New(fake, keystore.NewManualClock()).Load()
+	_, _, err := keystore.New(fake, clock.NewManual()).Load()
 	if !errors.Is(err, keystore.ErrUnavailable) {
 		t.Errorf("err = %v, want ErrUnavailable", err)
 	}
@@ -40,7 +41,7 @@ func TestMissingKeyringIsUnavailable(t *testing.T) {
 func TestLockedKeyringTimesOutAndRetryJoinsTheAttempt(t *testing.T) {
 	fake := keystore.NewFake()
 	fake.Lock()
-	clock := keystore.NewManualClock()
+	clock := clock.NewManual()
 	s := keystore.New(fake, clock)
 
 	first := make(chan error, 1)
@@ -64,7 +65,7 @@ func TestLockedKeyringTimesOutAndRetryJoinsTheAttempt(t *testing.T) {
 
 func TestDeleteRemovesTheKeyAndAcceptsAMissingKey(t *testing.T) {
 	fake := keystore.NewFake()
-	s := keystore.New(fake, keystore.NewManualClock())
+	s := keystore.New(fake, clock.NewManual())
 	if err := s.Delete(); err != nil {
 		t.Fatalf("Delete without key: %v", err)
 	}

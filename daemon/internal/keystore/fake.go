@@ -3,7 +3,6 @@ package keystore
 import (
 	"strings"
 	"sync"
-	"time"
 )
 
 // Fake is an in-memory Backend for tests. It never touches the real keyring.
@@ -84,20 +83,3 @@ func (f *Fake) Delete() error {
 	f.value, f.has = "", false
 	return nil
 }
-
-// ManualClock is a Clock for tests. A timer fires only when the test calls Fire.
-type ManualClock struct{ timers chan chan time.Time }
-
-func NewManualClock() *ManualClock { return &ManualClock{timers: make(chan chan time.Time, 8)} }
-
-func (c *ManualClock) After(time.Duration) <-chan time.Time {
-	t := make(chan time.Time, 1)
-	c.timers <- t
-	return t
-}
-
-// Fire fires the oldest timer. It waits until a call has set one.
-func (c *ManualClock) Fire() { (<-c.timers) <- time.Time{} }
-
-// WaitTimer waits until a call has set a timer, and leaves the timer unfired.
-func (c *ManualClock) WaitTimer() { <-c.timers }

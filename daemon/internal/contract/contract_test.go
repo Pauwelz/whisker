@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
@@ -64,9 +65,9 @@ type fixtureLine struct {
 type runner struct {
 	t       *testing.T
 	fake    *keystore.Fake
-	clock   *keystore.ManualClock
-	expiry  *keystore.ManualClock // the timers of the Disappearing Message sweep
-	now     atomic.Int64          // the Daemon time in Unix seconds
+	clock   *clock.Manual
+	expiry  *clock.Manual // the timers of the Disappearing Message sweep
+	now     atomic.Int64  // the Daemon time in Unix seconds
 	dir     string
 	runtime string // $XDG_RUNTIME_DIR of the Daemon
 	in      *io.PipeWriter
@@ -86,7 +87,7 @@ func newRunner(t *testing.T) *runner {
 	oldTimers := contract.Timers
 	runtime := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtime)
-	r := &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: keystore.NewManualClock(), expiry: keystore.NewManualClock(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
+	r := &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: clock.NewManual(), expiry: clock.NewManual(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
 	r.now.Store(1000) // fixed Message times for the fixtures
 	contract.Now = func() time.Time { return time.Unix(r.now.Load(), 0) }
 	contract.Timers = r.expiry
@@ -301,7 +302,7 @@ func (r *runner) restart(t *testing.T, now *int64) {
 		t.Errorf("before the restart: exit code %d, extra frames %v", code, rest)
 	}
 	r.started = false
-	r.expiry = keystore.NewManualClock()
+	r.expiry = clock.NewManual()
 	contract.Timers = r.expiry
 	r.portMu.Lock()
 	r.port, r.portUsed = whatsapp.NewFake(), false
@@ -520,7 +521,7 @@ func run(t *testing.T, input string) (int, string, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
-	p := profile.New(filepath.Join(t.TempDir(), "whisker"), keystore.New(keystore.NewFake(), keystore.NewManualClock()))
+	p := profile.New(filepath.Join(t.TempDir(), "whisker"), keystore.New(keystore.NewFake(), clock.NewManual()))
 	code := contract.Run(strings.NewReader(input), &out, &errOut, p, settings.New(filepath.Join(t.TempDir(), "settings.json")), func() (whatsapp.Port, error) { return whatsapp.NewFake(), nil })
 	p.Close()
 	return code, out.String(), errOut.String()

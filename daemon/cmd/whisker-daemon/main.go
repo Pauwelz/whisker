@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
@@ -68,7 +69,7 @@ func run() int {
 		configDir = filepath.Join(home, ".config")
 	}
 	prefs := settings.New(filepath.Join(configDir, "whisker", "settings.json"))
-	p := profile.New(filepath.Join(dataDir, "whisker"), keystore.New(keystore.SecretService{}, keystore.RealClock))
+	p := profile.New(filepath.Join(dataDir, "whisker"), keystore.New(keystore.SecretService{}, clock.Real))
 	defer p.Close()
 	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
 	return contract.Run(stdinUntilSignal(), os.Stdout, os.Stderr, p, prefs, newPort)

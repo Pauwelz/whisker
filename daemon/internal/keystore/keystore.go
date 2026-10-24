@@ -8,6 +8,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/Pauwelz/whisker/daemon/internal/clock"
 )
 
 // Timeout is how long one call waits for the keyring.
@@ -29,18 +31,6 @@ type Backend interface {
 	Delete() error
 }
 
-// Clock lets tests control the timeout.
-type Clock interface {
-	After(d time.Duration) <-chan time.Time
-}
-
-type realClock struct{}
-
-func (realClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
-
-// RealClock is the wall clock.
-var RealClock Clock = realClock{}
-
 type attempt struct {
 	done    chan struct{}
 	key     []byte
@@ -51,13 +41,13 @@ type attempt struct {
 // Store loads and deletes the store key.
 type Store struct {
 	backend Backend
-	clock   Clock
+	clock   clock.Clock
 
 	mu       sync.Mutex
 	inflight *attempt
 }
 
-func New(backend Backend, clock Clock) *Store { return &Store{backend: backend, clock: clock} }
+func New(backend Backend, clock clock.Clock) *Store { return &Store{backend: backend, clock: clock} }
 
 // Load returns the store key. It makes the key on first use and then reports created.
 // One attempt runs at a time. After a timeout the attempt keeps running, and the next Load joins it.
