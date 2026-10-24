@@ -25,7 +25,7 @@ func startWithImage(t *testing.T, r *runner) {
 		ID: "m1", Sender: mediaChat, Time: 5,
 		Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Key: make([]byte, 32)},
 	}})
-	for _, want := range []string{`"downloading"`, "chatsChanged", `"ready"`} {
+	for _, want := range []string{`"downloading"`, "chatsChanged", `"notify"`, `"ready"`} {
 		if f := r.nextFrame(); !strings.Contains(f, want) {
 			t.Fatalf("frame = %s, want %s", f, want)
 		}

@@ -31,8 +31,12 @@ type Fake struct {
 	readErr    error
 	reads      []Read
 	chatReads  []string
+	plays      []Read
 	edits      []string
 	revokes    []string
+	online     []bool
+	subscribed []string
+	typing     []string
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -144,6 +148,24 @@ func (f *Fake) Reads() []Read {
 	return append([]Read{}, f.reads...)
 }
 
+// Plays lists the MarkPlayed calls that worked, in order. Each has one ID.
+func (f *Fake) Plays() []Read {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Read{}, f.plays...)
+}
+
+// MarkPlayed fails with the read error, like MarkRead.
+func (f *Fake) MarkPlayed(chat, sender, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.readErr != nil {
+		return f.readErr
+	}
+	f.plays = append(f.plays, Read{chat, sender, []string{id}})
+	return nil
+}
+
 // ChatReads lists the Chats of the MarkChatRead calls, in order.
 func (f *Fake) ChatReads() []string {
 	f.mu.Lock()
@@ -243,3 +265,48 @@ func (f *Fake) PairCode(string) (string, error) {
 
 func (f *Fake) Disconnect()          {}
 func (f *Fake) Events() <-chan Event { return f.events }
+
+// SendPresence, SubscribePresence and SendTyping record the call. Typing is recorded as "chat:composing" or "chat:paused".
+func (f *Fake) SendPresence(online bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.online = append(f.online, online)
+	return nil
+}
+
+func (f *Fake) SubscribePresence(jid string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.subscribed = append(f.subscribed, jid)
+	return nil
+}
+
+func (f *Fake) SendTyping(chat string, composing bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	state := ActivityPaused
+	if composing {
+		state = ActivityComposing
+	}
+	f.typing = append(f.typing, chat+":"+state)
+	return nil
+}
+
+// OnlineCalls, Subscribed and TypingCalls list what the fake got, in order.
+func (f *Fake) OnlineCalls() []bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]bool{}, f.online...)
+}
+
+func (f *Fake) Subscribed() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.subscribed...)
+}
+
+func (f *Fake) TypingCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.typing...)
+}

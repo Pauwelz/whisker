@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- A voice note has a Play and Stop button in the pop-out. It plays with `mpv --no-video`. Closing the pop-out stops it. The sender sees the note as played, unless Read Receipts is Off. In On interaction mode, playing also sends Read for that note only.
 - A fresh Profile shows a QR code in the pop-out. The code refreshes while the user waits.
 - A switch in the pop-out links with a Pair Code instead.
 - The pop-out leaves the linking screen when the phone authorizes the Companion Device.
@@ -29,6 +30,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - The Daemon knows when the pop-out is open and which Chat it shows. Opening a Chat clears its unread mark, also on the phone. A new Message marks its Chat unread.
 - An Attach button in the composer picks an image or a document and sends it. The composer text is the caption. Sent Media is stored encrypted and opens again after a restart.
 - Read Receipts follow the setting: Off sends none, On open sends them for the Chat you view, On interaction sends them for the whole Chat after you send a Message there.
+- A new Message raises a desktop notification, except in a Muted Chat, in the Attended Chat, or when notifications are off. A click on it opens the pop-out on that Chat.
+- The bar shows the number of unread Chats, without Muted Chats. It shows only the icon when no Chat is unread.
+- A Direct Chat header shows Online or Last Seen. A Chat shows "typing…" or "recording…", with the Participant name in a Group Chat.
+- whisker sends Composing while you type, if "send typing" is on. It sends Online while the pop-out is open, if "send online" is on.
 
 ## [1.0.0-rc.1] - 2026-10-24
 

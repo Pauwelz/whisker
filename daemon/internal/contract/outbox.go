@@ -31,8 +31,9 @@ type outbox struct {
 	gen      int // counts the Connected events, so a send can tell that a reconnect came while it ran
 	inflight map[string]bool
 	results  chan sendResult
-	incoming func(whatsapp.NewMessage) // runs after a new Message is stored, may be nil
-	store    *media.Store              // holds the files of Media to send
+	incoming func(whatsapp.NewMessage)                // runs after a new Message is stored, may be nil
+	notice   func(whatsapp.NewMessage) map[string]any // the `notify` frame of a new Message, or nil; may be nil
+	store    *media.Store                             // holds the files of Media to send
 }
 
 type sendResult struct {
@@ -151,7 +152,14 @@ func (b *outbox) handle(ev whatsapp.Event) bool {
 		if b.incoming != nil {
 			b.incoming(ev)
 		}
-		return b.notify(ev.Chat, ev.Message.ID) && b.send(notification("chatsChanged", nil))
+		if !b.notify(ev.Chat, ev.Message.ID) || !b.send(notification("chatsChanged", nil)) {
+			return false
+		}
+		if b.notice != nil {
+			if frame := b.notice(ev); frame != nil {
+				return b.send(frame)
+			}
+		}
 	case whatsapp.MessageEdited:
 		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Edit(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Text) })
 	case whatsapp.MessageRevoked:
