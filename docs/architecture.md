@@ -149,13 +149,14 @@ A marketplace listing is the goal. The repo has a root README with install and r
 
 ## 9. Open points
 
-- The package split inside `daemon/internal/...` is not decided.
-- The lock mechanism, the exact wait time and the numeric exit codes (including "Profile in use" and the oversized-line code) are not decided.
-- The storage format of Profile Settings is not decided.
-- The encrypted chat store is not run with a chat schema. FTS5 needs the extra `ncruces` `ext/fts5` package. This is not verified.
-- A locked keyring is not tested with `go-keyring` in a run. The research lists what a run must confirm.
+- Decided since this spec began, see [contract.md](contract.md):
+  - The Profile lock, its wait time and the exit codes: section "Exit codes".
+  - The storage format of Profile Settings: section `settings.get`. The file is `$XDG_CONFIG_HOME/whisker/settings.json`.
+  - The application error codes: section "Errors".
+  - The chat schema and its migrations: section "Chat store schema". Search filters in Go, so FTS5 is not used.
+- The package split is the one in `daemon/internal/`. Section 4 names the modules.
+- A locked keyring is only tested with a fake backend. A run with `go-keyring` on a real locked keyring is open.
 - The marketplace scanner is not checked for how it treats a verified download.
-- The list of stable application error codes in the contract is not written.
 - An `arm64` target is not planned. It needs a new `SHA256SUMS` line and a new asset.
 
 ## 10. Decisions this rests on
