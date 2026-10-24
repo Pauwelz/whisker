@@ -1,0 +1,168 @@
+# whisker architecture
+
+## 1. Purpose and scope
+
+whisker is the Omarchy product: a Quickshell/QML Plugin and its own Go Daemon. It runs only on Linux. It is built from the ground up and shares no code with other products. [ADR 0007](https://github.com/Pauwelz/whisker-legacy/blob/main/docs/adr/0007-split-into-whisker-and-catty.md) records the split. This spec names the language, the process model, the modules, the storage and the distribution, so an implementer can start the repo from it. It does not list the v1 features or the CI setup. Terms such as Profile, Companion Device, Daemon, Plugin and Media follow the [glossary](../GLOSSARY.md).
+
+## 2. Language and key dependencies
+
+- The Plugin is QML on Quickshell. It uses `Quickshell.Io` to start and talk to the Daemon.
+- The Daemon is Go. It is one static binary, built with `CGO_ENABLED=0`. There is no bridge process and no protobuf layer.
+- `whatsmeow` handles the WhatsApp protocol and its `sqlstore`.
+- `ncruces/go-sqlite3` with the `adiantum` VFS gives encrypted SQLite in pure Go.
+- `zalando/go-keyring` reads and writes the store key in the Secret Service.
+- A pure-Go QR library renders the QR code.
+- The Daemon uses whatsmeow's `util/hkdfutil` and `util/cbcutil` packages for Media.
+- The JSON-RPC 2.0 envelope uses no library on either side.
+- Release tooling: POSIX `sh`, `curl` and `sha256sum` (see section 8).
+
+## 3. Process model
+
+- Quickshell starts the Daemon as a child process. The Daemon stops with the Plugin.
+- The Plugin talks to the Daemon over the child's stdio. stdin carries commands. stdout carries protocol frames only. stderr carries logs. There is no socket.
+- The Daemon exits on stdin EOF. A hard shell crash leaves no orphan Daemon.
+- Quickshell kills the child when it exits or reloads its config. The Plugin does not use `startDetached()`.
+- One Daemon serves one Profile, which is one Companion Device. The initial architecture has no support for several Profiles.
+- The Profile lock in `$XDG_RUNTIME_DIR/whisker/` stops a second Daemon on the same Profile. A new Daemon waits a few seconds for the lock. Then it exits with a "Profile in use" code. This covers the shell restart race.
+- To debug, run `whisker-daemon` in a terminal and type JSON lines.
+
+## 4. Modules and seams
+
+```
+manifest.json, QML         the Plugin (repo root)
+scripts/fetch-daemon.sh    downloads and verifies the Daemon
+bin/                       the Daemon binary (git-ignored)
+daemon/
+  go.mod
+  cmd/whisker-daemon       the entry point
+  internal/...             the Daemon packages
+docs/contract.md           the Plugin and Daemon contract
+contract/fixtures/*.jsonl  golden fixtures
+```
+
+- **Plugin (QML).** It shows state, sends commands and owns all presentation. It holds no Profile state.
+- **Daemon (Go).** It owns the Profile: the stores, the Media, the session and linking.
+- **Seam 1: stdio JSON-RPC.** This is the only runtime seam between the Plugin and the Daemon (section 7). The Go tests and the Plugin's JS tests both read the golden fixtures in `contract/fixtures/*.jsonl`. This keeps both sides in step.
+- **Seam 2: the Daemon binary.** The Plugin gets the binary through `scripts/fetch-daemon.sh`. It calls the script through `Quickshell.Io` and reads the exit code (section 8).
+- **Seam 3: whatsmeow.** The Daemon embeds whatsmeow in-process. whatsmeow's `sqlstore` runs on the encrypted SQLite driver.
+- **Store.** The Daemon has a device store (whatsmeow's) and a chat store (Chats, messages, Drafts and the FTS index). Both are encrypted SQLite (section 5).
+
+The split of `daemon/internal/...` into packages is not decided (see section 9).
+
+## 5. Profile and storage
+
+### Paths
+
+| Path | Content |
+|---|---|
+| `$XDG_DATA_HOME/whisker/` | the stores and Media |
+| `$XDG_CONFIG_HOME/whisker/` | Profile Settings |
+| `$XDG_RUNTIME_DIR/whisker/` | the Profile lock and the plain Media copies (`media/`) |
+
+whisker never reads, detects or deletes the Profile of whisker-legacy in `~/.config/Whisker/`.
+
+### Encryption at rest
+
+The scheme covers the device store, the chat store and the Media. Profile Settings stay plain.
+
+1. **SQLite stores.** `ncruces/go-sqlite3` with the `adiantum` VFS, in pure Go. The main file, the WAL and the journal are encrypted. Both stores use the same key. SQLCipher is out, because it needs cgo.
+2. **Known limit.** The encryption gives confidentiality only. It does not detect tampering or rollback.
+3. **Key.** The Daemon makes one random 32-byte store key per Profile on first start. It keeps the key in the Secret Service through `go-keyring`. The key never goes on disk.
+4. **No keyring or locked keyring.** The Daemon waits at most about 30 s. `go-keyring` has no timeout, so the Daemon sets its own. Then it sends a "keyring unavailable" state to the Plugin, with a Retry action. There is no plain-file or key-file fallback.
+5. **Lost key.** The Daemon deletes the unreadable Profile and starts linking again. There is no recovery code.
+6. **Media at rest.** The Profile keeps Media in WhatsApp's CDN format: AES-256-CBC with a truncated HMAC-SHA256. The HMAC detects tampering. The `mediaKey` of each Media lives in the chat store.
+   - Sent Media: the Daemon keeps the `tempFile` that `UploadReader` encrypts into.
+   - Received Media: whatsmeow downloads the plaintext into `$XDG_RUNTIME_DIR/whisker/media/`. The Daemon encrypts it again into the Profile with `cbcutil.EncryptStream` and the same `mediaKey`.
+7. **Media on request.** The Daemon copies the file to `$XDG_RUNTIME_DIR/whisker/media/` (tmpfs, mode `0700`). It checks the HMAC and decrypts the copy in place with `cbcutil.DecryptFile`. It gives the path to the Plugin.
+   - The Daemon deletes the plain copy when the Chat closes. It wipes the folder at Daemon start and exit.
+   - "Save as" and "open in another app" are explicit exports to a path the user chooses. That copy is plain.
+8. **Re-implemented helpers.** whatsmeow has no public function to decrypt a Media file on disk. The Daemon re-implements `getMediaKeys` (HKDF-SHA256 of `mediaKey` with the Media type as info, 112 bytes: IV, cipher key, MAC key) and `validateMedia` (HMAC over IV and ciphertext, truncated to 10 bytes). This takes about 20 lines. It uses the public `util/hkdfutil.SHA256`. A whatsmeow version bump that changes `util/` breaks the build, so the change is caught at compile time.
+9. **Logs.** Logs are plain. They never hold message text, captions, contact names or Media paths. They hold only ids and error codes.
+
+### Threat boundary
+
+A `0600` file is readable by every process of the same user. A key in the Secret Service is too. The encryption keeps the stores and Media away from indexers, backup or sync tools and sandboxed apps. It does not keep them from a hostile native process of the same user.
+
+### Lock
+
+The Profile lock is in `$XDG_RUNTIME_DIR/whisker/` (see section 3).
+
+## 6. Linking
+
+- The Daemon runs linking (QR code and Pair Code) and streams its state to the Plugin. The Plugin shows it.
+- The Daemon renders the QR code with a pure-Go library. It sends the code as a `data:image/png;base64,...` URI. Qt `Image` loads it natively.
+- The Daemon sends the Pair Code as text.
+- Each linking makes a new Companion Device. After linking, History Sync brings back recent Chats and Messages.
+
+## 7. Plugin and Daemon contract
+
+- **Transport.** Stdio, as in section 3.
+- **Framing.** Newline-delimited JSON. The Daemon reads with `bufio.Scanner` and a 1 MiB buffer cap. The cap fits WhatsApp's 65,536-character text limit. On an oversized line, the Daemon logs the error and exits with a distinct code. The Plugin shows that error and does not restart in a loop. The Plugin reads with no cap.
+- **Bounded frames.** History comes in pages. Frames carry no Media bytes.
+- **Envelope.** JSON-RPC 2.0.
+  - A request has `id`, `method` and `params`.
+  - A response has `result` or `error` (`code`, `message`, `data`).
+  - Daemon events are notifications.
+  - Error codes are stable application codes.
+  - The Daemon sends a `ready` notification once it can take commands.
+- **Versioning.** The wire carries no version and no `hello`. The rule is an exact release-version match (see section 8). A Plugin always runs its own Daemon, so a mixed pair cannot occur.
+- **Single source of truth.** A hand-written `docs/contract.md` lists the methods and notifications. The golden fixtures in `contract/fixtures/*.jsonl` back it with tests.
+- **QR code.** A `data:` URI (section 6).
+- **Media.** The Daemon sends a file path on request, never bytes. The path points to the plain copy described in section 5.
+
+## 8. Distribution and release
+
+### Install
+
+`omarchy plugin add <url>` clones the whole repo and moves it to `~/.config/omarchy/plugins/<manifest id>`. `omarchy plugin update` runs `git fetch origin HEAD` and a fast-forward merge. Omarchy has no build step, no install hook and no binary download. The Plugin id is `pauwelz.whisker`. `manifest.json` must sit at the repo root, and the repo must hold no symlink.
+
+### Binary delivery
+
+- The Plugin downloads `whisker-daemon` from the GitHub release with `scripts/fetch-daemon.sh`. The script downloads to a temp file, verifies it and moves it into place.
+- The script verifies the binary against a `SHA256SUMS` file committed in the repo. The clone is the trust root.
+- The repo holds no binary and has no source-build fallback.
+- `bin/` is git-ignored and holds the binary. A fast-forward update keeps it. `omarchy plugin remove` deletes it. A local dev build writes the same path with the same version, so development needs no download.
+- The only target is `linux/amd64`. `SHA256SUMS` has one line per architecture, so `arm64` can be added later.
+
+### Version
+
+The Plugin and the Daemon share one version. `manifest.json` is the single source. The build embeds it in the Daemon. Before it starts the Daemon, the Plugin runs `whisker-daemon --version`. On a mismatch, it downloads the matching binary. It stops and replaces a running Daemon that has the wrong version. The Plugin never runs a binary with the wrong version.
+
+### Failure
+
+If the download fails, the Plugin shows "Daemon download failed" with a retry action. It retries at the next shell start.
+
+### Release flow
+
+1. Work happens on `dev`.
+2. To release version V: bump `manifest.json`, build, and publish release `vV` with the raw binary as its asset.
+3. Commit `SHA256SUMS` on top.
+4. Fast-forward `main` (the default branch) to that commit.
+
+`main` only points at published releases, so HEAD is always installable.
+
+### Marketplace
+
+A marketplace listing is the goal. The repo has a root README with install and removal steps, and a root license. Removal keeps the Profile data in the XDG paths. The README says how to delete it. The README says nothing about whisker-legacy.
+
+## 9. Open points
+
+- The package split inside `daemon/internal/...` is not decided.
+- The lock mechanism, the exact wait time and the numeric exit codes (including "Profile in use" and the oversized-line code) are not decided.
+- The pure-Go QR library is not chosen.
+- The storage format of Profile Settings is not decided.
+- The encrypted chat store is not run with a chat schema. FTS5 needs the extra `ncruces` `ext/fts5` package. This is not verified.
+- A locked keyring is not tested with `go-keyring`. The missing prompt timeout comes from reading the source, not from a run.
+- The marketplace scanner is not checked for how it treats a verified download.
+- The list of stable application error codes in the contract is not written.
+- An `arm64` target is not planned. It needs a new `SHA256SUMS` line and a new asset.
+
+## 10. Decisions this rests on
+
+- [How Omarchy installs plugins from Git and ships binaries](https://github.com/Pauwelz/whisker-legacy/issues/99)
+- [Omarchy product: repo layout and distribution](https://github.com/Pauwelz/whisker-legacy/issues/100)
+- [Omarchy Daemon: language, shape and lifecycle](https://github.com/Pauwelz/whisker-legacy/issues/103) (stdio replaces its socket, see the next item)
+- [Plugin and Daemon contract](https://github.com/Pauwelz/whisker-legacy/issues/104)
+- [Encrypted whatsmeow store: pure Go or SQLCipher](https://github.com/Pauwelz/whisker-legacy/issues/106)
+- [Encrypt the Profile's stores at rest?](https://github.com/Pauwelz/whisker-legacy/issues/107)
+- [Moving existing users to the new products](https://github.com/Pauwelz/whisker-legacy/issues/112) (the Plugin id `pauwelz.whisker`, and no migration)
