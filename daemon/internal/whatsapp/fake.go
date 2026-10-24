@@ -40,6 +40,7 @@ type Fake struct {
 	online     []bool
 	subscribed []string
 	typing     []string
+	gate       chan struct{} // while set, Send waits
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -84,7 +85,25 @@ func (f *Fake) SentTimers() []int64 {
 	return append([]int64{}, f.timers...)
 }
 
+// SetHold makes Send wait until SetHold(false), so a test can end a send after other events.
+func (f *Fake) SetHold(hold bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if hold && f.gate == nil {
+		f.gate = make(chan struct{})
+	} else if !hold && f.gate != nil {
+		close(f.gate)
+		f.gate = nil
+	}
+}
+
 func (f *Fake) Send(_, id, _ string, quote *Quote, timer int64) error {
+	f.mu.Lock()
+	gate := f.gate
+	f.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++

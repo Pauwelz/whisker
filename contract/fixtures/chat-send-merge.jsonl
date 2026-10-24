@@ -1,0 +1,16 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"99@lid","kind":"direct","subject":"","lastActive":10,"messages":[]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"connected"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
+{"dir":"whatsapp","hold":true}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.send","params":{"chat":"99@lid","text":"hi"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"message":{"id":"fake-1","chat":"99@lid","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"pending","edited":false,"revoked":false}}}}
+{"dir":"whatsapp","event":{"kind":"chatAlias","lid":"99@lid","phone":"31600@s.whatsapp.net"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatMerged","params":{"from":"99@lid","to":"31600@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","hold":false}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"31600@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"sent","edited":false,"revoked":false}}}}
+{"dir":"sent","ids":["fake-1"]}

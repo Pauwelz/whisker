@@ -44,6 +44,7 @@ type outbox struct {
 	online   bool
 	gen      int // counts the Connected events, so a send can tell that a reconnect came while it ran
 	inflight map[string]bool
+	merged   map[string]string // LID Chat to phone Chat: a send that began in the LID Chat ends in the phone Chat
 	results  chan sendResult
 	store    *media.Store                             // holds the files of Media to send
 	incoming func(whatsapp.NewMessage)                // runs after a new Message is stored
@@ -59,7 +60,7 @@ type sendResult struct {
 func newOutbox(chats *chatstore.Store, port sendPort, store *media.Store, send func(map[string]any) bool, logOut io.Writer,
 	incoming func(whatsapp.NewMessage), notice func(whatsapp.NewMessage) map[string]any) *outbox {
 	return &outbox{chats: chats, port: port, store: store, send: send, logOut: logOut, incoming: incoming, notice: notice,
-		inflight: map[string]bool{}, results: make(chan sendResult, 64)}
+		inflight: map[string]bool{}, merged: map[string]string{}, results: make(chan sendResult, 64)}
 }
 
 // submit starts the send of a pending Message. It does nothing offline, or while that Message is in flight.
@@ -117,6 +118,9 @@ func (b *outbox) flush() {
 
 // done handles the end of a send. It returns false when a frame could not be written.
 func (b *outbox) done(r sendResult) bool {
+	if to, ok := b.merged[r.chat]; ok {
+		r.chat = to
+	}
 	delete(b.inflight, r.id)
 	switch {
 	case r.err == nil:

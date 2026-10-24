@@ -224,6 +224,7 @@ func (s *session) merge(a whatsapp.ChatAlias) bool {
 		return true
 	}
 	s.media.MoveChat(a.LID, a.Phone)
+	s.box.merged[a.LID] = a.Phone
 	if s.attn.Attended() == a.LID {
 		s.attn.Set(true, a.Phone)
 	}

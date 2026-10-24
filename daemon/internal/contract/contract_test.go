@@ -35,6 +35,7 @@ type fixtureLine struct {
 	Linked    *bool           `json:"linked"`
 	PairCode  string          `json:"pairCode"`
 	PairError string          `json:"pairError"`
+	Hold      *bool           `json:"hold"`      // dir "whatsapp": true holds every send until false
 	SendError *string         `json:"sendError"` // "" lets sends work again
 	ReadError *string         `json:"readError"` // "" lets Read Receipts work again
 	Receipts  []whatsapp.Read `json:"receipts"`  // dir "read": the Read Receipts the fake port has sent so far
@@ -366,6 +367,8 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 		f.SetLinked(*line.Linked)
 	case line.PairCode != "":
 		f.SetPairCode(line.PairCode, nil)
+	case line.Hold != nil:
+		f.SetHold(*line.Hold)
 	case line.SendError != nil:
 		if *line.SendError == "" {
 			f.SetSendError(nil)
