@@ -7,6 +7,11 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- The `chatMerged` notification tells the Plugin when two Chats merge.
+- The Attach button stages a file. The file waits in the Draft as "Attached: name" with a remove button (✕). Enter sends it with the text as caption. The Draft keeps the file over a Chat switch, closing the pop-out and a Daemon restart. Starting an Edit drops the file. `draft.set` takes an `attachment` param for the file.
+
 ### Fixed
 
 - A Chat merge no longer deletes Media files when a move fails. The Daemon logs "media move failed" and keeps the files.
@@ -14,14 +19,13 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - A merge of two Chats keeps the text of both Drafts. Before, the Draft of the LID Chat was lost. The merge also runs when the LID shows only as a Draft or as a group sender.
 - A Quote and a staged file no longer combine, like an Edit and a file. Staging a file drops the Quote. Starting a Quote drops the file. Before, the Quote dropped without notice when the file went out.
 - The Draft text always saves. A file that is gone, or that is not a regular file, no longer blocks the save of the text. The Draft drops such a file when you open the Chat.
-- The Attach button no longer sends the file at once. The file waits in the Draft as "Attached: name" with a remove button (✕). Enter sends it with the text as caption. The Draft keeps the file over a Chat switch, closing the pop-out and a Daemon restart. Starting an Edit drops the file.
 - A contact no longer shows as two Chats, one with the contact name and one with the phone number. WhatsApp sends the LID to phone number mapping after the Chat, and the Daemon now merges the two Chats, with their Messages, Drafts and Media.
 - Incoming Messages show again. The Daemon took every ordinary Message for a revoke and dropped it.
 - A Message that WhatsApp addresses by LID goes to the Chat of the phone JID, not to a second Chat.
 - The Attach button opens the file picker. The picker did not load.
 - A location has an Open map button that opens the map in the browser. The link in the Message text did not open, and `xdg-open` refused the command.
 - History Sync no longer adds a second Chat for a contact that WhatsApp sends by LID. The Daemon uses the phone JID that the conversation carries.
-- The linked device shows as "whisker" (a desktop) on the phone, not as "Other device". The name applies after a new link.
+- The linked device shows as "whisker" (a desktop) on the phone, not as "Other device". The name applies after a new link. Users linked with rc.2 keep "Other device" until they link again.
 - "Load more" no longer shows in the settings view.
 
 ## [1.0.0-rc.2] - 2026-10-24
