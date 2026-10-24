@@ -16,6 +16,7 @@ Panel {
   // Settings view and Log out confirmation: the user picks them, so they are view state only.
   property bool showSettings: false
   property bool confirmLogout: false
+  property string savingId: "" // the Message whose Save as path is being typed, or empty
   property string editingId: "" // the Message under edit in the composer, or empty
   readonly property var settings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
@@ -249,6 +250,7 @@ Panel {
                 font.bold: true
               }
               Text {
+                visible: text !== ""
                 width: parent.width
                 wrapMode: Text.Wrap
                 textFormat: Text.PlainText
@@ -257,6 +259,66 @@ Panel {
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
+              }
+              // Media: an image or sticker shows here once the Daemon holds it. The path comes from media.open, never bytes.
+              Image {
+                readonly property string file: State.mediaPath(root.view, modelData)
+                visible: file !== "" && State.showsInline(modelData)
+                source: visible ? "file://" + file : ""
+                width: Math.min(parent.width, Style.space(240))
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                TapHandler { onTapped: root.whiskerService.openMedia(modelData) }
+              }
+              Row {
+                visible: !!modelData.media
+                spacing: Style.space(8)
+                Text {
+                  text: State.mediaLabel(modelData) + (State.mediaStatus(modelData) !== "" ? " - " + State.mediaStatus(modelData) : "")
+                  textFormat: Text.PlainText
+                  color: modelData.media && modelData.media.state === "failed" ? Color.urgent : root.contentForeground
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                }
+                Button {
+                  visible: State.canDownloadMedia(modelData)
+                  text: modelData.media && modelData.media.state === "failed" ? "Retry download" : "Download"
+                  bordered: true
+                  onClicked: root.whiskerService.downloadMedia(modelData)
+                }
+                Button {
+                  visible: State.canOpenMedia(modelData)
+                  text: "Open"
+                  bordered: true
+                  onClicked: root.whiskerService.openMedia(modelData)
+                }
+                Button {
+                  visible: State.canOpenMedia(modelData)
+                  text: "Save as"
+                  bordered: true
+                  onClicked: root.savingId = modelData.id
+                }
+              }
+              // Save as: type an absolute path, then press Enter. Escape cancels.
+              TextEdit {
+                visible: root.savingId === modelData.id
+                width: parent.width
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+                onVisibleChanged: if (visible) forceActiveFocus()
+                Keys.onPressed: function(event) {
+                  if (event.key === Qt.Key_Escape) {
+                    root.savingId = ""
+                  } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    root.whiskerService.saveMedia(modelData, text.trim())
+                    root.savingId = ""
+                    text = ""
+                  } else {
+                    return
+                  }
+                  event.accepted = true
+                }
               }
               Row {
                 spacing: Style.space(8)
