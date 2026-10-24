@@ -76,8 +76,8 @@ func TestMergeChatMovesEverythingAndMergesFlags(t *testing.T) {
 	if n := rows(t, db, `SELECT COUNT(*) FROM media WHERE chat_jid = ?`, phoneJID); n != 1 {
 		t.Error("the Media row did not move")
 	}
-	if d, _ := s.Draft(phoneJID); d.Text != "phone draft" {
-		t.Errorf("Draft = %+v; the phone Draft must win", d)
+	if d, _ := s.Draft(phoneJID); d.Text != "phone draft\nlid draft" {
+		t.Errorf("Draft = %+v; want both texts joined", d)
 	}
 	for _, table := range []string{"chats", "messages", "reactions", "media", "drafts"} {
 		col := "chat_jid"
@@ -119,5 +119,56 @@ func TestMergeChatOfAnUnknownLIDChangesNothing(t *testing.T) {
 	}
 	if page := list(t, s, 0, 10); len(page.Chats) != 1 {
 		t.Errorf("chats = %+v", page.Chats)
+	}
+}
+
+func TestMergeChatDraftKeepsPhoneTargetsAndTheOnlyDraft(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{
+		{JID: lidJID, LastActive: 5, Messages: []whatsapp.Message{msg("a", 5)}},
+		{JID: phoneJID, LastActive: 5, Messages: []whatsapp.Message{msg("b", 5)}},
+	}})
+	if err := s.SetDraft(lidJID, chatstore.Draft{Text: "lid", Quote: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetDraft(phoneJID, chatstore.Draft{Text: "phone", Quote: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MergeChat(lidJID, phoneJID); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := s.Draft(phoneJID); d != (chatstore.Draft{Text: "phone\nlid", Quote: "b"}) {
+		t.Errorf("Draft = %+v; want the phone Quote and both texts", d)
+	}
+
+	// A lone LID Draft moves over whole.
+	if err := s.SetDraft("98@lid", chatstore.Draft{Text: "only", Attachment: "/a/b.png"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MergeChat("98@lid", "31601@s.whatsapp.net"); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := s.Draft("31601@s.whatsapp.net"); d != (chatstore.Draft{Text: "only", Attachment: "/a/b.png"}) {
+		t.Errorf("Draft = %+v; the lone Draft must move whole", d)
+	}
+}
+
+func TestMergeChatFindsTheLIDInAnyTable(t *testing.T) {
+	s, db := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "group@g.us", Kind: "group", LastActive: 5, Messages: []whatsapp.Message{msg("g1", 5)}}}})
+	if changed, err := s.MergeChat(lidJID, phoneJID); err != nil || !changed {
+		t.Fatalf("a LID that is only a group sender: MergeChat = %v, %v; want true", changed, err)
+	}
+	if n := rows(t, db, `SELECT COUNT(*) FROM messages WHERE sender_jid = ?`, phoneJID); n != 1 {
+		t.Errorf("group sender was not rewritten (%d)", n)
+	}
+	if err := s.SetDraft("97@lid", chatstore.Draft{Text: "orphan"}); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := s.MergeChat("97@lid", "31602@s.whatsapp.net"); err != nil || !changed {
+		t.Fatalf("an orphan Draft: MergeChat = %v, %v; want true", changed, err)
+	}
+	if d, _ := s.Draft("31602@s.whatsapp.net"); d.Text != "orphan" {
+		t.Errorf("Draft = %+v", d)
 	}
 }

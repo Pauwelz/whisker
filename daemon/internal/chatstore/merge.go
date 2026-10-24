@@ -4,7 +4,7 @@ import "database/sql"
 
 // MergeChat folds the LID Chat into the phone Chat once WhatsApp has said that both are one Participant.
 // It moves the Messages, Reactions, Media rows and the Draft, merges the flags and moves the names.
-// A row that the phone Chat already has wins: the same Message id, the Draft. With no phone Chat, the LID Chat gets the phone JID.
+// A row that the phone Chat already has wins: the same Message id. Two Drafts keep the phone targets and join the texts (phone, newline, LID). With no phone Chat, the LID Chat gets the phone JID.
 // It reports false when nothing named the LID, so a repeated alias costs two queries.
 func (s *Store) MergeChat(lid, phone string) (changed bool, err error) {
 	if lid == phone {
@@ -12,7 +12,12 @@ func (s *Store) MergeChat(lid, phone string) (changed bool, err error) {
 	}
 	err = s.inTx(func(tx *sql.Tx) error {
 		var known int
-		if err := tx.QueryRow(`SELECT (SELECT COUNT(*) FROM chats WHERE jid = :lid) + (SELECT COUNT(*) FROM names WHERE jid = :lid)`, sql.Named("lid", lid)).Scan(&known); err != nil {
+		// Count every place the LID can be, so an orphan Draft or a LID that is only a group sender still merges.
+		if err := tx.QueryRow(`SELECT
+			(SELECT COUNT(*) FROM chats WHERE jid = :lid) + (SELECT COUNT(*) FROM names WHERE jid = :lid) +
+			(SELECT COUNT(*) FROM drafts WHERE chat_jid = :lid) +
+			(SELECT COUNT(*) FROM messages WHERE chat_jid = :lid OR sender_jid = :lid OR quote_sender = :lid) +
+			(SELECT COUNT(*) FROM reactions WHERE chat_jid = :lid OR sender_jid = :lid)`, sql.Named("lid", lid)).Scan(&known); err != nil {
 			return err
 		}
 		if known == 0 {
@@ -20,6 +25,9 @@ func (s *Store) MergeChat(lid, phone string) (changed bool, err error) {
 		}
 		changed = true
 		steps := []string{
+			// Two Drafts keep the phone targets (Quote, Edit, file) and join the texts, so no typed text is lost. A lone Draft just moves below.
+			`UPDATE drafts SET text = CASE WHEN drafts.text = '' THEN l.text WHEN l.text = '' THEN drafts.text ELSE drafts.text || char(10) || l.text END
+				FROM (SELECT text FROM drafts WHERE chat_jid = :lid) AS l WHERE drafts.chat_jid = :phone`,
 			// Copy the LID Chat under the phone JID when the phone Chat is absent, then merge the flags. -1 (muted for ever) beats any end time.
 			`INSERT OR IGNORE INTO chats (jid, kind, subject, last_active, pinned, muted_until, unread, timer)
 				SELECT :phone, kind, subject, last_active, pinned, muted_until, unread, timer FROM chats WHERE jid = :lid`,
