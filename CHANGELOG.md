@@ -45,6 +45,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 ### Fixed
 
 - A Profile whose store key is in the keyring but wrong no longer stops the Daemon. The Daemon deletes the unreadable Profile and starts linking.
+- Log out deletes the Profile and its key also when WhatsApp is out of reach. The phone then still lists the device until you remove it there.
 
 ## [1.0.0-rc.1] - 2026-10-24
 

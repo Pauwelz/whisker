@@ -209,7 +209,7 @@ Params: any of the settings above. A key that is left out stays as it is. The Da
 
 ### `profile.logout`
 
-No params. Valid only once the Daemon is `ready` and the Profile is linked. The Daemon asks WhatsApp to remove the Companion Device, so the phone no longer lists it. It then answers with an empty `result` and runs the delete-the-Profile routine (`Profile.Delete`). `unlinked` with `by: "user"` and `ready` follow, then linking starts. Profile Settings stay. If WhatsApp cannot be reached, the Daemon gives error -32005 and keeps the Profile. The Plugin asks the user to confirm before it sends this request. Fixture: `logout.jsonl`.
+No params. Valid only once the Daemon is `ready` and the Profile is linked. The Daemon asks WhatsApp to remove the Companion Device, so the phone no longer lists it. It then answers with an empty `result` and runs the delete-the-Profile routine (`Profile.Delete`). `unlinked` with `by: "user"` and `ready` follow, then linking starts. Profile Settings stay. If WhatsApp cannot be reached, the Daemon logs it and deletes the Profile anyway; the phone then still lists the device until the user removes it there. The Plugin asks the user to confirm before it sends this request. Fixture: `logout.jsonl`.
 
 ### `attention.set`
 
@@ -418,7 +418,6 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32002 | pair code failed | WhatsApp did not give a Pair Code. |
 | -32003 | chat store failed | `chats.list`, `chat.messages`, `chat.send` or `chat.retry` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
-| -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
 | -32006 | invalid message | `chat.send` or `chat.sendMedia` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.react` got an unknown or revoked Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown or revoked. |
 | -32007 | send failed | `chat.edit`, `chat.revoke` or `chat.react` could not reach WhatsApp. The Message is unchanged. |
 | -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |

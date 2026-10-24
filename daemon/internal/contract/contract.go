@@ -77,7 +77,6 @@ const (
 	errPairCode       = -32002
 	errChatStore      = -32003
 	errSetting        = -32004
-	errLogout         = -32005
 	errMessage        = -32006
 	errSendFailed     = -32007
 	errMedia          = -32008
@@ -356,13 +355,12 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					return cur, err
 				})
 			} else if req.Method == methodLogout && ready && port.Linked() {
+				// The user must get out even when WhatsApp is out of reach: the Profile goes either way.
 				if err := port.Logout(); err != nil {
-					fmt.Fprintln(logOut, "logout failed") // the error text could name hosts
-					reply = errorReply(req.ID, errLogout, "log out failed")
-				} else {
-					reply = resultReply(req.ID, map[string]any{})
-					logout = true
+					fmt.Fprintln(logOut, "remote logout failed") // the error text could name hosts
 				}
+				reply = resultReply(req.ID, map[string]any{})
+				logout = true
 			} else {
 				reply = errorReply(req.ID, errMethodNotFound, "method not found")
 			}

@@ -641,7 +641,8 @@ func TestLogoutKeepsProfileSettingsAndDeletesTheProfile(t *testing.T) {
 	}
 }
 
-func TestFailedLogoutKeepsTheProfile(t *testing.T) {
+// Offline, the remote logout fails. The Profile and its key go anyway, so the user is never stuck.
+func TestFailedRemoteLogoutStillDeletesTheProfile(t *testing.T) {
 	r := newRunner(t)
 	r.port.SetLinked(true)
 	r.port.SetLogoutError(errors.New("offline"))
@@ -649,17 +650,17 @@ func TestFailedLogoutKeepsTheProfile(t *testing.T) {
 	r.nextFrame() // ready
 	r.nextFrame() // linked
 	r.send(`{"jsonrpc":"2.0","id":1,"method":"profile.logout"}`)
-	if f := r.nextFrame(); !strings.Contains(f, "-32005") {
-		t.Fatalf("frame = %s, want error -32005", f)
+	for _, want := range []string{`"result"`, "unlinked", "ready"} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
 	}
-	if strings.Contains(r.fake.Calls(), "delete") {
-		t.Error("a failed Log out must not delete the Profile")
+	if !strings.Contains(r.fake.Calls(), "delete") {
+		t.Errorf("keyring calls = %q, want the store key deleted", r.fake.Calls())
 	}
-	r.send(`{"jsonrpc":"2.0","id":2,"method":"chats.list"}`) // still ready and linked
-	if f := r.nextFrame(); !strings.Contains(f, `"chats"`) {
-		t.Errorf("frame = %s, want a Chat list", f)
+	if _, _, logs := r.finish(); !strings.Contains(logs, "remote logout failed") {
+		t.Errorf("log = %q, want the remote logout failure", logs)
 	}
-	r.finish()
 }
 
 func TestLogoutNeedsALinkedProfile(t *testing.T) {
