@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "pauwelz.whisker",
+  "name": "whisker",
+  "version": "0.1.0",
+  "author": "Michel Pauwels",
+  "license": "MIT",
+  "description": "A WhatsApp client for the Omarchy shell.",
+  "kinds": ["service", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "whisker",
+    "description": "WhatsApp pop-out",
+    "category": "Communication",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

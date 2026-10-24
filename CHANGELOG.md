@@ -6,3 +6,9 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- A bar icon with a pop-out that shows when the Daemon is ready.
+- The Daemon speaks JSON-RPC over stdio and answers `--version`.
+- `scripts/build-daemon.sh` builds the Daemon for local development.

@@ -1,0 +1,2 @@
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"view","expect":{"screen":"ready"}}
