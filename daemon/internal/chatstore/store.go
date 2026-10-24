@@ -5,6 +5,7 @@ package chatstore
 import (
 	"cmp"
 	"database/sql"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -161,6 +162,16 @@ func chatName(kind, subject, contact, push, jid string) string {
 		return subject
 	}
 	return participantName(contact, push, jid)
+}
+
+// ParticipantName applies the name rule to one Participant, for the names the Daemon sends outside a Message.
+func (s *Store) ParticipantName(jid string) (string, error) {
+	var contact, push string
+	err := s.db.QueryRow(`SELECT COALESCE(contact_name, ''), COALESCE(push_name, '') FROM names WHERE jid = ?`, jid).Scan(&contact, &push)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	return participantName(contact, push, jid), nil
 }
 
 // participantName is the name rule for a Participant: contact name, Push Name, then phone number.

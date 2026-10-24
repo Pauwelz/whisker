@@ -226,6 +226,18 @@ Panel {
             }
           }
 
+          // Presence of the other side: Online or Last Seen, and "typing…" or "recording…".
+          Text {
+            visible: text !== ""
+            width: parent.width
+            textFormat: Text.PlainText
+            text: State.chatStatusLabel(root.view, Math.floor(Date.now() / 1000))
+            color: root.contentForeground
+            opacity: 0.6
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+          }
+
           Button {
             visible: !!root.openChat && root.openChat.moreMessages === true
             text: "Load older"
@@ -383,6 +395,7 @@ Panel {
             color: root.contentForeground
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.body
+            onTextChanged: root.whiskerService.composerChanged(text)
             Keys.onPressed: function(event) {
               var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text)
               if (action === "default") return
