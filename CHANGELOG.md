@@ -7,6 +7,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.0.0-rc.2] - 2026-10-24
+
 ### Added
 
 - Each Chat keeps its Draft: the text and a pending Quote or Edit target. A Chat switch, closing the pop-out and a Daemon restart keep it. Sending clears it.
