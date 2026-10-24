@@ -11,13 +11,20 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
+// receiptPort is what the reader needs from WhatsApp.
+type receiptPort interface {
+	MarkRead(chat, sender string, ids []string) error
+	MarkPlayed(chat, sender, id string) error
+	MarkChatRead(chat string) error
+}
+
 // reader clears Read Markers and sends Read Receipts for the Attended Chat.
 // The policy (receiptpolicy) decides when. It runs on the Daemon loop only.
 // shortcut: MarkRead and MarkChatRead block the loop while they send, upgrade if a slow network shows.
 // shortcut: a Read Receipt that fails stays due and goes out with the next one for that Chat.
 type reader struct {
 	chats  *chatstore.Store
-	port   whatsapp.Port
+	port   receiptPort
 	prefs  *settings.Store
 	attn   *attention.Attention
 	logOut io.Writer

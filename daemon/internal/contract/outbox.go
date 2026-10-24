@@ -26,13 +26,19 @@ const ExpiryInterval = time.Minute
 // ConnectRetryDelay is the wait before the Daemon connects again after a failed connect.
 var ConnectRetryDelay = 5 * time.Second
 
+// sendPort is what the outbox needs from WhatsApp.
+type sendPort interface {
+	Send(chat, id, text string, quote *whatsapp.Quote, timer int64) error
+	SendMedia(chat, id string, m whatsapp.Media, plain *os.File, caption string, timer int64) error
+}
+
 // outbox sends the Messages of the user and follows the connection.
 // A Message waits as `pending` in the chat store until the connection is up, so a restart loses nothing.
 // A send and its retries use one Message ID, so WhatsApp drops a repeat: a Message never shows twice.
 // It runs on the Daemon loop only. Only the sends run on other goroutines.
 type outbox struct {
 	chats    *chatstore.Store
-	port     whatsapp.Port
+	port     sendPort
 	send     func(map[string]any) bool
 	logOut   io.Writer
 	online   bool
@@ -50,7 +56,7 @@ type sendResult struct {
 	err      error
 }
 
-func newOutbox(chats *chatstore.Store, port whatsapp.Port, store *media.Store, send func(map[string]any) bool, logOut io.Writer,
+func newOutbox(chats *chatstore.Store, port sendPort, store *media.Store, send func(map[string]any) bool, logOut io.Writer,
 	incoming func(whatsapp.NewMessage), notice func(whatsapp.NewMessage) map[string]any) *outbox {
 	return &outbox{chats: chats, port: port, store: store, send: send, logOut: logOut, incoming: incoming, notice: notice,
 		inflight: map[string]bool{}, results: make(chan sendResult, 64)}

@@ -14,13 +14,18 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
+// downloadPort is what the mediaLoader needs from WhatsApp.
+type downloadPort interface {
+	Download(ref whatsapp.Media, dst *os.File) error
+}
+
 // mediaLoader downloads Media and hands out paths to plain copies.
 // Images, stickers and voice notes download when the Message arrives (the chat store marks them downloading).
 // Other Media downloads on `media.download`. It runs on the Daemon loop; only the downloads run on other goroutines.
 // Logs hold fixed texts only: never a Chat, a name or a path.
 type mediaLoader struct {
 	chats    *chatstore.Store
-	port     whatsapp.Port
+	port     downloadPort
 	store    *media.Store
 	notify   func(chat, id string) bool
 	logOut   io.Writer
@@ -34,7 +39,7 @@ type mediaResult struct {
 }
 
 // newMediaLoader wipes the plain copies of an earlier run and makes interrupted downloads startable again.
-func newMediaLoader(chats *chatstore.Store, port whatsapp.Port, store *media.Store, notify func(chat, id string) bool, logOut io.Writer) *mediaLoader {
+func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Store, notify func(chat, id string) bool, logOut io.Writer) *mediaLoader {
 	store.Wipe()
 	if err := chats.ResetDownloads(); err != nil {
 		fmt.Fprintln(logOut, "chat store write failed")

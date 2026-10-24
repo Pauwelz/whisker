@@ -7,15 +7,21 @@ import (
 
 	"github.com/Pauwelz/whisker/daemon/internal/attention"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
-	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
+
+// presencePort is what the presenter needs from WhatsApp.
+type presencePort interface {
+	SendPresence(online bool) error
+	SubscribePresence(jid string) error
+	SendTyping(chat string, composing bool) error
+}
 
 // presenter sends the Presence of the user: `Online` while the pop-out is open, and Composing while the user types.
 // "send online" and "send typing" (Profile Settings) gate both. It runs on the Daemon loop only.
 // shortcut: the calls block the loop while they send, and a failed call is not repeated until the next change, upgrade if that shows.
 // shortcut: Composing is sent once per change, not refreshed while the user keeps typing.
 type presenter struct {
-	port       whatsapp.Port
+	port       presencePort
 	prefs      *settings.Store
 	attn       *attention.Attention
 	logOut     io.Writer
@@ -24,7 +30,7 @@ type presenter struct {
 	subscribed map[string]bool
 }
 
-func newPresenter(port whatsapp.Port, prefs *settings.Store, attn *attention.Attention, logOut io.Writer) *presenter {
+func newPresenter(port presencePort, prefs *settings.Store, attn *attention.Attention, logOut io.Writer) *presenter {
 	return &presenter{port: port, prefs: prefs, attn: attn, logOut: logOut, subscribed: map[string]bool{}}
 }
 
