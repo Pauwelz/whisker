@@ -31,3 +31,20 @@ func TestDue(t *testing.T) {
 		}
 	}
 }
+
+func TestPlayed(t *testing.T) {
+	cases := []struct {
+		mode             string
+		wantPlayed, read bool
+	}{
+		{settings.ReadReceiptsOff, false, false},
+		{settings.ReadReceiptsOnOpen, true, false},
+		{settings.ReadReceiptsOnInteraction, true, true},
+		{"unknown", false, false},
+	}
+	for _, c := range cases {
+		if played, read := Played(c.mode); played != c.wantPlayed || read != c.read {
+			t.Errorf("Played(%q) = %v, %v, want %v, %v", c.mode, played, read, c.wantPlayed, c.read)
+		}
+	}
+}

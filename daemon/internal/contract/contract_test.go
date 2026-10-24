@@ -36,6 +36,7 @@ type fixtureLine struct {
 	SendError *string         `json:"sendError"` // "" lets sends work again
 	ReadError *string         `json:"readError"` // "" lets Read Receipts work again
 	Receipts  []whatsapp.Read `json:"receipts"`  // dir "read": the Read Receipts the fake port has sent so far
+	Plays     []whatsapp.Read `json:"plays"`     // dir "read": the Played receipts the fake port has sent so far
 	Markers   []string        `json:"markers"`   // dir "read": the Chats whose Read Marker the fake port has cleared
 	IDs       []string        `json:"ids"`       // dir "sent" and "revoked": the Message IDs
 	Edits     []string        `json:"edits"`     // dir "edited": "id:text" of each edit the fake port has sent so far
@@ -208,6 +209,9 @@ func TestFixtures(t *testing.T) {
 					f := r.currentPort()
 					if got, want := mustJSON(f.Reads()), mustJSON(append([]whatsapp.Read{}, line.Receipts...)); got != want {
 						t.Errorf("Read Receipts = %s, want %s", got, want)
+					}
+					if got, want := mustJSON(f.Plays()), mustJSON(append([]whatsapp.Read{}, line.Plays...)); got != want {
+						t.Errorf("Played receipts = %s, want %s", got, want)
 					}
 					if got, want := mustJSON(f.ChatReads()), mustJSON(append([]string{}, line.Markers...)); got != want {
 						t.Errorf("Read Markers cleared = %s, want %s", got, want)

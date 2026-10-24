@@ -67,6 +67,7 @@ Item {
   function closeChat() {
     stopTyping()
     // The Daemon deletes the plain Media copies of the Chat.
+    stopPlayer()
     daemon.write(State.mediaReleaseRequest(nextRequestId++, view.openChat.jid))
     view = State.closeChat(view)
     syncAttention()
@@ -99,7 +100,10 @@ Item {
 
   function setPopoutOpen(open) {
     popoutOpen = open
-    if (!open) stopTyping()
+    if (!open) {
+      stopPlayer()
+      stopTyping()
+    }
     syncAttention()
   }
 
@@ -118,6 +122,10 @@ Item {
 
   // Called by Open and by a tap on an image. A path that is already known opens at once.
   function openMedia(message) {
+    if (State.isPlaying(playingKey, message)) {
+      stopPlayer()
+      return
+    }
     var path = State.mediaPath(view, message)
     if (path !== "") {
       launch(message, path)
@@ -132,8 +140,28 @@ Item {
     daemon.write(State.mediaSaveRequest(nextRequestId++, message, path))
   }
 
-  // video in mpv, the rest in the default app
+  // The voice note that plays now, by State.mediaKey. Empty when nothing plays.
+  property string playingKey: ""
+
+  function stopPlayer() {
+    player.running = false
+    playingKey = ""
+  }
+
+  function playVoice(message, path) {
+    stopPlayer()
+    playingKey = State.mediaKey(message.chat, message.id)
+    player.command = State.openCommand(message, path)
+    player.running = true
+    daemon.write(State.playedRequest(nextRequestId++, message))
+  }
+
+  // voice in mpv without a window, video in mpv, the rest in the default app
   function launch(message, path) {
+    if (State.isVoice(message)) {
+      playVoice(message, path)
+      return
+    }
     opener.command = State.openCommand(message, path)
     opener.startDetached()
   }
@@ -157,6 +185,12 @@ Item {
 
   Process {
     id: opener
+  }
+
+  // The child process of the voice note. Stop ends it. An exit that is not from a newer note clears playingKey.
+  Process {
+    id: player
+    onExited: if (!running) root.playingKey = ""
   }
 
   // Called by the "Load older" button of the open Chat.

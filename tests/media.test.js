@@ -44,7 +44,7 @@ test("Media rows say what they are and what the user can do", () => {
 test("video opens in mpv and everything else in the default app", () => {
   assert.deepEqual(plain(State.openCommand({ media: { kind: "video" } }, "/p/v.mp4")), ["mpv", "/p/v.mp4"]);
   assert.deepEqual(plain(State.openCommand({ media: { kind: "document" } }, "/p/a.pdf")), ["xdg-open", "/p/a.pdf"]);
-  assert.deepEqual(plain(State.openCommand({ media: { kind: "voice" } }, "/p/v.ogg")), ["xdg-open", "/p/v.ogg"]);
+  assert.deepEqual(plain(State.openCommand({ media: { kind: "voice" } }, "/p/v.ogg")), ["mpv", "--no-video", "/p/v.ogg"]);
 });
 
 test("Media requests carry the Chat and the Message id", () => {
@@ -52,4 +52,15 @@ test("Media requests carry the Chat and the Message id", () => {
   assert.equal(JSON.parse(State.mediaOpenRequest(2, pdf)).method, "media.open");
   assert.deepEqual(JSON.parse(State.mediaSaveRequest(3, pdf, "/home/u/a.pdf")).params, { chat: pdf.chat, id: "m2", path: "/home/u/a.pdf" });
   assert.deepEqual(JSON.parse(State.mediaReleaseRequest(4, pdf.chat)).params, { chat: pdf.chat });
+});
+
+test("a voice note shows Play or Stop, and playing sends media.played", () => {
+  const voice = { id: "v1", chat: "1@s.whatsapp.net", media: { kind: "voice", state: "ready" } };
+  const key = State.mediaKey(voice.chat, voice.id);
+  assert.equal(State.openLabel(voice, ""), "Play");
+  assert.equal(State.openLabel(voice, key), "Stop");
+  assert.equal(State.openLabel(voice, "other|id"), "Play");
+  assert.equal(State.openLabel(pdf, ""), "Open");
+  assert.equal(State.isPlaying("", voice), false);
+  assert.deepEqual(plain(JSON.parse(State.playedRequest(3, voice))), { jsonrpc: "2.0", id: 3, method: "media.played", params: { chat: voice.chat, id: "v1" } });
 });

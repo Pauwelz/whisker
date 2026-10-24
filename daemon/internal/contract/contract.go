@@ -48,6 +48,7 @@ const (
 	methodMediaOpen     = "media.open"
 	methodMediaSave     = "media.save"
 	methodMediaRelease  = "media.release"
+	methodMediaPlayed   = "media.played"
 	methodChatEdit      = "chat.edit"
 	methodChatRevoke    = "chat.revoke"
 	methodChatTyping    = "chat.typing"
@@ -161,7 +162,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			sent = box.results
 			loader = newMediaLoader(chats, port, profile.Media(), box.notify, logOut)
 			mediaDone = loader.results
-			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut}
+			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut, played: map[string]bool{}}
 			box.incoming = read.incoming
 			box.notice = (&notifier{chats: chats, prefs: prefs, attn: &attn, logOut: logOut}).frame
 			pres = newPresenter(port, prefs, &attn, logOut)
@@ -299,6 +300,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			} else if req.Method == methodMediaRelease && ready {
 				loader.store.Release(req.Params.Chat)
 				reply = resultReply(req.ID, map[string]any{})
+			} else if req.Method == methodMediaPlayed && ready {
+				reply = loader.playedReply(req.ID, req.Params.Chat, req.Params.ID, read)
 			} else if req.Method == methodAttentionSet && ready {
 				listChanged = read.setAttention(req.Params.Open, req.Params.Chat)
 				pres.sync()
