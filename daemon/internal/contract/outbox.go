@@ -7,11 +7,19 @@ import (
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
+	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
 // Now is the clock of the chat store. Tests replace it to get fixed Message times.
 var Now = time.Now
+
+// Timers makes the timers of the Disappearing Message sweep. Tests replace it with a manual clock.
+var Timers keystore.Clock = keystore.RealClock
+
+// ExpiryInterval is how often the Daemon deletes Disappearing Messages whose timer ended.
+// shortcut: an expired Message can show for up to one interval, upgrade to a timer for the next deadline if that matters.
+const ExpiryInterval = time.Minute
 
 // ConnectRetryDelay is the wait before the Daemon connects again after a failed connect.
 var ConnectRetryDelay = 5 * time.Second
@@ -49,7 +57,9 @@ func (b *outbox) submit(m chatstore.Message) {
 	}
 	b.inflight[m.ID] = true
 	gen := b.gen
-	go func() { b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text)} }()
+	go func() {
+		b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text, max(m.ExpiresAt-m.Time, 0))}
+	}()
 }
 
 // flush starts the send of every pending Message, oldest first.

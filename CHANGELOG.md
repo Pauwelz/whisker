@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- A Disappearing Message and its Media leave the Profile when the timer of the Chat ends, also when whisker was off. A Message you send carries the timer of its Chat.
 - A fresh Profile shows a QR code in the pop-out. The code refreshes while the user waits.
 - A switch in the pop-out links with a Pair Code instead.
 - The pop-out leaves the linking screen when the phone authorizes the Companion Device.

@@ -28,8 +28,9 @@ type Port interface {
 	// NewMessageID returns an unused Message ID. A send and its retries use one ID, so WhatsApp drops a repeat.
 	NewMessageID() string
 	// Send sends a text Message to a Chat. It returns ErrOffline when there is no connection.
+	// timer is the Disappearing timer in seconds: 0 sends a Message that stays.
 	// It can block for a long time: call it off the Daemon loop.
-	Send(chat, id, text string) error
+	Send(chat, id, text string, timer int64) error
 	// Download downloads the plain Media into dst, and checks it against its hashes.
 	// It can block for a long time: call it off the Daemon loop.
 	Download(ref Media, dst *os.File) error
@@ -111,6 +112,7 @@ type Message struct {
 	Text     string `json:"text"`
 	PushName string `json:"pushName"` // the author's Push Name as sent with the Message, may be empty
 	Media    *Media `json:"media"`
+	Timer    int64  `json:"timer"` // the Disappearing timer in seconds that the Message carries, 0 for none
 }
 
 // HistoryChat is one Chat of a History Sync batch, with the App State that came with it.
@@ -123,6 +125,7 @@ type HistoryChat struct {
 	Pinned     bool      `json:"pinned"`
 	MutedUntil int64     `json:"mutedUntil"`
 	Unread     bool      `json:"unread"`
+	Timer      int64     `json:"timer"` // the Disappearing timer of the Chat in seconds, 0 for off
 	Messages   []Message `json:"messages"`
 }
 
@@ -214,12 +217,20 @@ type ChatPresence struct {
 	State  string `json:"state"`
 }
 
+// ChatTimer means the Disappearing timer of a Chat changed. Seconds is 0 when the timer is off.
+// It applies to Messages from now on.
+type ChatTimer struct {
+	Chat    string `json:"chat"`
+	Seconds int64  `json:"seconds"`
+}
+
 // Connected and Disconnected report the connection to WhatsApp.
 type Connected struct{}
 type Disconnected struct{}
 
 func (NewMessage) isEvent()     {}
 func (Receipt) isEvent()        {}
+func (ChatTimer) isEvent()      {}
 func (Presence) isEvent()       {}
 func (ChatPresence) isEvent()   {}
 func (MessageEdited) isEvent()  {}

@@ -237,6 +237,7 @@ function foldChatFrame(state, frame) {
   if (!frame) return null
   if (frame.method === "connected") return withChanges(state, { connection: "online" })
   if (frame.method === "disconnected") return withChanges(state, { connection: "offline", activity: {} })
+  if (frame.method === "messageExpired") return removeMessage(state, frame.params)
   if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
   if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
@@ -282,6 +283,14 @@ function upsertMessage(state, message) {
   var at = messages.length
   while (at > 0 && messages[at - 1].time > message.time) at--
   messages.splice(at, 0, message)
+  return withChanges(state, { openChat: withChanges(chat, { messages: messages }) })
+}
+
+// Takes an expired Message out of the open Chat.
+function removeMessage(state, expired) {
+  var chat = state.openChat
+  if (!chat || chat.jid !== expired.chat) return state
+  var messages = chat.messages.filter(function (m) { return m.id !== expired.id })
   return withChanges(state, { openChat: withChanges(chat, { messages: messages }) })
 }
 

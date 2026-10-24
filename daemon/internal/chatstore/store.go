@@ -31,6 +31,7 @@ type Chat struct {
 	Pinned     bool   `json:"pinned"`
 	Muted      bool   `json:"muted"`
 	Unread     bool   `json:"unread"`
+	Timer      int64  `json:"timer,omitempty"` // the Disappearing timer in seconds, absent when off
 }
 
 // Page is a page of the Chat list. More tells whether another page follows.
@@ -69,6 +70,8 @@ func (s *Store) Apply(ev whatsapp.Event) error {
 		return s.setFlag("muted_until", ev.JID, ev.Until)
 	case whatsapp.ReadMarker:
 		return s.setFlag("unread", ev.JID, boolInt(ev.Unread))
+	case whatsapp.ChatTimer:
+		return s.setFlag("timer", ev.Chat, ev.Seconds)
 	}
 	return nil
 }
@@ -85,7 +88,7 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 	}
 	rows, err := s.db.Query(`
 		SELECT c.jid, c.kind, c.pinned, c.unread, c.last_active,
-		       c.muted_until = -1 OR c.muted_until > ?,
+		       c.muted_until = -1 OR c.muted_until > ?, c.timer,
 		       c.subject, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
 		FROM chats c LEFT JOIN names n ON n.jid = c.jid
 		WHERE c.last_active > 0
@@ -99,7 +102,7 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 	for rows.Next() {
 		var c Chat
 		var subject, contact, push string
-		if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.Muted, &subject, &contact, &push); err != nil {
+		if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.Muted, &c.Timer, &subject, &contact, &push); err != nil {
 			return Page{}, err
 		}
 		c.Name = chatName(c.Kind, subject, contact, push, c.JID)
@@ -220,12 +223,12 @@ func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 		last = max(last, m.Time)
 	}
 	_, err := tx.Exec(`
-		INSERT INTO chats (jid, kind, subject, last_active, pinned, muted_until, unread) VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO chats (jid, kind, subject, last_active, pinned, muted_until, unread, timer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(jid) DO UPDATE SET kind = excluded.kind,
 		  subject = CASE WHEN excluded.subject = '' THEN subject ELSE excluded.subject END,
 		  last_active = MAX(last_active, excluded.last_active),
-		  pinned = excluded.pinned, muted_until = excluded.muted_until, unread = excluded.unread`,
-		c.JID, kindOrDirect(c.Kind), c.Subject, last, boolInt(c.Pinned), c.MutedUntil, boolInt(c.Unread))
+		  pinned = excluded.pinned, muted_until = excluded.muted_until, unread = excluded.unread, timer = excluded.timer`,
+		c.JID, kindOrDirect(c.Kind), c.Subject, last, boolInt(c.Pinned), c.MutedUntil, boolInt(c.Unread), c.Timer)
 	if err != nil {
 		return err
 	}
