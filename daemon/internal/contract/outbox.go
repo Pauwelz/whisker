@@ -49,7 +49,11 @@ func (b *outbox) submit(m chatstore.Message) {
 	}
 	b.inflight[m.ID] = true
 	gen := b.gen
-	go func() { b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text)} }()
+	var quote *whatsapp.Quote
+	if m.Quote != nil {
+		quote = &whatsapp.Quote{ID: m.Quote.ID, Sender: m.Quote.Sender, Text: m.Quote.Text}
+	}
+	go func() { b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text, quote)} }()
 }
 
 // flush starts the send of every pending Message, oldest first.
@@ -102,7 +106,7 @@ func (b *outbox) notify(chat, id string) bool {
 	return b.send(notification("messageChanged", map[string]any{"message": m}))
 }
 
-// handle turns a connection, Message, edit, revoke or receipt event into frames. It returns false when a frame could not be written.
+// handle turns a connection, Message, edit, revoke, Reaction or receipt event into frames. It returns false when a frame could not be written.
 func (b *outbox) handle(ev whatsapp.Event) bool {
 	switch ev := ev.(type) {
 	case whatsapp.Connected:
@@ -128,6 +132,8 @@ func (b *outbox) handle(ev whatsapp.Event) bool {
 		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Edit(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Text) })
 	case whatsapp.MessageRevoked:
 		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Revoke(ev.Chat, ev.ID) })
+	case whatsapp.Reaction:
+		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.SetReaction(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Emoji) })
 	case whatsapp.Receipt:
 		for _, id := range ev.IDs {
 			if !b.move(ev.Chat, id, func() (bool, error) { return b.chats.Advance(ev.Chat, id, ev.State) }) {

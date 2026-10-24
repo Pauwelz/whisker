@@ -26,6 +26,8 @@ type Fake struct {
 	chatReads  []string
 	edits      []string
 	revokes    []string
+	quotes     []string
+	reactions  []string
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -63,7 +65,7 @@ func (f *Fake) NewMessageID() string {
 	return fmt.Sprintf("fake-%d", f.ids)
 }
 
-func (f *Fake) Send(_, id, _ string) error {
+func (f *Fake) Send(_, id, _ string, quote *Quote) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++
@@ -71,7 +73,34 @@ func (f *Fake) Send(_, id, _ string) error {
 		return f.sendErr
 	}
 	f.sent = append(f.sent, id)
+	if quote != nil {
+		f.quotes = append(f.quotes, id+":"+quote.ID)
+	}
 	return nil
+}
+
+// React fails with the send error, like Send. A good call is recorded as "id:emoji".
+func (f *Fake) React(_, id, _, emoji string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.reactions = append(f.reactions, id+":"+emoji)
+	return nil
+}
+
+// Quotes lists the sent replies as "id:quotedID", in order. Reactions lists the Reactions as "id:emoji".
+func (f *Fake) Quotes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.quotes...)
+}
+
+func (f *Fake) Reactions() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.reactions...)
 }
 
 // Read is one MarkRead call that worked.
