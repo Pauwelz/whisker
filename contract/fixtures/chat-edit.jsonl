@@ -42,6 +42,7 @@
 {"dir":"clock","now":1901}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":9,"method":"chat.edit","params":{"chat":"1@s.whatsapp.net","id":"fake-1","text":"too late"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":9,"error":{"code":-32006,"message":"invalid message"}}}
+{"dir":"clock","now":1000}
 {"dir":"whatsapp","sendError":"offline"}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":7,"method":"chat.edit","params":{"chat":"1@s.whatsapp.net","id":"fake-1","text":"later"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":7,"error":{"code":-32007,"message":"not connected"}}}
