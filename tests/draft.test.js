@@ -78,3 +78,17 @@ test("clearing the Draft clears the staged file", () => {
   const state = State.clearDraft(State.changeDraft(opened(), { attachment: "/a/b.png", text: "x" }));
   assert.equal(State.draftOf(state).attachment, "");
 });
+
+test("the composer shows Attach except during an Edit, and the file row only with a file", () => {
+  assert.equal(State.canAttach(""), true);
+  assert.equal(State.canAttach("in1"), false);
+  assert.equal(State.hasAttachment({ attachment: "/a/b.png" }), true);
+  assert.equal(State.hasAttachment(State.draftOf(opened())), false);
+});
+
+test("a location Message has an Open map view with the link, others have none", () => {
+  const url = "https://www.openstreetmap.org/?mlat=51.500000&mlon=-0.120000#map=17/51.500000/-0.120000";
+  assert.deepEqual(JSON.parse(JSON.stringify(State.mapView({ text: "Location: Cafe\n" + url }))), { url });
+  assert.equal(State.mapView({ text: "hello" }), null);
+  assert.equal(State.mapView({ text: url, revoked: true }), null);
+});

@@ -403,6 +403,16 @@ function filePath(url) {
   return decodeURIComponent(String(url).replace(/^file:\/\//, ""))
 }
 
+// Whether the composer shows the Attach button: not during an Edit, which never combines with a file.
+function canAttach(editingId) {
+  return editingId === ""
+}
+
+// Whether the composer shows the staged file row (name and remove button).
+function hasAttachment(draft) {
+  return draft.attachment !== ""
+}
+
 // The file name of the staged file, shown in the composer.
 function attachmentName(draft) {
   return draft.attachment.split("/").pop()
@@ -499,6 +509,12 @@ function mapLink(message) {
   MAP_LINK.lastIndex = 0
   var match = MAP_LINK.exec(message.text || "")
   return match ? match[0] : ""
+}
+
+// The Open map button of a Message: { url }, or null when the Message has no map link.
+function mapView(message) {
+  var url = mapLink(message)
+  return url === "" ? null : { url: url }
 }
 
 // The command that opens a map link in the browser, or [] for any other link.

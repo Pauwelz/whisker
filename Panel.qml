@@ -336,10 +336,11 @@ Panel {
                 font.pixelSize: Style.font.body
               }
               Button {
-                visible: State.mapLink(modelData) !== ""
+                readonly property var map: State.mapView(modelData)
+                visible: map !== null
                 text: "Open map"
                 bordered: true
-                onClicked: root.whiskerService.openLink(State.mapLink(modelData))
+                onClicked: root.whiskerService.openLink(map.url)
               }
               // Media: an image or sticker shows here once the Daemon holds it. The path comes from media.open, never bytes.
               Image {
@@ -497,14 +498,14 @@ Panel {
             onLoaded: item.picked.connect(function(file) { root.whiskerService.stageAttachment(file) })
           }
           Button {
-            visible: root.editingId === ""
+            visible: State.canAttach(root.editingId)
             text: "Attach"
             bordered: true
             onClicked: { picker.active = false; picker.active = true }
           }
 
           Text {
-            visible: root.draft.attachment !== ""
+            visible: State.hasAttachment(root.draft)
             width: parent.width - Style.space(40)
             elide: Text.ElideMiddle
             textFormat: Text.PlainText
@@ -515,7 +516,7 @@ Panel {
           }
 
           Button {
-            visible: root.draft.attachment !== ""
+            visible: State.hasAttachment(root.draft)
             text: "✕"
             bordered: true
             onClicked: root.whiskerService.changeDraft({ attachment: "" })
