@@ -378,6 +378,18 @@ function composerAction(key, shift, text) {
   return String(text).trim() === "" ? "swallow" : "send"
 }
 
+// The fixed shortcuts of the pop-out. `shortcut` is "Escape" or "Ctrl+F"; `context` says what the pop-out shows.
+// Escape goes back one level: Chat, then settings, then it closes the pop-out. Ctrl+F searches, on the Chat list only.
+// Returns "closeChat", "closeSettings", "closePopout", "focusSearch" or "none".
+function shortcutAction(shortcut, context) {
+  if (shortcut === "Escape") {
+    if (context.chatOpen) return "closeChat"
+    return context.settingsOpen ? "closeSettings" : "closePopout"
+  }
+  var onList = context.linked && !context.chatOpen && !context.settingsOpen
+  return shortcut === "Ctrl+F" && onList ? "focusSearch" : "none"
+}
+
 // The sender name shown on a Message: only on the Messages of others in a Group Chat.
 function senderLabel(chat, message) {
   return chat.kind === "group" && !message.fromMe ? message.senderName : ""

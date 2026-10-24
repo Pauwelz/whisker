@@ -4,6 +4,17 @@ A WhatsApp client for the Omarchy shell: a Quickshell Plugin and its own Go Daem
 
 whisker is in early development and is not ready to install. The architecture is in [docs/architecture.md](docs/architecture.md).
 
+## Keyboard shortcuts
+
+The pop-out has these fixed shortcuts:
+
+| Key | Action |
+|---|---|
+| Escape | Go back one level: close the open Chat, then the settings view, then the pop-out. |
+| Ctrl+F | Focus the search field of the Chat list. |
+| Enter | Send the composer text. |
+| Shift+Enter | Add a line in the composer. |
+
 ## Development
 
 Work happens on `dev`. `main` only moves to release commits, so its HEAD is always installable.

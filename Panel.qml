@@ -30,6 +30,27 @@ Panel {
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
+  // Runs a fixed shortcut. The decision is State.shortcutAction.
+  function runShortcut(shortcut) {
+    var action = State.shortcutAction(shortcut, { chatOpen: !!root.openChat, settingsOpen: root.showSettings, linked: root.view.screen === "linked" })
+    if (action === "closeChat") {
+      root.reactingId = ""
+      root.whiskerService.closeChat()
+    } else if (action === "closeSettings") {
+      root.showSettings = false
+      root.confirmLogout = false
+    } else if (action === "closePopout") {
+      root.close()
+    } else if (action === "focusSearch") {
+      searchInput.forceActiveFocus()
+    }
+  }
+
+  Shortcut {
+    sequence: "Ctrl+F"
+    onActivated: root.runShortcut("Ctrl+F")
+  }
+
   onOpenedChanged: if (whiskerService) whiskerService.setPopoutOpen(opened)
 
   implicitWidth: button.implicitWidth
@@ -74,7 +95,9 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onCloseRequested: root.close()
+      // A text field that has focus gets every key, so typing never runs a catcher action.
+      blocked: composer.activeFocus || searchInput.activeFocus || root.savingId !== ""
+      onCloseRequested: root.runShortcut("Escape")
 
       Column {
         id: column
@@ -156,6 +179,7 @@ Panel {
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
           onTextChanged: root.whiskerService.searchChats(text)
+          Keys.onEscapePressed: root.runShortcut("Escape")
         }
 
         Button {
@@ -503,6 +527,7 @@ Panel {
             onTextChanged: root.whiskerService.composerChanged(text)
             readonly property string draftText: root.draft.text
             onDraftTextChanged: if (text !== draftText) text = draftText
+            Keys.onEscapePressed: root.runShortcut("Escape")
             Keys.onPressed: function(event) {
               var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text)
               if (action === "default") return

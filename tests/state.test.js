@@ -453,3 +453,15 @@ test("chatStatusLabel prefers the activity over Presence", () => {
   s = State.applyFrame(s, { method: "activityChanged", params: { chat: "1@s", participant: "1@s", name: "Ann", state: "composing" } });
   assert.equal(State.chatStatusLabel(s, 0), "typing…");
 });
+
+test("fixed shortcuts: Escape goes back one level, Ctrl+F searches the Chat list", () => {
+  const list = { chatOpen: false, settingsOpen: false, linked: true };
+  assert.equal(State.shortcutAction("Escape", { ...list, chatOpen: true }), "closeChat");
+  assert.equal(State.shortcutAction("Escape", { ...list, settingsOpen: true }), "closeSettings");
+  assert.equal(State.shortcutAction("Escape", list), "closePopout");
+  assert.equal(State.shortcutAction("Ctrl+F", list), "focusSearch");
+  assert.equal(State.shortcutAction("Ctrl+F", { ...list, chatOpen: true }), "none");
+  assert.equal(State.shortcutAction("Ctrl+F", { ...list, settingsOpen: true }), "none");
+  assert.equal(State.shortcutAction("Ctrl+F", { ...list, linked: false }), "none");
+  assert.equal(State.shortcutAction("F5", list), "none");
+});

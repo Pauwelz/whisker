@@ -41,6 +41,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - Polls, events and view-once Media show a one-line text that says to open them on the phone. A contact card shows the name and number. A location shows its name and a map link that opens in the browser. No Message is blank.
 - A mention shows the Participant name in bold. A Message that mentions you notifies even in a Muted Group Chat.
 - whisker sends Composing while you type, if "send typing" is on. It sends Online while the pop-out is open, if "send online" is on.
+- The pop-out has fixed keyboard shortcuts: Escape goes back one level, and Ctrl+F focuses the search field. The README lists them.
 
 ### Fixed
 
