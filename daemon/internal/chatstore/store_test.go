@@ -165,6 +165,21 @@ func TestMutedAndReadMarkerFromAppState(t *testing.T) {
 	}
 }
 
+// A late History Sync batch is older than the live App State. It must not undo it.
+func TestHistorySyncKeepsFlagsOfAnExistingChat(t *testing.T) {
+	s, _ := newStore(t)
+	const jid = "a@s.whatsapp.net"
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: jid, LastActive: 1}}})
+	apply(t, s, whatsapp.Pin{JID: jid, Pinned: true})
+	apply(t, s, whatsapp.Mute{JID: jid, Until: -1})
+	apply(t, s, whatsapp.ReadMarker{JID: jid, Unread: true})
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: jid, LastActive: 1}}}) // stale flags
+	c := list(t, s, 0, 10).Chats[0]
+	if !c.Pinned || !c.Muted || !c.Unread {
+		t.Errorf("flags after a late batch = %+v, want all kept", c)
+	}
+}
+
 func TestAppStateBeforeHistoryDoesNotCreateAnEmptyChat(t *testing.T) {
 	s, _ := newStore(t)
 	apply(t, s, whatsapp.Pin{JID: "a@s.whatsapp.net", Pinned: true})

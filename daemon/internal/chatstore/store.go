@@ -250,7 +250,7 @@ func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 		ON CONFLICT(jid) DO UPDATE SET kind = excluded.kind,
 		  subject = CASE WHEN excluded.subject = '' THEN subject ELSE excluded.subject END,
 		  last_active = MAX(last_active, excluded.last_active),
-		  pinned = excluded.pinned, muted_until = excluded.muted_until, unread = excluded.unread, timer = excluded.timer`,
+		  timer = excluded.timer`, // pinned, muted_until and unread stay: live App State is newer than a History Sync batch
 		c.JID, kindOrDirect(c.Kind), c.Subject, last, boolInt(c.Pinned), c.MutedUntil, boolInt(c.Unread), c.Timer)
 	if err != nil {
 		return err
