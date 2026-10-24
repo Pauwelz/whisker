@@ -119,6 +119,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	var attn attention.Attention      // the pop-out state: it outlives the Profile, so a new link keeps it
 	var sent <-chan sendResult        // the results of the sends, nil until the Profile is open
 	var retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
+	var expiryTick <-chan time.Time   // fires when the sweep of Disappearing Messages is due, nil until the Profile is open
 	var loader *mediaLoader           // nil until the Profile is open
 	var mediaDone <-chan mediaResult  // the results of the Media downloads, nil until the Profile is open
 	// The plain copies of Media never outlive the Daemon.
@@ -163,6 +164,11 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			sent = box.results
 			loader = newMediaLoader(chats, port, profile.Media(), box.notify, logOut)
 			mediaDone = loader.results
+			// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
+			if _, err := chats.Expire(Now().Unix()); err != nil {
+				fmt.Fprintln(logOut, "chat store write failed")
+			}
+			expiryTick = Timers.After(ExpiryInterval)
 			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut, played: map[string]bool{}}
 			box.incoming = read.incoming
 			box.notice = (&notifier{chats: chats, prefs: prefs, attn: &attn, logOut: logOut}).frame
@@ -191,7 +197,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	unlink := func(by string) int {
 		port.Disconnect()
 		loader.store.Wipe()
-		ready, port, events, chats, box, read, pres, sent, retryConnect, loader, mediaDone = false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+		ready, port, events, chats, box, read, pres, sent, retryConnect, loader, mediaDone, expiryTick = false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 		attn.Set(attn.Open(), "") // the Chat is gone with the Profile
 		if err := profile.Delete(); err != nil {
 			fmt.Fprintln(logOut, "profile delete failed")
@@ -227,6 +233,17 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			}
 			if code := handleEvent(ev, logOut, send, chats, box, loader, func() int { return unlink("") }); code >= 0 {
 				return code
+			}
+		case <-expiryTick:
+			expired, err := chats.Expire(Now().Unix())
+			if err != nil {
+				fmt.Fprintln(logOut, "chat store write failed")
+			}
+			expiryTick = Timers.After(ExpiryInterval)
+			for _, e := range expired {
+				if !send(notification("messageExpired", map[string]any{"chat": e.Chat, "id": e.ID})) {
+					return ExitError
+				}
 			}
 		case r := <-mediaDone:
 			if !loader.done(r) {
@@ -408,7 +425,7 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 			break
 		}
 		ok = send(notification("activityChanged", map[string]any{"chat": ev.Chat, "participant": ev.Sender, "name": name, "state": ev.State}))
-	case whatsapp.HistorySync, whatsapp.PushName, whatsapp.ContactName, whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker:
+	case whatsapp.HistorySync, whatsapp.PushName, whatsapp.ContactName, whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker, whatsapp.ChatTimer:
 		if err := chats.Apply(ev); err != nil {
 			fmt.Fprintln(logOut, "chat store write failed") // the error text could hold names
 		} else {

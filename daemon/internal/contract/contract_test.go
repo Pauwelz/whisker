@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -49,6 +50,9 @@ type fixtureLine struct {
 	Path          string   `json:"path"`          // dir "file"
 	Content       string   `json:"content"`       // dir "file": the content the file must hold
 	Missing       bool     `json:"missing"`       // dir "file": the file must not exist
+	Present       bool     `json:"present"`       // dir "file": the file must exist
+	Now           *int64   `json:"now"`           // dir "clock" and "restart": the Daemon time in Unix seconds
+	Timers        []int64  `json:"timers"`        // dir "sent": the Disappearing timer of each sent Message
 	Online        []bool   `json:"online"`        // dir "presence": the availability calls so far
 	Typing        []string `json:"typing"`        // dir "presence": "chat:composing" or "chat:paused" calls so far
 	Subscribed    []string `json:"subscribed"`    // dir "presence": the Presence subscriptions so far
@@ -59,6 +63,8 @@ type runner struct {
 	t       *testing.T
 	fake    *keystore.Fake
 	clock   *keystore.ManualClock
+	expiry  *keystore.ManualClock // the timers of the Disappearing Message sweep
+	now     atomic.Int64          // the Daemon time in Unix seconds
 	dir     string
 	runtime string // $XDG_RUNTIME_DIR of the Daemon
 	in      *io.PipeWriter
@@ -75,11 +81,15 @@ type runner struct {
 func newRunner(t *testing.T) *runner {
 	t.Helper()
 	oldNow := contract.Now
-	contract.Now = func() time.Time { return time.Unix(1000, 0) } // fixed Message times for the fixtures
-	t.Cleanup(func() { contract.Now = oldNow })
+	oldTimers := contract.Timers
 	runtime := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtime)
-	return &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: keystore.NewManualClock(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
+	r := &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: keystore.NewManualClock(), expiry: keystore.NewManualClock(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
+	r.now.Store(1000) // fixed Message times for the fixtures
+	contract.Now = func() time.Time { return time.Unix(r.now.Load(), 0) }
+	contract.Timers = r.expiry
+	t.Cleanup(func() { contract.Now, contract.Timers = oldNow, oldTimers })
+	return r
 }
 
 func (r *runner) currentPort() *whatsapp.Fake {
@@ -207,6 +217,11 @@ func TestFixtures(t *testing.T) {
 					if got := r.currentPort().Sent(); !reflect.DeepEqual(got, append([]string{}, line.IDs...)) {
 						t.Errorf("sent IDs = %v, want %v", got, line.IDs)
 					}
+					if line.Timers != nil {
+						if got := r.currentPort().SentTimers(); !reflect.DeepEqual(got, line.Timers) {
+							t.Errorf("sent timers = %v, want %v", got, line.Timers)
+						}
+					}
 				case "read":
 					f := r.currentPort()
 					if got, want := mustJSON(f.Reads()), mustJSON(append([]whatsapp.Read{}, line.Receipts...)); got != want {
@@ -249,7 +264,14 @@ func TestFixtures(t *testing.T) {
 					r.checkFile(line)
 				case "clock":
 					r.start()
-					r.clock.Fire()
+					if line.Now != nil { // the Disappearing Message sweep
+						r.now.Store(*line.Now)
+						r.expiry.Fire()
+					} else {
+						r.clock.Fire()
+					}
+				case "restart":
+					r.restart(t, line.Now)
 				}
 				// "view" lines belong to the Plugin tests.
 			}
@@ -264,11 +286,33 @@ func TestFixtures(t *testing.T) {
 	}
 }
 
+// restart stops the Daemon like a closed stdin and makes it ready to start again on the same Profile.
+// The Daemon time can move on while it is off.
+func (r *runner) restart(t *testing.T, now *int64) {
+	t.Helper()
+	code, rest, _ := r.finish()
+	if code != contract.ExitOK || len(rest) > 0 {
+		t.Errorf("before the restart: exit code %d, extra frames %v", code, rest)
+	}
+	r.started = false
+	r.expiry = keystore.NewManualClock()
+	contract.Timers = r.expiry
+	r.portMu.Lock()
+	r.port, r.portUsed = whatsapp.NewFake(), false
+	r.portMu.Unlock()
+	if now != nil {
+		r.now.Store(*now)
+	}
+}
+
 // checkFile checks a plain Media copy in the runtime folder: its content, or that it is gone.
 func (r *runner) checkFile(line fixtureLine) {
-	path := strings.ReplaceAll(line.Path, "$RUNTIME", r.runtime)
+	path := strings.ReplaceAll(strings.ReplaceAll(line.Path, "$RUNTIME", r.runtime), "$PROFILE", r.dir)
 	got, err := os.ReadFile(path)
 	switch {
+	case line.Present && err != nil:
+		r.t.Errorf("file %s is missing: %v", line.Path, err)
+	case line.Present:
 	case line.Missing && err == nil:
 		r.t.Errorf("a plain Media copy stayed behind: %s", line.Path)
 	case !line.Missing && (err != nil || string(got) != line.Content):
@@ -353,6 +397,8 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.MessageEdited](r.t, f, line.Event)
 		case "messageRevoked":
 			emitJSON[whatsapp.MessageRevoked](r.t, f, line.Event)
+		case "chatTimer":
+			emitJSON[whatsapp.ChatTimer](r.t, f, line.Event)
 		case "reaction":
 			emitJSON[whatsapp.Reaction](r.t, f, line.Event)
 		case "presence":

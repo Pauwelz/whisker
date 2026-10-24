@@ -18,6 +18,7 @@ type Fake struct {
 	connects   int
 	sendErr    error
 	sent       []string
+	timers     []int64
 	attempts   int
 	ids        int
 	logoutErr  error
@@ -73,7 +74,14 @@ func (f *Fake) NewMessageID() string {
 	return fmt.Sprintf("fake-%d", f.ids)
 }
 
-func (f *Fake) Send(_, id, _ string, quote *Quote) error {
+// SentTimers lists the Disappearing timers that Send accepted, in order.
+func (f *Fake) SentTimers() []int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int64{}, f.timers...)
+}
+
+func (f *Fake) Send(_, id, _ string, quote *Quote, timer int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++
@@ -81,6 +89,7 @@ func (f *Fake) Send(_, id, _ string, quote *Quote) error {
 		return f.sendErr
 	}
 	f.sent = append(f.sent, id)
+	f.timers = append(f.timers, timer)
 	if quote != nil {
 		f.quotes = append(f.quotes, id+":"+quote.ID)
 	}

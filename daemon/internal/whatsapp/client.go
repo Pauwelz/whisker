@@ -113,15 +113,20 @@ func (c *Client) PairCode(phone string) (string, error) {
 
 func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
 
-func (c *Client) Send(chat, id, text string, quote *Quote) error {
+func (c *Client) Send(chat, id, text string, quote *Quote, timer int64) error {
 	return c.send(chat, sendTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
 		msg := &waE2E.Message{Conversation: proto.String(text)}
-		if quote != nil {
-			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: &waE2E.ContextInfo{
-				StanzaID:      proto.String(quote.ID),
-				Participant:   proto.String(c.quoteSender(quote.Sender)),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String(quote.Text)},
-			}}}
+		if quote != nil || timer > 0 { // a quote and the timer ride in the ContextInfo of an extended text Message
+			info := &waE2E.ContextInfo{}
+			if quote != nil {
+				info.StanzaID = proto.String(quote.ID)
+				info.Participant = proto.String(c.quoteSender(quote.Sender))
+				info.QuotedMessage = &waE2E.Message{Conversation: proto.String(quote.Text)}
+			}
+			if timer > 0 {
+				info.Expiration = proto.Uint32(uint32(timer))
+			}
+			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: info}}
 		}
 		return msg, whatsmeow.SendRequestExtra{ID: id}
 	})
@@ -339,10 +344,32 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
 		c.events <- MessageRevoked{Chat: chat, ID: id}
+	case pm.GetType() == waE2E.ProtocolMessage_EPHEMERAL_SETTING:
+		c.events <- ChatTimer{Chat: chat, Seconds: int64(pm.GetEphemeralExpiration())}
 	default:
 		return false
 	}
 	return true
+}
+
+// timerOf is the Disappearing timer in seconds that a Message carries in its ContextInfo, or 0.
+func timerOf(m *waE2E.Message) int64 {
+	var info *waE2E.ContextInfo
+	switch {
+	case m.GetExtendedTextMessage() != nil:
+		info = m.GetExtendedTextMessage().GetContextInfo()
+	case m.GetImageMessage() != nil:
+		info = m.GetImageMessage().GetContextInfo()
+	case m.GetVideoMessage() != nil:
+		info = m.GetVideoMessage().GetContextInfo()
+	case m.GetAudioMessage() != nil:
+		info = m.GetAudioMessage().GetContextInfo()
+	case m.GetStickerMessage() != nil:
+		info = m.GetStickerMessage().GetContextInfo()
+	case m.GetDocumentMessage() != nil:
+		info = m.GetDocumentMessage().GetContextInfo()
+	}
+	return int64(info.GetExpiration())
 }
 
 func receiptState(t types.ReceiptType) string {
@@ -382,6 +409,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 			LastActive: int64(max(conv.GetConversationTimestamp(), conv.GetLastMsgTimestamp())),
 			Pinned:     conv.GetPinned() != 0,
 			Unread:     conv.GetUnreadCount() > 0 || conv.GetMarkedAsUnread(),
+			Timer:      int64(conv.GetEphemeralExpiration()),
 		}
 		if chat.Kind == KindGroup {
 			chat.Subject = conv.GetName()
@@ -406,7 +434,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {
 	return Message{
 		ID: info.ID, Sender: info.Sender.String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
-		Text: body.Text, PushName: info.PushName, Quote: c.quoteOf(m), Media: body.Media,
+		Text: body.Text, PushName: info.PushName, Quote: c.quoteOf(m), Media: body.Media, Timer: timerOf(m),
 		Mentions: body.Mentions, MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
 	}
 }

@@ -123,6 +123,22 @@ Later tickets add keys to the Message and send `messageChanged` for each change.
 
 Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`, `chat-edit.jsonl`, `chat-revoke.jsonl`.
 
+### `messageExpired`
+
+A Disappearing Message reached the end of its timer. The Daemon has deleted it from the chat store, with its Media. The Plugin takes it out of the open Chat. No `chatsChanged` follows.
+
+```json
+{"jsonrpc":"2.0","method":"messageExpired","params":{"chat":"1@s.whatsapp.net","id":"3EB0"}}
+```
+
+### Disappearing Messages
+
+A Chat has a timer in seconds (`timer` in `chats.list`, absent when off). It comes from History Sync and from `chatTimer` events, and it applies to Messages from then on. A Message of a timed Chat has `expiresAt` (Unix seconds): the Message time plus the timer. `chat.send` gives the Message of the user the timer of its Chat, and the Daemon sends the timer with it.
+
+The Daemon deletes expired Messages at start-up before `ready`, so a Message that expired while whisker was off is gone at once. After that it sweeps every minute (`contract.ExpiryInterval`) and sends `messageExpired` for each.
+
+Fixtures: `disappearing-expire.jsonl`, `disappearing-restart.jsonl`, `disappearing-send.jsonl`.
+
 ### `notify`
 
 A new Message raises a desktop notification. The Daemon sends `notify` after `messageChanged` and `chatsChanged` of that Message. `kind` is the Chat kind, `name` follows the name rule, and `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it.
@@ -417,12 +433,14 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
 | `read` | `receipts`, `plays`, `markers` | The Go test checks the Read Receipts and the Played receipts (`chat`, `sender`, `ids`) and the Chats whose Read Marker the fake port cleared, all so far, in order. |
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
-| `sent` | `ids` | The Go test checks the Message IDs that the fake port has sent so far, in order. |
+| `sent` | `ids`, `timers` (optional) | The Go test checks the Message IDs that the fake port has sent so far, in order. With `timers`, it also checks the Disappearing timer of each, in seconds. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
 | `reacted` | `reactions` | The Go test checks the Reactions that the fake port has sent so far, in order, as `"id:emoji"`. An empty emoji is a removal. |
 | `quoted` | `quotes` | The Go test checks the replies that the fake port has sent with a Quote so far, in order, as `"id:quotedID"`. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
-| `file` | `path`, and `content` or `missing` | The Go test checks a file: it holds `content`, or (`missing`: true) it does not exist. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
+| `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest sweep timer of Disappearing Messages. Without it, the line fires the keyring timeout as above. |
+| `restart` | `now` (optional) | The Go test stops the Daemon like a closed stdin and starts it again on the same Profile, with a new fake WhatsApp port. `now` sets the Daemon time while it was off. Put the `whatsapp` start-up lines after it. |
+| `file` | `path`, and `content` or `missing` | The Go test checks a file: it holds `content`, or (`missing`: true) it does not exist, or (`present`: true) it exists. `$PROFILE` in `path` is the Profile folder. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
 | `plugin` | `openChat` | The Plugin test opens this Chat (`jid`, `name`, `kind`) as the user does. The Go test ignores it. |
 | `whatsapp` | one of the keys below | The Go test scripts the fake WhatsApp port. |
 
@@ -442,6 +460,8 @@ Keys of a `whatsapp` line. Each line has exactly one:
 The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
 
 The `event` kinds `newMessage`, `receipt`, `messageEdited`, `messageRevoked` and `reaction` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
+
+The `event` kind `chatTimer` (`chat`, `seconds`) sets the Disappearing timer of a Chat. A `newMessage` takes `timer` (seconds), and a `historySync` Chat takes `timer`.
 
 The events are the event kinds of the WhatsApp port (`daemon/internal/whatsapp`). A new port event kind gets a new `event` kind here. A new port method that a fixture must script gets a new key.
 

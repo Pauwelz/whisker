@@ -29,8 +29,9 @@ type Port interface {
 	NewMessageID() string
 	// Send sends a text Message to a Chat, as a reply to quote when quote is not nil.
 	// It returns ErrOffline when there is no connection.
+	// timer is the Disappearing timer in seconds: 0 sends a Message that stays.
 	// It can block for a long time: call it off the Daemon loop.
-	Send(chat, id, text string, quote *Quote) error
+	Send(chat, id, text string, quote *Quote, timer int64) error
 	// React sets the Reaction of the user on a Message. An empty emoji removes it.
 	// sender is the author of the Message ("" for the user). It returns ErrOffline when there is no connection.
 	React(chat, id, sender, emoji string) error
@@ -122,6 +123,7 @@ type Message struct {
 	// Mentions are the JIDs that Text mentions as "@<user part>". MentionsMe tells that one of them is the user.
 	Mentions   []string `json:"mentions"`
 	MentionsMe bool     `json:"mentionsMe"`
+	Timer    int64  `json:"timer"` // the Disappearing timer in seconds that the Message carries, 0 for none
 }
 
 // Quote is the Message that a reply quotes. Sender is its author, empty for the user. Text is the preview.
@@ -141,6 +143,7 @@ type HistoryChat struct {
 	Pinned     bool      `json:"pinned"`
 	MutedUntil int64     `json:"mutedUntil"`
 	Unread     bool      `json:"unread"`
+	Timer      int64     `json:"timer"` // the Disappearing timer of the Chat in seconds, 0 for off
 	Messages   []Message `json:"messages"`
 }
 
@@ -242,12 +245,20 @@ type ChatPresence struct {
 	State  string `json:"state"`
 }
 
+// ChatTimer means the Disappearing timer of a Chat changed. Seconds is 0 when the timer is off.
+// It applies to Messages from now on.
+type ChatTimer struct {
+	Chat    string `json:"chat"`
+	Seconds int64  `json:"seconds"`
+}
+
 // Connected and Disconnected report the connection to WhatsApp.
 type Connected struct{}
 type Disconnected struct{}
 
 func (NewMessage) isEvent()     {}
 func (Receipt) isEvent()        {}
+func (ChatTimer) isEvent()      {}
 func (Presence) isEvent()       {}
 func (ChatPresence) isEvent()   {}
 func (MessageEdited) isEvent()  {}
