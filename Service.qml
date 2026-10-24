@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "WhiskerState.js" as State
 
@@ -58,11 +59,38 @@ Item {
     daemon.write(State.messagesRequest(nextRequestId++, chat.jid, 0))
   }
 
+  // Called by the IPC handler `openChat`, which a click on a notification runs.
+  function openChatByJid(jid) {
+    openChat(State.chatByJid(view, jid))
+  }
+
   function closeChat() {
+    stopTyping()
     // The Daemon deletes the plain Media copies of the Chat.
     daemon.write(State.mediaReleaseRequest(nextRequestId++, view.openChat.jid))
     view = State.closeChat(view)
     syncAttention()
+  }
+
+  // Outgoing Composing. The Daemon drops it when "send typing" is off.
+  property string typingChat: "" // the Chat that got Composing, or empty
+
+  // Called by the composer when its text changes.
+  function composerChanged(text) {
+    if (!view.openChat) return
+    var action = State.typingAction(typingChat !== "", text)
+    if (action === "start") {
+      typingChat = view.openChat.jid
+      daemon.write(State.typingRequest(nextRequestId++, typingChat, true))
+    } else if (action === "stop") {
+      stopTyping()
+    }
+  }
+
+  function stopTyping() {
+    if (typingChat === "") return
+    daemon.write(State.typingRequest(nextRequestId++, typingChat, false))
+    typingChat = ""
   }
 
   // Called by the pop-out when it opens or closes. The Daemon derives the Attended Chat from this and the shown Chat.
@@ -71,6 +99,7 @@ Item {
 
   function setPopoutOpen(open) {
     popoutOpen = open
+    if (!open) stopTyping()
     syncAttention()
   }
 
@@ -224,6 +253,7 @@ Item {
         var frame = State.parseLine(line)
         if (!frame) return
         root.view = State.applyFrame(root.view, frame)
+        if (State.isNotify(frame)) Quickshell.execDetached(State.notifyCommand(frame.params))
         root.handleMediaFrame(frame)
         if (State.resendsAttention(frame)) root.syncAttention()
         if (State.requestsSettings(frame)) daemon.write(State.settingsGetRequest(root.nextRequestId++))

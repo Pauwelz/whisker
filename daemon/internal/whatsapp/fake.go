@@ -32,6 +32,9 @@ type Fake struct {
 	revokes    []string
 	quotes     []string
 	reactions  []string
+	online     []bool
+	subscribed []string
+	typing     []string
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -245,3 +248,48 @@ func (f *Fake) PairCode(string) (string, error) {
 
 func (f *Fake) Disconnect()          {}
 func (f *Fake) Events() <-chan Event { return f.events }
+
+// SendPresence, SubscribePresence and SendTyping record the call. Typing is recorded as "chat:composing" or "chat:paused".
+func (f *Fake) SendPresence(online bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.online = append(f.online, online)
+	return nil
+}
+
+func (f *Fake) SubscribePresence(jid string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.subscribed = append(f.subscribed, jid)
+	return nil
+}
+
+func (f *Fake) SendTyping(chat string, composing bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	state := ActivityPaused
+	if composing {
+		state = ActivityComposing
+	}
+	f.typing = append(f.typing, chat+":"+state)
+	return nil
+}
+
+// OnlineCalls, Subscribed and TypingCalls list what the fake got, in order.
+func (f *Fake) OnlineCalls() []bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]bool{}, f.online...)
+}
+
+func (f *Fake) Subscribed() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.subscribed...)
+}
+
+func (f *Fake) TypingCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.typing...)
+}

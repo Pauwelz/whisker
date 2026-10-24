@@ -5,6 +5,7 @@ package chatstore
 import (
 	"cmp"
 	"database/sql"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -82,11 +83,7 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 	if query != "" {
 		sqlLimit, sqlOffset = -1, 0
 	}
-	rows, err := s.db.Query(`
-		SELECT c.jid, c.kind, c.pinned, c.unread, c.last_active,
-		       c.muted_until = -1 OR c.muted_until > ?,
-		       c.subject, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
-		FROM chats c LEFT JOIN names n ON n.jid = c.jid
+	rows, err := s.db.Query(selectChat+`
 		WHERE c.last_active > 0
 		ORDER BY c.pinned DESC, c.last_active DESC, c.jid
 		LIMIT ? OFFSET ?`, s.now().Unix(), sqlLimit, sqlOffset)
@@ -96,12 +93,10 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 	defer rows.Close()
 	var chats []Chat
 	for rows.Next() {
-		var c Chat
-		var subject, contact, push string
-		if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.Muted, &subject, &contact, &push); err != nil {
+		c, err := scanChat(rows)
+		if err != nil {
 			return Page{}, err
 		}
-		c.Name = chatName(c.Kind, subject, contact, push, c.JID)
 		chats = append(chats, c)
 	}
 	if err := rows.Err(); err != nil {
@@ -119,6 +114,35 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 	}
 	page.Chats = append(page.Chats, chats...)
 	return page, nil
+}
+
+const selectChat = `
+	SELECT c.jid, c.kind, c.pinned, c.unread, c.last_active,
+	       c.muted_until = -1 OR c.muted_until > ?,
+	       c.subject, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
+	FROM chats c LEFT JOIN names n ON n.jid = c.jid `
+
+func scanChat(rows *sql.Rows) (Chat, error) {
+	var c Chat
+	var subject, contact, push string
+	if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.Muted, &subject, &contact, &push); err != nil {
+		return Chat{}, err
+	}
+	c.Name = chatName(c.Kind, subject, contact, push, c.JID)
+	return c, nil
+}
+
+// Chat returns one stored Chat, or sql.ErrNoRows.
+func (s *Store) Chat(jid string) (Chat, error) {
+	rows, err := s.db.Query(selectChat+`WHERE c.jid = ?`, s.now().Unix(), jid)
+	if err != nil {
+		return Chat{}, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return Chat{}, errors.Join(sql.ErrNoRows, rows.Err())
+	}
+	return scanChat(rows)
 }
 
 // matching keeps the Chats that match a lower-case query by Chat name or Participant name.
@@ -161,6 +185,16 @@ func chatName(kind, subject, contact, push, jid string) string {
 		return subject
 	}
 	return participantName(contact, push, jid)
+}
+
+// ParticipantName applies the name rule to one Participant, for the names the Daemon sends outside a Message.
+func (s *Store) ParticipantName(jid string) (string, error) {
+	var contact, push string
+	err := s.db.QueryRow(`SELECT COALESCE(contact_name, ''), COALESCE(push_name, '') FROM names WHERE jid = ?`, jid).Scan(&contact, &push)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	return participantName(contact, push, jid), nil
 }
 
 // participantName is the name rule for a Participant: contact name, Push Name, then phone number.

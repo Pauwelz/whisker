@@ -377,4 +377,46 @@ test("Quotes: the preview names the author and is cut to one line; the composer 
   assert.deepEqual(JSON.parse(State.composerRequest(1, jid, "", "re", "m1")).params, { chat: jid, text: "re", quote: "m1" });
   assert.deepEqual(JSON.parse(State.composerRequest(2, jid, "", "re", "")).params, { chat: jid, text: "re" });
   assert.equal(JSON.parse(State.composerRequest(3, jid, "m1", "fix", "m2")).method, "chat.edit");
+test("presenceLabel shows Online and Last Seen in a Direct Chat only", () => {
+  const now = Math.floor(new Date(2026, 9, 24, 15, 0).getTime() / 1000);
+  const seen = Math.floor(new Date(2026, 9, 24, 14, 5).getTime() / 1000);
+  const old = Math.floor(new Date(2026, 9, 20, 14, 5).getTime() / 1000);
+  const open = (kind) => State.openChat(State.initialState(), { jid: "1@s.whatsapp.net", name: "Ann", kind });
+  const seen_ = (state, p) => State.applyFrame(state, { method: "presenceChanged", params: { chat: "1@s.whatsapp.net", ...p } });
+  assert.equal(State.presenceLabel(open("direct"), now), "");
+  assert.equal(State.presenceLabel(seen_(open("direct"), { online: true, lastSeen: 0 }), now), "Online");
+  assert.equal(State.presenceLabel(seen_(open("direct"), { online: false, lastSeen: seen }), now), "last seen at 14:05");
+  assert.equal(State.presenceLabel(seen_(open("direct"), { online: false, lastSeen: old }), now), "last seen 2026-10-20");
+  assert.equal(State.presenceLabel(seen_(open("direct"), { online: false, lastSeen: 0 }), now), "");
+  assert.equal(State.presenceLabel(seen_(open("group"), { online: true, lastSeen: 0 }), now), "");
+});
+
+test("activityLabel names the Participant in a Group Chat and drops it on a connection loss", () => {
+  const act = (state, chat, participant, name, s) =>
+    State.applyFrame(state, { method: "activityChanged", params: { chat, participant, name, state: s } });
+  let direct = State.openChat(State.initialState(), { jid: "1@s.whatsapp.net", name: "Ann", kind: "direct" });
+  direct = act(direct, "1@s.whatsapp.net", "1@s.whatsapp.net", "Ann", "composing");
+  assert.equal(State.activityLabel(direct), "typing…");
+  direct = act(direct, "1@s.whatsapp.net", "1@s.whatsapp.net", "Ann", "recording");
+  assert.equal(State.activityLabel(direct), "recording…");
+  assert.equal(State.activityLabel(State.applyFrame(direct, { method: "disconnected" })), "");
+  let group = State.openChat(State.initialState(), { jid: "g@g.us", name: "Team", kind: "group" });
+  group = act(act(group, "g@g.us", "2@s", "Bob", "composing"), "g@g.us", "3@s", "Cy", "recording");
+  assert.equal(State.activityLabel(group), "Bob is typing…, Cy is recording…");
+});
+
+test("typingAction sends Composing on the first text and Paused when the text empties", () => {
+  assert.equal(State.typingAction(false, "h"), "start");
+  assert.equal(State.typingAction(true, "hi"), "");
+  assert.equal(State.typingAction(true, "  "), "stop");
+  assert.equal(State.typingAction(false, ""), "");
+  assert.deepEqual(JSON.parse(State.typingRequest(3, "1@s", true)), { jsonrpc: "2.0", id: 3, method: "chat.typing", params: { chat: "1@s", typing: true } });
+});
+
+test("chatStatusLabel prefers the activity over Presence", () => {
+  let s = State.openChat(State.initialState(), { jid: "1@s", name: "Ann", kind: "direct" });
+  s = State.applyFrame(s, { method: "presenceChanged", params: { chat: "1@s", online: true, lastSeen: 0 } });
+  assert.equal(State.chatStatusLabel(s, 0), "Online");
+  s = State.applyFrame(s, { method: "activityChanged", params: { chat: "1@s", participant: "1@s", name: "Ann", state: "composing" } });
+  assert.equal(State.chatStatusLabel(s, 0), "typing…");
 });

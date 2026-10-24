@@ -8,6 +8,7 @@ Panel {
   id: root
   moduleName: "pauwelz.whisker"
   ipcTarget: "pauwelz.whisker"
+  manageIpc: false // the handler below adds openChat to the standard methods
 
   readonly property var whiskerService: bar && bar.shell ? bar.shell.serviceFor("pauwelz.whisker") : null
   readonly property var view: whiskerService ? whiskerService.view : ({ screen: "starting", message: "" })
@@ -32,8 +33,23 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
+  ShellIpc {
+    target: root.ipcTarget
+
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
+    function openChat(jid: string): void {
+      if (root.whiskerService) root.whiskerService.openChatByJid(jid)
+      root.open()
+    }
+  }
+
   BarIconButton {
     id: button
+    labelText: State.unreadLabel(root.view)
     anchors.fill: parent
     bar: root.bar
     text: ""
@@ -228,6 +244,18 @@ Panel {
               root.reactingId = ""
               root.whiskerService.closeChat()
             }
+          }
+
+          // Presence of the other side: Online or Last Seen, and "typing…" or "recording…".
+          Text {
+            visible: text !== ""
+            width: parent.width
+            textFormat: Text.PlainText
+            text: State.chatStatusLabel(root.view, Math.floor(Date.now() / 1000))
+            color: root.contentForeground
+            opacity: 0.6
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
           }
 
           Button {
@@ -459,6 +487,7 @@ Panel {
             color: root.contentForeground
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.body
+            onTextChanged: root.whiskerService.composerChanged(text)
             Keys.onPressed: function(event) {
               var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text)
               if (action === "default") return

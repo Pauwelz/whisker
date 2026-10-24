@@ -86,7 +86,7 @@ function applyFrame(state, frame) {
 }
 
 function foldFrame(state, frame) {
-  var chatState = foldChatFrame(state, frame)
+  var chatState = foldChatFrame(state, frame) || foldPresenceFrame(state, frame)
   if (chatState) return chatState
   if (frame && frame.result && frame.result.readReceipts !== undefined) {
     var withSettings = {}
@@ -236,7 +236,7 @@ function withChanges(state, changes) {
 function foldChatFrame(state, frame) {
   if (!frame) return null
   if (frame.method === "connected") return withChanges(state, { connection: "online" })
-  if (frame.method === "disconnected") return withChanges(state, { connection: "offline" })
+  if (frame.method === "disconnected") return withChanges(state, { connection: "offline", activity: {} })
   if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
   if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
@@ -430,6 +430,113 @@ function canQuoteMessage(message) {
 // A Message can get a Reaction once WhatsApp has it: any Message of others, or a Message of the user that was sent.
 function canReactToMessage(message) {
   return !message.revoked && (!message.fromMe || ["sent", "delivered", "read", "played"].indexOf(message.state) >= 0)
+}
+
+// The number of unread Chats the bar shows: a Chat with a Read Marker counts, a Muted Chat does not.
+// shortcut: it counts the Chats the Plugin has loaded (the first page, or a search result), upgrade to a Daemon count if that shows.
+function unreadCount(state) {
+  return (state.chats || []).filter(function(chat) { return chat.unread && !chat.muted }).length
+}
+
+// The bar label: the count, or "" so that only the icon shows when no Chat is unread.
+function unreadLabel(state) {
+  var count = unreadCount(state)
+  return count > 0 ? String(count) : ""
+}
+
+// What a notification says for a Message with Media and no text. Keys are the Media kinds of docs/contract.md.
+var MEDIA_LABELS = {
+  image: "Photo",
+  sticker: "Sticker",
+  voice: "Voice message",
+  audio: "Audio",
+  video: "Video",
+  document: "Document"
+}
+
+// The command that shows a `notify` frame as a desktop notification. A click runs the Plugin IPC handler `openChat`.
+// A Group Chat shows the sender in front of the text. The headline cannot start with "-": the sender script would read an option.
+// --exec comes last, and each word is one argument, so a Chat id never becomes a command.
+function notifyCommand(params) {
+  var headline = params.name.charAt(0) === "-" ? " " + params.name : params.name
+  var text = params.text || MEDIA_LABELS[params.media] || ""
+  var body = params.kind === "group" && params.senderName ? params.senderName + ": " + text : text
+  return ["omarchy-notification-send", "--app-name", "whisker", headline, body,
+    "--exec", "omarchy-shell", "pauwelz.whisker", "openChat", params.chat]
+}
+
+// True when the frame asks the Plugin to show a desktop notification.
+function isNotify(frame) {
+  return !!frame && frame.method === "notify"
+}
+
+// The Chat of the Chat list with this id. A Chat that is not loaded gets a minimal row, so a click on a notification still opens it.
+// shortcut: the fallback kind is "direct", so a Group Chat that is not loaded shows no sender names until the list loads it.
+function chatByJid(state, jid) {
+  var found = (state.chats || []).filter(function(chat) { return chat.jid === jid })
+  return found.length > 0 ? found[0] : { jid: jid, name: jid, kind: "direct" }
+}
+
+// Presence. `presence[jid]` is { online, lastSeen } of a Participant of a Direct Chat.
+// `activity[chat]` lists who is composing or recording there: { participant, name, state }.
+function foldPresenceFrame(state, frame) {
+  if (!frame) return null
+  if (frame.method === "presenceChanged") {
+    var presence = withChanges(state.presence || {}, {})
+    presence[frame.params.chat] = { online: frame.params.online, lastSeen: frame.params.lastSeen }
+    return withChanges(state, { presence: presence })
+  }
+  if (frame.method === "activityChanged") {
+    var p = frame.params
+    var activity = withChanges(state.activity || {}, {})
+    var others = (activity[p.chat] || []).filter(function(a) { return a.participant !== p.participant })
+    if (p.state !== "paused") others.push({ participant: p.participant, name: p.name, state: p.state })
+    activity[p.chat] = others
+    return withChanges(state, { activity: activity })
+  }
+  return null
+}
+
+function pad2(n) {
+  return (n < 10 ? "0" : "") + n
+}
+
+// The header line of a Direct Chat: "Online", "last seen at 14:05" (within a day), "last seen 2026-10-23", or "".
+function presenceLabel(state, nowSeconds) {
+  var chat = state.openChat
+  var p = chat && chat.kind !== "group" && state.presence ? state.presence[chat.jid] : null
+  if (!p) return ""
+  if (p.online) return "Online"
+  if (!p.lastSeen) return ""
+  var d = new Date(p.lastSeen * 1000)
+  if (nowSeconds - p.lastSeen < 24 * 3600) return "last seen at " + pad2(d.getHours()) + ":" + pad2(d.getMinutes())
+  return "last seen " + d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate())
+}
+
+// "typing…" or "recording…" in a Direct Chat; "Bob is typing…" in a Group Chat. Empty when nobody is active.
+function activityLabel(state) {
+  var chat = state.openChat
+  var list = chat && state.activity ? state.activity[chat.jid] || [] : []
+  return list.map(function(a) {
+    var verb = a.state === "recording" ? "recording…" : "typing…"
+    return chat.kind === "group" ? a.name + " is " + verb : verb
+  }).join(", ")
+}
+
+// What the composer text means for the outgoing Composing: "start", "stop" or "" (no change).
+function typingAction(wasTyping, text) {
+  var typing = String(text).trim() !== ""
+  if (typing === wasTyping) return ""
+  return typing ? "start" : "stop"
+}
+
+function typingRequest(id, jid, typing) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.typing", params: { chat: jid, typing: typing } }) + "\n"
+}
+
+// The line under the Chat header: the activity ("typing…") wins over Online and Last Seen.
+function chatStatusLabel(state, nowSeconds) {
+  return activityLabel(state) || presenceLabel(state, nowSeconds)
 }
 
 // Media. The Daemon sends paths only on request (media.open). `mediaPaths` holds them by Chat and Message id.

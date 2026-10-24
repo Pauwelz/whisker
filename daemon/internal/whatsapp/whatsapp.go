@@ -46,6 +46,12 @@ type Port interface {
 	Edit(chat, id, text string) error
 	// Revoke takes back a Message of the user for everyone. It returns ErrOffline when there is no connection.
 	Revoke(chat, id string) error
+	// SendPresence tells WhatsApp that the user is online (true) or not. WhatsApp only sends Presence after it.
+	SendPresence(online bool) error
+	// SubscribePresence asks WhatsApp for the Presence of a Participant.
+	SubscribePresence(jid string) error
+	// SendTyping tells a Chat that the user is composing (true) or has paused (false).
+	SendTyping(chat string, composing bool) error
 	// Events delivers events in order. The channel stays open until the process ends.
 	Events() <-chan Event
 }
@@ -209,12 +215,35 @@ type Reaction struct {
 	Emoji  string `json:"emoji"`
 }
 
+// Presence is the availability of a Participant of a Direct Chat. LastSeen is Unix seconds, 0 when WhatsApp hides it.
+type Presence struct {
+	JID      string `json:"jid"`
+	Online   bool   `json:"online"`
+	LastSeen int64  `json:"lastSeen"`
+}
+
+// Activity states of a ChatPresence. Paused ends Composing and Recording.
+const (
+	ActivityComposing = "composing"
+	ActivityRecording = "recording"
+	ActivityPaused    = "paused"
+)
+
+// ChatPresence is the activity of a Participant in a Chat. State is one of the Activity constants.
+type ChatPresence struct {
+	Chat   string `json:"chat"`
+	Sender string `json:"sender"`
+	State  string `json:"state"`
+}
+
 // Connected and Disconnected report the connection to WhatsApp.
 type Connected struct{}
 type Disconnected struct{}
 
 func (NewMessage) isEvent()     {}
 func (Receipt) isEvent()        {}
+func (Presence) isEvent()       {}
+func (ChatPresence) isEvent()   {}
 func (MessageEdited) isEvent()  {}
 func (MessageRevoked) isEvent() {}
 func (Reaction) isEvent()       {}
