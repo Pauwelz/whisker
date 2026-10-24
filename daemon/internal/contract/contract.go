@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -15,7 +14,6 @@ import (
 
 	"rsc.io/qr"
 
-	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
@@ -156,104 +154,6 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			return code
 		}
 	}
-}
-
-func pairCodeReply(port whatsapp.Port, id json.RawMessage, phone string, logOut io.Writer) map[string]any {
-	// shortcut: PairCode blocks the Daemon loop (up to 30 s), upgrade when another request must run meanwhile.
-	code, err := port.PairCode(phone)
-	switch {
-	case errors.Is(err, whatsapp.ErrInvalidPhone):
-		return errorReply(id, errInvalidPhone, msgInvalidPhone)
-	case err != nil:
-		fmt.Fprintln(logOut, "pair code failed") // the error text could hold the phone number
-		return errorReply(id, errPairCode, msgPairCode)
-	}
-	return resultReply(id, map[string]any{"code": code})
-}
-
-func chatsListReply(chats *chatstore.Store, id json.RawMessage, offset, limit int, query string, logOut io.Writer) map[string]any {
-	offset = max(offset, 0)
-	if limit <= 0 {
-		limit = defaultChatsLimit
-	}
-	page, err := chats.List(offset, min(limit, maxChatsLimit), query)
-	if err != nil {
-		fmt.Fprintln(logOut, "chat list failed")
-		return errorReply(id, errChatStore, msgChatStore)
-	}
-	unread, err := chats.UnreadChats()
-	if err != nil {
-		fmt.Fprintln(logOut, "chat list failed")
-		return errorReply(id, errChatStore, msgChatStore)
-	}
-	return resultReply(id, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset, "unreadChats": unread})
-}
-
-func chatMessagesReply(chats *chatstore.Store, id json.RawMessage, chat string, offset, limit int, logOut io.Writer) map[string]any {
-	offset = max(offset, 0)
-	if limit <= 0 {
-		limit = defaultChatsLimit
-	}
-	page, err := chats.Messages(chat, offset, min(limit, maxChatsLimit))
-	if err != nil {
-		fmt.Fprintln(logOut, "message list failed")
-		return errorReply(id, errChatStore, msgChatStore)
-	}
-	return resultReply(id, map[string]any{"chat": chat, "messages": page.Messages, "more": page.More, "offset": offset})
-}
-
-// chatSendReply stores the text as a pending Message. The caller sends it after the reply.
-// A non-empty quoteID makes it a reply: that Message must exist in the Chat and not be a Tombstone.
-func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, text, quoteID string, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	if !validText(text) {
-		return errorReply(id, errMessage, msgInvalidMessage), nil
-	}
-	var quote *whatsapp.Quote
-	if quoteID != "" {
-		q, err := chats.Message(chat, quoteID)
-		if err != nil || q.Revoked {
-			return storeOrInvalid(id, err, logOut), nil
-		}
-		quote = whatsappQuote(q.ID, q.Sender, q.Text)
-	}
-	m, err := chats.AddPending(chat, port.NewMessageID(), text, quote)
-	return messageReply(id, m, err, logOut)
-}
-
-// chatRetryReply makes a failed Message pending again. The caller sends it after the reply.
-func chatRetryReply(chats *chatstore.Store, id json.RawMessage, chat, msgID string, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	changed, err := chats.Requeue(chat, msgID)
-	if err == nil && !changed {
-		return errorReply(id, errMessage, msgInvalidMessage), nil
-	}
-	if err != nil {
-		return messageReply(id, chatstore.Message{}, err, logOut)
-	}
-	m, err := chats.Message(chat, msgID)
-	return messageReply(id, m, err, logOut)
-}
-
-func messageReply(id json.RawMessage, m chatstore.Message, err error, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	switch {
-	case errors.Is(err, chatstore.ErrNoChat):
-		return errorReply(id, errMessage, msgInvalidMessage), nil
-	case err != nil:
-		fmt.Fprintln(logOut, "message write failed")
-		return errorReply(id, errChatStore, msgChatStore), nil
-	}
-	return resultReply(id, map[string]any{"message": m}), &m
-}
-
-func settingsReply(id json.RawMessage, logOut io.Writer, apply func() (settings.Settings, error)) map[string]any {
-	cur, err := apply()
-	switch {
-	case errors.Is(err, settings.ErrInvalid):
-		return errorReply(id, errSetting, msgInvalidSetting)
-	case err != nil:
-		fmt.Fprintln(logOut, "settings failed") // the error text could name paths
-		return errorReply(id, errSetting, msgSettingsFailed)
-	}
-	return resultReply(id, map[string]any{"readReceipts": cur.ReadReceipts, "sendOnline": cur.SendOnline, "sendTyping": cur.SendTyping, "notifications": cur.Notifications})
 }
 
 // qrDataURI renders a WhatsApp QR code string as a PNG data: URI.

@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
-	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
@@ -20,56 +18,59 @@ func sentByWhatsApp(state string) bool {
 	return state != "" && state != whatsapp.StatePending && state != whatsapp.StateFailed
 }
 
-// chatEditReply edits a Message of the user. The caller sends `messageChanged` for the returned Message.
+// chatEdit edits a Message of the user. The follow-up sends `messageChanged` for it.
 // shortcut: the WhatsApp call blocks the Daemon loop (up to 15 s), upgrade when another request must run meanwhile.
-func chatEditReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, msgID, text string, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	m, err := chats.Message(chat, msgID)
+func (s *session) chatEdit(req *request) outcome {
+	p := req.Params
+	m, err := s.chats.Message(p.Chat, p.ID)
 	if err != nil || !m.FromMe || m.Revoked || !sentByWhatsApp(m.State) ||
-		!validText(text) ||
+		!validText(p.Text) ||
 		Clock.Now().Sub(time.Unix(m.Time, 0)) > EditWindow {
-		return storeOrInvalid(id, err, logOut), nil
+		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
-	if err := port.Edit(chat, msgID, text); err != nil {
-		return sendFailed(id, err, logOut), nil
+	if err := s.port.Edit(p.Chat, p.ID, p.Text); err != nil {
+		return outcome{reply: s.sendFailed(req.ID, err)}
 	}
-	return changedReply(id, logOut, chats, chat, msgID, func() (bool, error) { return chats.Edit(chat, msgID, "", true, text) })
+	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.Edit(p.Chat, p.ID, "", true, p.Text) }, func() { s.clearDraft(p.Chat) })
 }
 
-// chatRevokeReply revokes a Message of the user for everyone. It becomes a Tombstone.
-func chatRevokeReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, msgID string, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	m, err := chats.Message(chat, msgID)
+// chatRevoke revokes a Message of the user for everyone. It becomes a Tombstone.
+func (s *session) chatRevoke(req *request) outcome {
+	p := req.Params
+	m, err := s.chats.Message(p.Chat, p.ID)
 	if err != nil || !m.FromMe || m.Revoked || !sentByWhatsApp(m.State) {
-		return storeOrInvalid(id, err, logOut), nil
+		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
-	if err := port.Revoke(chat, msgID); err != nil {
-		return sendFailed(id, err, logOut), nil
+	if err := s.port.Revoke(p.Chat, p.ID); err != nil {
+		return outcome{reply: s.sendFailed(req.ID, err)}
 	}
-	return changedReply(id, logOut, chats, chat, msgID, func() (bool, error) { return chats.Revoke(chat, msgID) })
+	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.Revoke(p.Chat, p.ID) }, nil)
 }
 
 // storeOrInvalid answers a failed lookup with "chat store failed", and any other refusal with "invalid message".
-func storeOrInvalid(id json.RawMessage, err error, logOut io.Writer) map[string]any {
+func (s *session) storeOrInvalid(id json.RawMessage, err error) map[string]any {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		fmt.Fprintln(logOut, "message read failed")
+		fmt.Fprintln(s.logOut, "message read failed")
 		return errorReply(id, errChatStore, msgChatStore)
 	}
 	return errorReply(id, errMessage, msgInvalidMessage)
 }
 
-func sendFailed(id json.RawMessage, err error, logOut io.Writer) map[string]any {
-	fmt.Fprintln(logOut, "edit or revoke failed") // the error text could hold names
+func (s *session) sendFailed(id json.RawMessage, err error) map[string]any {
+	fmt.Fprintln(s.logOut, "edit or revoke failed") // the error text could hold names
 	if errors.Is(err, whatsapp.ErrOffline) {
 		return errorReply(id, errSendFailed, msgNotConnected)
 	}
 	return errorReply(id, errSendFailed, msgSendFailed)
 }
 
-// changedReply stores the change and answers with the new Message.
-func changedReply(id json.RawMessage, logOut io.Writer, chats *chatstore.Store, chat, msgID string, change func() (bool, error)) (map[string]any, *chatstore.Message) {
+// changed stores the change and answers with the new Message. The follow-up runs before and then tells the Plugin it changed.
+func (s *session) changed(id json.RawMessage, chat, msgID string, change func() (bool, error), before func()) outcome {
 	if _, err := change(); err != nil {
-		fmt.Fprintln(logOut, "message write failed")
-		return errorReply(id, errChatStore, msgChatStore), nil
+		fmt.Fprintln(s.logOut, "message write failed")
+		return outcome{reply: errorReply(id, errChatStore, msgChatStore)}
 	}
-	m, err := chats.Message(chat, msgID)
-	return messageReply(id, m, err, logOut)
+	m, err := s.chats.Message(chat, msgID)
+	reply, changed := s.messageReply(id, m, err)
+	return s.followUp(reply, changed, before, s.announce, nil)
 }

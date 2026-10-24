@@ -2,10 +2,12 @@ package contract
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
+	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
 const (
@@ -148,17 +150,33 @@ func (s *session) announce(m chatstore.Message) bool {
 	return s.send(notification("messageChanged", map[string]any{"message": m}))
 }
 
-// afterChange is the follow-up of an edit, a revoke or a Reaction: before runs, then the Plugin hears of the changed Message.
-func (s *session) afterChange(reply map[string]any, changed *chatstore.Message, before func()) outcome {
+// submit starts the send of a pending Message.
+func (s *session) submit(m chatstore.Message) bool {
+	s.box.submit(m)
+	return true
+}
+
+// followUp is the follow-up of a request that stored or changed a Message: before runs, act runs (submit or announce), then after runs.
+// before and after may be nil. Nothing runs when the request left no Message (m is nil).
+func (s *session) followUp(reply map[string]any, m *chatstore.Message, before func(), act func(chatstore.Message) bool, after func()) outcome {
 	return outcome{reply, func() int {
-		if changed == nil {
+		if m == nil {
 			return keepGoing
 		}
 		if before != nil {
 			before()
 		}
-		return exitIf(s.announce(*changed))
+		ok := act(*m)
+		if after != nil {
+			after()
+		}
+		return exitIf(ok)
 	}}
+}
+
+// sentOutcome is the follow-up of a send: sending uses up the Draft, and a sent Message is the interaction that the Read Receipt policy waits for.
+func (s *session) sentOutcome(chat string, reply map[string]any, m *chatstore.Message) outcome {
+	return s.followUp(reply, m, func() { s.clearDraft(chat) }, s.submit, func() { s.read.interaction(chat) })
 }
 
 // clearDraft uses up the Draft of a Chat: sending or editing consumes it.
@@ -177,62 +195,98 @@ func (s *session) linkRetry(req *request) outcome {
 }
 
 func (s *session) linkPairCode(req *request) outcome {
-	return outcome{reply: pairCodeReply(s.port, req.ID, req.Params.Phone, s.logOut)}
+	// shortcut: PairCode blocks the Daemon loop (up to 30 s), upgrade when another request must run meanwhile.
+	code, err := s.port.PairCode(req.Params.Phone)
+	switch {
+	case errors.Is(err, whatsapp.ErrInvalidPhone):
+		return outcome{reply: errorReply(req.ID, errInvalidPhone, msgInvalidPhone)}
+	case err != nil:
+		fmt.Fprintln(s.logOut, "pair code failed") // the error text could hold the phone number
+		return outcome{reply: errorReply(req.ID, errPairCode, msgPairCode)}
+	}
+	return outcome{reply: resultReply(req.ID, map[string]any{"code": code})}
+}
+
+// pageParams applies the paging rules of chats.list and chat.messages: no negative offset, a default and a maximum limit.
+func pageParams(offset, limit int) (int, int) {
+	if limit <= 0 {
+		limit = defaultChatsLimit
+	}
+	return max(offset, 0), min(limit, maxChatsLimit)
 }
 
 func (s *session) chatsList(req *request) outcome {
 	p := req.Params
-	return outcome{reply: chatsListReply(s.chats, req.ID, p.Offset, p.Limit, p.Query, s.logOut)}
+	offset, limit := pageParams(p.Offset, p.Limit)
+	page, err := s.chats.List(offset, limit, p.Query)
+	if err != nil {
+		fmt.Fprintln(s.logOut, "chat list failed")
+		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
+	}
+	unread, err := s.chats.UnreadChats()
+	if err != nil {
+		fmt.Fprintln(s.logOut, "chat list failed")
+		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
+	}
+	return outcome{reply: resultReply(req.ID, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset, "unreadChats": unread})}
 }
 
 func (s *session) chatMessages(req *request) outcome {
 	p := req.Params
-	return outcome{reply: chatMessagesReply(s.chats, req.ID, p.Chat, p.Offset, p.Limit, s.logOut)}
+	offset, limit := pageParams(p.Offset, p.Limit)
+	page, err := s.chats.Messages(p.Chat, offset, limit)
+	if err != nil {
+		fmt.Fprintln(s.logOut, "message list failed")
+		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
+	}
+	return outcome{reply: resultReply(req.ID, map[string]any{"chat": p.Chat, "messages": page.Messages, "more": page.More, "offset": offset})}
 }
 
-func (s *session) draftGet(req *request) outcome {
-	return outcome{reply: draftGetReply(s.chats, req.ID, req.Params.Chat, s.logOut)}
-}
-
-func (s *session) draftSet(req *request) outcome {
-	p := req.Params
-	return outcome{reply: draftSetReply(s.chats, req.ID, p.Chat, chatstore.Draft{Text: p.Text, Quote: p.Quote, Edit: p.Edit, Attachment: p.Attachment}, s.logOut)}
-}
-
-// submitted is the follow-up of a request that stored a pending Message: before runs, the send starts, then after runs.
-// before and after may be nil. Nothing runs when the request stored no Message.
-func (s *session) submitted(reply map[string]any, submit *chatstore.Message, before, after func()) outcome {
-	return outcome{reply, func() int {
-		if submit == nil {
-			return keepGoing
-		}
-		if before != nil {
-			before()
-		}
-		s.box.submit(*submit)
-		if after != nil {
-			after()
-		}
-		return keepGoing
-	}}
-}
-
-// chatSend: sending uses up the Draft, and a sent Message is the interaction that the Read Receipt policy waits for.
+// chatSend stores the text as a pending Message. The follow-up sends it after the reply.
+// A non-empty quote makes it a reply: that Message must exist in the Chat and not be a Tombstone.
 func (s *session) chatSend(req *request) outcome {
 	p := req.Params
-	reply, submit := chatSendReply(s.chats, s.port, req.ID, p.Chat, p.Text, p.Quote, s.logOut)
-	return s.submitted(reply, submit, func() { s.clearDraft(p.Chat) }, func() { s.read.interaction(p.Chat) })
+	if !validText(p.Text) {
+		return outcome{reply: errorReply(req.ID, errMessage, msgInvalidMessage)}
+	}
+	var quote *whatsapp.Quote
+	if p.Quote != "" {
+		q, err := s.chats.Message(p.Chat, p.Quote)
+		if err != nil || q.Revoked {
+			return outcome{reply: s.storeOrInvalid(req.ID, err)}
+		}
+		quote = whatsappQuote(q.ID, q.Sender, q.Text)
+	}
+	m, err := s.chats.AddPending(p.Chat, s.port.NewMessageID(), p.Text, quote)
+	reply, submit := s.messageReply(req.ID, m, err)
+	return s.sentOutcome(p.Chat, reply, submit)
 }
 
-func (s *session) chatSendMedia(req *request) outcome {
-	p := req.Params
-	reply, submit := chatSendMediaReply(s.chats, s.media, s.port.NewMessageID, req.ID, p.Chat, p.Path, p.Caption, s.logOut)
-	return s.submitted(reply, submit, func() { s.clearDraft(p.Chat) }, func() { s.read.interaction(p.Chat) })
-}
-
+// chatRetry makes a failed Message pending again. The follow-up sends it after the reply.
 func (s *session) chatRetry(req *request) outcome {
-	reply, submit := chatRetryReply(s.chats, req.ID, req.Params.Chat, req.Params.ID, s.logOut)
-	return s.submitted(reply, submit, nil, nil)
+	p := req.Params
+	changed, err := s.chats.Requeue(p.Chat, p.ID)
+	if err == nil && !changed {
+		return outcome{reply: errorReply(req.ID, errMessage, msgInvalidMessage)}
+	}
+	if err != nil {
+		reply, _ := s.messageReply(req.ID, chatstore.Message{}, err)
+		return outcome{reply: reply}
+	}
+	m, err := s.chats.Message(p.Chat, p.ID)
+	reply, submit := s.messageReply(req.ID, m, err)
+	return s.followUp(reply, submit, nil, s.submit, nil)
+}
+
+func (s *session) messageReply(id json.RawMessage, m chatstore.Message, err error) (map[string]any, *chatstore.Message) {
+	switch {
+	case errors.Is(err, chatstore.ErrNoChat):
+		return errorReply(id, errMessage, msgInvalidMessage), nil
+	case err != nil:
+		fmt.Fprintln(s.logOut, "message write failed")
+		return errorReply(id, errChatStore, msgChatStore), nil
+	}
+	return resultReply(id, map[string]any{"message": m}), &m
 }
 
 func (s *session) mediaDownload(req *request) outcome {
@@ -272,39 +326,33 @@ func (s *session) attentionSet(req *request) outcome {
 	}}
 }
 
-func (s *session) chatEdit(req *request) outcome {
-	p := req.Params
-	reply, changed := chatEditReply(s.chats, s.port, req.ID, p.Chat, p.ID, p.Text, s.logOut)
-	return s.afterChange(reply, changed, func() { s.clearDraft(p.Chat) })
-}
-
-func (s *session) chatRevoke(req *request) outcome {
-	reply, changed := chatRevokeReply(s.chats, s.port, req.ID, req.Params.Chat, req.Params.ID, s.logOut)
-	return s.afterChange(reply, changed, nil)
-}
-
-// chatReact: a Reaction is an interaction, like a sent Message.
-func (s *session) chatReact(req *request) outcome {
-	p := req.Params
-	reply, changed := chatReactReply(s.chats, s.port, req.ID, p.Chat, p.ID, p.Emoji, s.logOut)
-	return s.afterChange(reply, changed, func() { s.read.interaction(p.Chat) })
-}
-
 func (s *session) chatTyping(req *request) outcome {
 	s.pres.typing(req.Params.Chat, req.Params.Typing)
 	return outcome{reply: emptyReply(req)}
 }
 
 func (s *session) settingsGet(req *request) outcome {
-	return outcome{reply: settingsReply(req.ID, s.logOut, func() (settings.Settings, error) { return s.prefs.Get() })}
+	return s.settingsOutcome(req.ID, func() (settings.Settings, error) { return s.prefs.Get() })
 }
 
 func (s *session) settingsSet(req *request) outcome {
-	return outcome{reply: settingsReply(req.ID, s.logOut, func() (settings.Settings, error) {
+	return s.settingsOutcome(req.ID, func() (settings.Settings, error) {
 		cur, err := s.prefs.Set(req.Params.Update)
 		s.pres.sync() // "send online" may have changed
 		return cur, err
-	})}
+	})
+}
+
+func (s *session) settingsOutcome(id json.RawMessage, apply func() (settings.Settings, error)) outcome {
+	cur, err := apply()
+	switch {
+	case errors.Is(err, settings.ErrInvalid):
+		return outcome{reply: errorReply(id, errSetting, msgInvalidSetting)}
+	case err != nil:
+		fmt.Fprintln(s.logOut, "settings failed") // the error text could name paths
+		return outcome{reply: errorReply(id, errSetting, msgSettingsFailed)}
+	}
+	return outcome{reply: resultReply(id, map[string]any{"readReceipts": cur.ReadReceipts, "sendOnline": cur.SendOnline, "sendTyping": cur.SendTyping, "notifications": cur.Notifications})}
 }
 
 // logout asks WhatsApp to remove the Companion Device, then deletes the Profile whatever the answer.

@@ -2,7 +2,6 @@ package contract
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
@@ -52,38 +50,40 @@ func statSendable(path string) (os.FileInfo, error) {
 	return st, nil
 }
 
-// chatSendMediaReply stores the file encrypted in the Profile and adds a pending Message. The caller sends it after the reply.
+// chatSendMedia stores the file encrypted in the Profile and adds a pending Message. The follow-up sends it after the reply.
 // shortcut: the copy into the Profile runs on the Daemon loop, so a very large file blocks other requests for a moment.
-func chatSendMediaReply(chats *chatstore.Store, store *media.Store, newID func() string, id json.RawMessage, chat, path, caption string, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	invalid := errorReply(id, errMessage, msgInvalidMessage)
-	if !fitsMessage(caption) {
-		return invalid, nil
+func (s *session) chatSendMedia(req *request) outcome {
+	p := req.Params
+	invalid := outcome{reply: errorReply(req.ID, errMessage, msgInvalidMessage)}
+	if !fitsMessage(p.Caption) {
+		return invalid
 	}
-	st, err := statSendable(path)
+	st, err := statSendable(p.Path)
 	if err != nil {
-		return invalid, nil
+		return invalid
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(p.Path)
 	if err != nil {
-		return invalid, nil
+		return invalid
 	}
 	defer f.Close()
-	m := whatsapp.Media{Kind: media.Document, Mime: sniffMime(path, f), Name: filepath.Base(path), Size: st.Size(), Key: make([]byte, 32)}
+	m := whatsapp.Media{Kind: media.Document, Mime: sniffMime(p.Path, f), Name: filepath.Base(p.Path), Size: st.Size(), Key: make([]byte, 32)}
 	if sendableImages[m.Mime] {
 		m.Kind, m.Name = media.Image, ""
 	}
 	if _, err := rand.Read(m.Key); err != nil {
-		fmt.Fprintln(logOut, "media copy failed")
-		return errorReply(id, errMediaFailed, msgMediaCopy), nil
+		fmt.Fprintln(s.logOut, "media copy failed")
+		return outcome{reply: errorReply(req.ID, errMediaFailed, msgMediaCopy)}
 	}
-	msgID := newID()
-	if err := store.Put(chat, msgID, m.Kind, m.Key, f); err != nil {
-		fmt.Fprintln(logOut, "media copy failed") // the error text could hold paths
-		return errorReply(id, errMediaFailed, msgMediaCopy), nil
+	msgID := s.port.NewMessageID()
+	if err := s.media.Put(p.Chat, msgID, m.Kind, m.Key, f); err != nil {
+		fmt.Fprintln(s.logOut, "media copy failed") // the error text could hold paths
+		return outcome{reply: errorReply(req.ID, errMediaFailed, msgMediaCopy)}
 	}
-	msg, err := chats.AddPendingMedia(chat, msgID, caption, &m)
+	msg, err := s.chats.AddPendingMedia(p.Chat, msgID, p.Caption, &m)
 	if err != nil {
-		store.Remove(chat, msgID)
+		s.media.Remove(p.Chat, msgID)
 	}
-	return messageReply(id, msg, err, logOut)
+	reply, submit := s.messageReply(req.ID, msg, err)
+	return s.sentOutcome(p.Chat, reply, submit)
 }

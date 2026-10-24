@@ -1,28 +1,27 @@
 package contract
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 )
 
-// draftGetReply answers with the Draft of a Chat. A Quote or Edit target that is gone or revoked is dropped, and so is a file that is gone.
-func draftGetReply(chats *chatstore.Store, id json.RawMessage, chat string, logOut io.Writer) map[string]any {
-	d, err := chats.Draft(chat)
+// draftGet answers with the Draft of a Chat. A Quote or Edit target that is gone or revoked is dropped, and so is a file that is gone.
+func (s *session) draftGet(req *request) outcome {
+	chat := req.Params.Chat
+	d, err := s.chats.Draft(chat)
 	if err != nil {
-		fmt.Fprintln(logOut, "draft read failed")
-		return errorReply(id, errChatStore, msgChatStore)
+		fmt.Fprintln(s.logOut, "draft read failed")
+		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
 	}
-	d.Quote = liveTarget(chats, chat, d.Quote)
-	d.Edit = liveTarget(chats, chat, d.Edit)
+	d.Quote = liveTarget(s.chats, chat, d.Quote)
+	d.Edit = liveTarget(s.chats, chat, d.Edit)
 	if d.Attachment != "" {
 		if _, err := statSendable(d.Attachment); err != nil { // the file is gone; the text stays
 			d.Attachment = ""
 		}
 	}
-	return resultReply(id, map[string]any{"chat": chat, "draft": d})
+	return outcome{reply: resultReply(req.ID, map[string]any{"chat": chat, "draft": d})}
 }
 
 func liveTarget(chats *chatstore.Store, chat, id string) string {
@@ -35,19 +34,22 @@ func liveTarget(chats *chatstore.Store, chat, id string) string {
 	return id
 }
 
-// draftSetReply stores the Draft of a Chat. Error -32006 means a text that is too long, or a target that is not a stored Message of the Chat.
-func draftSetReply(chats *chatstore.Store, id json.RawMessage, chat string, d chatstore.Draft, logOut io.Writer) map[string]any {
+// draftSet stores the Draft of a Chat. Error -32006 means a text that is too long, or a target that is not a stored Message of the Chat.
+func (s *session) draftSet(req *request) outcome {
+	p := req.Params
+	chat, d := p.Chat, chatstore.Draft{Text: p.Text, Quote: p.Quote, Edit: p.Edit, Attachment: p.Attachment}
+	invalid := outcome{reply: errorReply(req.ID, errMessage, msgInvalidMessage)}
 	if chat == "" || !fitsMessage(d.Text) {
-		return errorReply(id, errMessage, msgInvalidMessage)
+		return invalid
 	}
 	if d.Attachment != "" && (d.Edit != "" || d.Quote != "") { // a file never combines with an Edit or a Quote (the Plugin drops one of them)
-		return errorReply(id, errMessage, msgInvalidMessage)
+		return invalid
 	}
 	// Check the file only when it is new: a keystroke that keeps the stored file must save even if the file is gone now.
-	if old, err := chats.Draft(chat); err != nil || d.Attachment != old.Attachment {
+	if old, err := s.chats.Draft(chat); err != nil || d.Attachment != old.Attachment {
 		if d.Attachment != "" {
 			if _, err := statSendable(d.Attachment); err != nil {
-				return errorReply(id, errMessage, msgInvalidMessage)
+				return invalid
 			}
 		}
 	}
@@ -55,13 +57,13 @@ func draftSetReply(chats *chatstore.Store, id json.RawMessage, chat string, d ch
 		if target == "" {
 			continue
 		}
-		if _, err := chats.Message(chat, target); err != nil {
-			return storeOrInvalid(id, err, logOut)
+		if _, err := s.chats.Message(chat, target); err != nil {
+			return outcome{reply: s.storeOrInvalid(req.ID, err)}
 		}
 	}
-	if err := chats.SetDraft(chat, d); err != nil {
-		fmt.Fprintln(logOut, "draft write failed")
-		return errorReply(id, errChatStore, msgChatStore)
+	if err := s.chats.SetDraft(chat, d); err != nil {
+		fmt.Fprintln(s.logOut, "draft write failed")
+		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
 	}
-	return resultReply(id, map[string]any{})
+	return outcome{reply: emptyReply(req)}
 }

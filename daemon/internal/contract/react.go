@@ -1,26 +1,23 @@
 package contract
 
 import (
-	"encoding/json"
-	"io"
 	"slices"
-
-	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
-	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
 // ReactionEmoji is the Reaction picker: the six default emoji of WhatsApp. An empty emoji removes the Reaction.
 var ReactionEmoji = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
 
-// chatReactReply sets or removes the Reaction of the user on a Message. The caller sends `messageChanged` for the returned Message.
+// chatReact sets or removes the Reaction of the user on a Message. The follow-up sends `messageChanged` for it.
+// A Reaction is an interaction, like a sent Message.
 // shortcut: the WhatsApp call blocks the Daemon loop (up to 15 s), like chat.edit.
-func chatReactReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, msgID, emoji string, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	m, err := chats.Message(chat, msgID)
-	if err != nil || m.Revoked || (emoji != "" && !slices.Contains(ReactionEmoji, emoji)) {
-		return storeOrInvalid(id, err, logOut), nil
+func (s *session) chatReact(req *request) outcome {
+	p := req.Params
+	m, err := s.chats.Message(p.Chat, p.ID)
+	if err != nil || m.Revoked || (p.Emoji != "" && !slices.Contains(ReactionEmoji, p.Emoji)) {
+		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
-	if err := port.React(chat, msgID, m.Sender, emoji); err != nil {
-		return sendFailed(id, err, logOut), nil
+	if err := s.port.React(p.Chat, p.ID, m.Sender, p.Emoji); err != nil {
+		return outcome{reply: s.sendFailed(req.ID, err)}
 	}
-	return changedReply(id, logOut, chats, chat, msgID, func() (bool, error) { return chats.SetReaction(chat, msgID, "", true, emoji) })
+	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.SetReaction(p.Chat, p.ID, "", true, p.Emoji) }, func() { s.read.interaction(p.Chat) })
 }
