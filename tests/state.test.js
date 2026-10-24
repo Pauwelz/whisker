@@ -175,6 +175,11 @@ test("the Chat list request carries the offset", () => {
   assert.deepEqual(JSON.parse(line), { jsonrpc: "2.0", id: 5, method: "chats.list", params: { offset: 50 } });
 });
 
+test("the Chat list request carries the search query only when it is set", () => {
+  assert.deepEqual(JSON.parse(State.chatListRequest(6, 0, "ann")).params, { offset: 0, query: "ann" });
+  assert.deepEqual(JSON.parse(State.chatListRequest(7, 0, "")).params, { offset: 0 });
+});
+
 test("the Chat list survives a chatsChanged frame and goes away on unlinked", () => {
   let state = State.applyFrame(State.initialState(), { method: "linked" });
   state = State.applyFrame(state, { id: 1, result: { chats: [{ jid: "a" }], more: false, offset: 0 } });
@@ -186,4 +191,35 @@ test("Retry on the linking screen restarts linking", () => {
   const failed = State.applyFrame(State.initialState(), { method: "linkFailed", params: { reason: "timeout" } });
   assert.equal(State.retryKind(failed), "link");
   assert.deepEqual(JSON.parse(State.linkRetryRequest(4)), { jsonrpc: "2.0", id: 4, method: "link.retry" });
+});
+
+test("the Profile Settings survive the frames that reset the view", () => {
+  const settings = { readReceipts: "off", sendOnline: true, sendTyping: true, notifications: true };
+  let state = State.applyFrame(State.initialState(), { id: 1, result: settings });
+  state = State.applyFrame(state, { method: "unlinked", params: {} });
+  assert.deepEqual(JSON.parse(JSON.stringify(state.settings)), settings);
+  assert.equal(State.applyFrame(state, { method: "ready" }).settings.readReceipts, "off");
+});
+
+test("a phone unlink and a Log out show different messages", () => {
+  const phone = State.applyFrame(State.initialState(), { method: "unlinked", params: {} });
+  const user = State.applyFrame(State.initialState(), { method: "unlinked", params: { by: "user" } });
+  assert.equal(phone.reason, "unlinked");
+  assert.equal(user.reason, "logged-out");
+});
+
+test("the settings requests are JSON-RPC lines", () => {
+  assert.deepEqual(JSON.parse(State.settingsGetRequest(1)), { jsonrpc: "2.0", id: 1, method: "settings.get" });
+  assert.deepEqual(JSON.parse(State.settingsSetRequest(2, { sendTyping: false })), { jsonrpc: "2.0", id: 2, method: "settings.set", params: { sendTyping: false } });
+  assert.deepEqual(JSON.parse(State.logoutRequest(3)), { jsonrpc: "2.0", id: 3, method: "profile.logout" });
+  assert.ok(State.logoutRequest(3).endsWith("\n"));
+});
+
+test("the Plugin reads the Profile Settings after ready only", () => {
+  assert.equal(State.requestsSettings({ method: "ready" }), true);
+  assert.equal(State.requestsSettings({ method: "linked" }), false);
+});
+
+test("the settings view lists the Read Receipt modes of the Daemon", () => {
+  assert.deepEqual(JSON.parse(JSON.stringify(State.READ_RECEIPT_MODES.map((m) => m.value))), ["off", "onOpen", "onInteraction"]);
 });

@@ -75,7 +75,23 @@ function parseLine(line) {
   }
 }
 
+// Profile Settings live on disk, so every frame keeps them, including the ones that reset the rest.
 function applyFrame(state, frame) {
+  var next = foldFrame(state, frame)
+  if (state.settings && !next.settings) {
+    if (next === state) return state
+    next.settings = state.settings
+  }
+  return next
+}
+
+function foldFrame(state, frame) {
+  if (frame && frame.result && frame.result.readReceipts !== undefined) {
+    var withSettings = {}
+    for (var key in state) withSettings[key] = state[key]
+    withSettings.settings = frame.result
+    return withSettings
+  }
   if (frame && frame.method === "ready")
     return { screen: "ready", reason: "", message: "The Daemon is ready.", canRetry: false }
   if (frame && frame.method === "keyringUnavailable")
@@ -89,6 +105,8 @@ function applyFrame(state, frame) {
     return linking(state, { qr: frame.params.qr, reason: "", message: "Scan this QR code in WhatsApp: Linked devices, Link a device.", canRetry: false })
   if (frame && frame.method === "linked")
     return { screen: "linked", reason: "", message: "whisker is linked.", canRetry: false }
+  if (frame && frame.method === "unlinked" && frame.params && frame.params.by === "user")
+    return { screen: "linking", reason: "logged-out", message: "You logged out. Link whisker again.", qr: "", pairCode: "", canRetry: false }
   if (frame && frame.method === "unlinked")
     return { screen: "linking", reason: "unlinked", message: "Your phone removed this device. Link whisker again.", qr: "", pairCode: "", canRetry: false }
   if (frame && frame.method === "linkFailed") {
@@ -120,8 +138,11 @@ function refreshesChats(frame) {
 }
 
 // The request for one page of the Chat list. The next page starts at the number of Chats shown.
-function chatListRequest(id, offset) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chats.list", params: { offset: offset } }) + "\n"
+// A non-empty query asks for the Chats that match the search field.
+function chatListRequest(id, offset, query) {
+  var params = { offset: offset }
+  if (query) params.query = query
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chats.list", params: params }) + "\n"
 }
 
 // The linking screen keeps the QR code and the Pair Code unless a frame changes them.
@@ -159,4 +180,30 @@ function linkRetryRequest(id) {
 function retryKind(state) {
   if (state.screen === "keyring-unavailable") return "keyring"
   return state.screen === "linking" ? "link" : "download"
+}
+
+// The Read Receipt modes in the order the settings view lists them. Mirror of daemon/internal/settings.
+var READ_RECEIPT_MODES = [
+  { value: "off", label: "Off" },
+  { value: "onOpen", label: "On open" },
+  { value: "onInteraction", label: "On interaction" }
+]
+
+// True when the Plugin must read the Profile Settings after this frame.
+function requestsSettings(frame) {
+  return !!frame && frame.method === "ready"
+}
+
+function settingsGetRequest(id) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "settings.get" }) + "\n"
+}
+
+// `changes` holds only the settings that change, for example { sendTyping: false }.
+function settingsSetRequest(id, changes) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "settings.set", params: changes }) + "\n"
+}
+
+// The request for Log out. The Plugin sends it only after the user confirmed.
+function logoutRequest(id) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "profile.logout" }) + "\n"
 }

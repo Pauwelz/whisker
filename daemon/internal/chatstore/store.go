@@ -3,7 +3,9 @@
 package chatstore
 
 import (
+	"cmp"
 	"database/sql"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,6 +54,8 @@ func (s *Store) Apply(ev whatsapp.Event) error {
 			}
 			return nil
 		})
+	case whatsapp.NewMessage:
+		return s.inTx(func(tx *sql.Tx) error { return putLiveMessage(tx, ev) })
 	case whatsapp.PushName:
 		return setName(s.db, "push_name", ev.JID, ev.Name)
 	case whatsapp.ContactName:
@@ -67,36 +71,99 @@ func (s *Store) Apply(ev whatsapp.Event) error {
 }
 
 // List returns Chats: Pinned first, then newest first. A Chat with no activity is not listed.
-func (s *Store) List(offset, limit int) (Page, error) {
+// A non-blank query keeps the Chats whose name, or the name of a Participant who wrote in them, contains it. Case does not matter.
+func (s *Store) List(offset, limit int, query string) (Page, error) {
 	// shortcut: offset paging can skip or repeat a Chat when the list changes between pages, upgrade to a keyset cursor if that shows.
+	// shortcut: a search reads every Chat and filters in Go, so the name rule stays in one place; upgrade if a profile holds tens of thousands of Chats.
+	query = strings.ToLower(strings.TrimSpace(query))
+	sqlLimit, sqlOffset := limit+1, offset
+	if query != "" {
+		sqlLimit, sqlOffset = -1, 0
+	}
 	rows, err := s.db.Query(`
 		SELECT c.jid, c.kind, c.pinned, c.unread, c.last_active,
 		       c.muted_until = -1 OR c.muted_until > ?,
-		       CASE WHEN c.kind = 'group' THEN c.subject
-		            ELSE COALESCE(NULLIF(n.contact_name, ''), NULLIF(n.push_name, ''), '') END
+		       c.subject, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
 		FROM chats c LEFT JOIN names n ON n.jid = c.jid
 		WHERE c.last_active > 0
 		ORDER BY c.pinned DESC, c.last_active DESC, c.jid
-		LIMIT ? OFFSET ?`, s.now().Unix(), limit+1, offset)
+		LIMIT ? OFFSET ?`, s.now().Unix(), sqlLimit, sqlOffset)
 	if err != nil {
 		return Page{}, err
 	}
 	defer rows.Close()
-	page := Page{Chats: []Chat{}}
+	var chats []Chat
 	for rows.Next() {
 		var c Chat
-		if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.Muted, &c.Name); err != nil {
+		var subject, contact, push string
+		if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.Muted, &subject, &contact, &push); err != nil {
 			return Page{}, err
 		}
-		if c.Name == "" {
-			c.Name = phoneNumber(c.JID)
+		c.Name = chatName(c.Kind, subject, contact, push, c.JID)
+		chats = append(chats, c)
+	}
+	if err := rows.Err(); err != nil {
+		return Page{}, err
+	}
+	if query != "" {
+		if chats, err = s.matching(chats, query); err != nil {
+			return Page{}, err
 		}
-		page.Chats = append(page.Chats, c)
+		chats = chats[min(offset, len(chats)):]
 	}
-	if len(page.Chats) > limit {
-		page.Chats, page.More = page.Chats[:limit], true
+	page := Page{Chats: []Chat{}}
+	if len(chats) > limit {
+		chats, page.More = chats[:limit], true
 	}
-	return page, rows.Err()
+	page.Chats = append(page.Chats, chats...)
+	return page, nil
+}
+
+// matching keeps the Chats that match a lower-case query by Chat name or Participant name.
+func (s *Store) matching(chats []Chat, query string) ([]Chat, error) {
+	rows, err := s.db.Query(`
+		SELECT DISTINCT m.chat_jid, m.sender_jid, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
+		FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid
+		WHERE m.from_me = 0`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	senders := map[string][]string{}
+	for rows.Next() {
+		var chat, jid, contact, push string
+		if err := rows.Scan(&chat, &jid, &contact, &push); err != nil {
+			return nil, err
+		}
+		senders[chat] = append(senders[chat], participantName(contact, push, jid))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	found := []Chat{}
+	for _, c := range chats {
+		if hasText(c.Name, query) || slices.ContainsFunc(senders[c.JID], func(n string) bool { return hasText(n, query) }) {
+			found = append(found, c)
+		}
+	}
+	return found, nil
+}
+
+func hasText(name, lowerQuery string) bool {
+	return strings.Contains(strings.ToLower(name), lowerQuery)
+}
+
+// chatName is the name rule: a Group Chat shows its subject, any other Chat the Participant name.
+func chatName(kind, subject, contact, push, jid string) string {
+	if kind == whatsapp.KindGroup && subject != "" {
+		return subject
+	}
+	return participantName(contact, push, jid)
+}
+
+// participantName is the name rule for a Participant: contact name, Push Name, then phone number.
+func participantName(contact, push, jid string) string {
+	return cmp.Or(contact, push, phoneNumber(jid))
 }
 
 // phoneNumber is the last step of the name rule. A JID is user[:device]@server.
@@ -150,14 +217,8 @@ func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 		return err
 	}
 	for _, m := range c.Messages {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text) VALUES (?, ?, ?, ?, ?, ?)`,
-			c.JID, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text); err != nil {
+		if err := putMessage(tx, c.JID, m); err != nil {
 			return err
-		}
-		if !m.FromMe && m.PushName != "" {
-			if err := setName(tx, "push_name", m.Sender, m.PushName); err != nil {
-				return err
-			}
 		}
 	}
 	return nil

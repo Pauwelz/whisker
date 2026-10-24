@@ -37,7 +37,7 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 
 // Timeline order: by time, then by arrival (rowid), so two Messages in one second keep their order.
 const selectMessage = `
-	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, ` + nameExpr + `
+	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
 	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid `
 
 // Messages returns one page of a Chat timeline. Offset 0 is the newest page.
@@ -144,16 +144,14 @@ func (s *Store) query(query string, args ...any) ([]Message, error) {
 	}
 	defer rows.Close()
 	var msgs []Message
+	var contact, push string
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.SenderName); err != nil {
+		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &contact, &push); err != nil {
 			return nil, err
 		}
-		switch {
-		case m.FromMe:
-			m.SenderName = ""
-		case m.SenderName == "":
-			m.SenderName = phoneNumber(m.Sender)
+		if !m.FromMe {
+			m.SenderName = participantName(contact, push, m.Sender)
 		}
 		msgs = append(msgs, m)
 	}

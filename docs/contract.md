@@ -64,7 +64,7 @@ After `ready`, a Profile that is not linked starts linking. A linked Profile con
 | `linkQr` | `qr` | A QR code as a `data:image/png;base64,...` URI. A new `linkQr` replaces the old one while the user waits. |
 | `linked` | none | The Profile is a Companion Device: sent after the phone authorizes it, and at start-up for a linked Profile. The Plugin leaves the linking screen. |
 | `linkFailed` | `reason` | Linking stopped. The Plugin shows the reason with Retry (`link.retry`). |
-| `unlinked` | none | The phone removed the Companion Device. The Daemon has deleted the Profile and its store key. `ready` follows, then linking starts as on a fresh Profile. |
+| `unlinked` | `by` (optional) | The phone removed the Companion Device, or the user chose Log out (`by` is `"user"`; see `profile.logout`). The Daemon has deleted the Profile and its store key. `ready` follows, then linking starts as on a fresh Profile. |
 
 Reasons of `linkFailed`. The Go source of truth is `daemon/internal/whatsapp/whatsapp.go`.
 
@@ -77,7 +77,7 @@ Reasons of `linkFailed`. The Go source of truth is `daemon/internal/whatsapp/wha
 | `connect-failed` | The Daemon could not connect to WhatsApp. |
 | `unexpected` | Any other linking failure. |
 
-Fixtures: `contract/fixtures/link-qr.jsonl`, `link-failed.jsonl`, `link-unlinked.jsonl`.
+Fixtures: `contract/fixtures/link-qr.jsonl`, `link-failed.jsonl`, `link-unlinked.jsonl`, `logout.jsonl`.
 
 ### `chatsChanged`
 
@@ -93,7 +93,7 @@ Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-
 
 ### `chats.list`
 
-Params, both optional: `offset` (default 0) and `limit` (default 50, at most 200). Valid once the Daemon is `ready`. The result is one page of the Chat list:
+Params, all optional: `offset` (default 0), `limit` (default 50, at most 200) and `query`. Valid once the Daemon is `ready`. The result is one page of the Chat list:
 
 ```json
 {"chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":100,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0}
@@ -103,6 +103,7 @@ Params, both optional: `offset` (default 0) and `limit` (default 50, at most 200
 - `kind` is `direct`, `group` or `self`.
 - `muted` is true for a Muted Chat whose mute has not ended. `unread` is the Read Marker. `pinned`, `muted` and `unread` come from App State.
 - `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
+- `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
 - Error -32003 means the chat store failed.
 
 Name rule, resolved by the Daemon at list time:
@@ -112,7 +113,34 @@ Name rule, resolved by the Daemon at list time:
 3. Otherwise it shows the Push Name.
 4. Otherwise it shows the phone number with a leading `+`.
 
-Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chats-pages.jsonl`.
+Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chats-pages.jsonl`, `chats-search.jsonl`.
+
+### `settings.get`
+
+No params. Valid once the Daemon is `ready`. The result is the Profile Settings:
+
+```json
+{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true}
+```
+
+The Daemon owns the settings in `$XDG_CONFIG_HOME/whisker/settings.json` (default `~/.config/whisker/settings.json`). The file is outside the Profile, so Log out keeps it. The Plugin reads and writes the settings only over JSON-RPC. Later tickets read them through `settings.Store.Get` in `daemon/internal/settings`.
+
+| Setting | Values | Default |
+|---|---|---|
+| `readReceipts` | `off`, `onOpen`, `onInteraction` | `onOpen` |
+| `sendOnline` | boolean | `true` |
+| `sendTyping` | boolean | `true` |
+| `notifications` | boolean | `true` |
+
+A missing file or a missing key gives the default. Error -32004 means the settings file is unreadable. Fixture: `settings-defaults.jsonl`.
+
+### `settings.set`
+
+Params: any of the settings above. A key that is left out stays as it is. The Daemon saves the file, then answers with the full settings (same shape as `settings.get`). A value that is not allowed (for example an unknown `readReceipts` mode) changes nothing and gives error -32004. Fixtures: `settings-set.jsonl`, `settings-invalid.jsonl`.
+
+### `profile.logout`
+
+No params. Valid only once the Daemon is `ready` and the Profile is linked. The Daemon asks WhatsApp to remove the Companion Device, so the phone no longer lists it. It then answers with an empty `result` and runs the delete-the-Profile routine (`Profile.Delete`). `unlinked` with `by: "user"` and `ready` follow, then linking starts. Profile Settings stay. If WhatsApp cannot be reached, the Daemon gives error -32005 and keeps the Profile. The Plugin asks the user to confirm before it sends this request. Fixture: `logout.jsonl`.
 
 ### `link.pairCode`
 
@@ -137,6 +165,8 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32001 | invalid phone number | `link.pairCode` got a number that is too short or not international. |
 | -32002 | pair code failed | WhatsApp did not give a Pair Code. |
 | -32003 | chat store failed | `chats.list` could not read the chat store. |
+| -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
+| -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 

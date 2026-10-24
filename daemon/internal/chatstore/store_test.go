@@ -3,6 +3,7 @@ package chatstore_test
 import (
 	"database/sql"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -36,7 +37,7 @@ func apply(t *testing.T, s *chatstore.Store, ev whatsapp.Event) {
 
 func list(t *testing.T, s *chatstore.Store, offset, limit int) chatstore.Page {
 	t.Helper()
-	page, err := s.List(offset, limit)
+	page, err := s.List(offset, limit, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,5 +193,50 @@ func TestPagesAndRepeatedBatches(t *testing.T) {
 	var n int
 	if err := db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&n); err != nil || n != 2 {
 		t.Errorf("messages = %d, %v; want 2", n, err)
+	}
+}
+
+func TestSearchMatchesChatNameAndParticipantName(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{
+		PushNames: []whatsapp.PushName{{JID: "2@s.whatsapp.net", Name: "Bob Push"}},
+		Chats: []whatsapp.HistoryChat{
+			{JID: "1@s.whatsapp.net", LastActive: 40},
+			{JID: "g1@g.us", Kind: whatsapp.KindGroup, Subject: "Chess Club", LastActive: 30,
+				Messages: []whatsapp.Message{{ID: "m1", Sender: "2@s.whatsapp.net", Time: 30}}},
+			{JID: "g2@g.us", Kind: whatsapp.KindGroup, Subject: "Family", LastActive: 20},
+		},
+	})
+	apply(t, s, whatsapp.ContactName{JID: "1@s.whatsapp.net", Name: "Ann Contact"})
+	search := func(q string) []string {
+		t.Helper()
+		page, err := s.List(0, 50, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		names := []string{}
+		for _, c := range page.Chats {
+			names = append(names, c.Name)
+		}
+		return names
+	}
+	for _, tc := range []struct {
+		query string
+		want  []string
+	}{
+		{"ann", []string{"Ann Contact"}},    // Chat name, case does not matter
+		{" CHESS ", []string{"Chess Club"}}, // Group subject, query trimmed
+		{"bob", []string{"Chess Club"}},     // Participant who wrote in a Group Chat
+		{"+1", []string{}},                  // the contact name hides the phone number
+		{"nobody", []string{}},
+		{"", []string{"Ann Contact", "Chess Club", "Family"}},
+	} {
+		if got := search(tc.query); !slices.Equal(got, tc.want) {
+			t.Errorf("search %q = %v, want %v", tc.query, got, tc.want)
+		}
+	}
+	page, _ := s.List(1, 1, "c") // "Ann Contact" and "Chess Club" both hold "c"
+	if len(page.Chats) != 1 || page.Chats[0].Name != "Chess Club" || page.More {
+		t.Errorf("paged search = %+v", page)
 	}
 }

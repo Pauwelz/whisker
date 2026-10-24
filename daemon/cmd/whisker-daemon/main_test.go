@@ -32,7 +32,7 @@ func start(t *testing.T, bin, runtimeDir string) *child {
 	t.Helper()
 	cmd := exec.Command(bin)
 	// No session bus: the keyring fails at once, so these tests never touch the real keyring.
-	cmd.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "XDG_DATA_HOME="+runtimeDir,
+	cmd.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "XDG_DATA_HOME="+runtimeDir, "XDG_CONFIG_HOME="+runtimeDir,
 		"DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/bus")
 	in, err := cmd.StdinPipe()
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
 	"github.com/Pauwelz/whisker/daemon/internal/profilelock"
+	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
@@ -54,8 +55,18 @@ func run() int {
 		}
 		dataDir = filepath.Join(home, ".local", "share")
 	}
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "no home directory")
+			return contract.ExitError
+		}
+		configDir = filepath.Join(home, ".config")
+	}
+	prefs := settings.New(filepath.Join(configDir, "whisker", "settings.json"))
 	p := profile.New(filepath.Join(dataDir, "whisker"), keystore.New(keystore.SecretService{}, keystore.RealClock))
 	defer p.Close()
 	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
-	return contract.Run(os.Stdin, os.Stdout, os.Stderr, p, newPort)
+	return contract.Run(os.Stdin, os.Stdout, os.Stderr, p, prefs, newPort)
 }

@@ -18,6 +18,8 @@ type Fake struct {
 	sendErr    error
 	sent       []string
 	ids        int
+	logoutErr  error
+	logouts    int
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -56,6 +58,19 @@ func (f *Fake) Send(_, id, _ string) error {
 	}
 	f.sent = append(f.sent, id)
 	return nil
+}
+
+// SetLogoutError makes Logout fail with err. Pass nil to stop failing.
+func (f *Fake) SetLogoutError(err error) { f.mu.Lock(); f.logoutErr = err; f.mu.Unlock() }
+
+// Logouts counts the Logout calls.
+func (f *Fake) Logouts() int { f.mu.Lock(); defer f.mu.Unlock(); return f.logouts }
+
+func (f *Fake) Logout() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logouts++
+	return f.logoutErr
 }
 
 // Connects counts the Connect calls.
