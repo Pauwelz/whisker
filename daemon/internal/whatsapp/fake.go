@@ -28,8 +28,11 @@ type Fake struct {
 	readErr    error
 	reads      []Read
 	chatReads  []string
+	plays      []Read
 	edits      []string
 	revokes    []string
+	quotes     []string
+	reactions  []string
 	online     []bool
 	subscribed []string
 	typing     []string
@@ -70,7 +73,7 @@ func (f *Fake) NewMessageID() string {
 	return fmt.Sprintf("fake-%d", f.ids)
 }
 
-func (f *Fake) Send(_, id, _ string) error {
+func (f *Fake) Send(_, id, _ string, quote *Quote) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++
@@ -78,7 +81,34 @@ func (f *Fake) Send(_, id, _ string) error {
 		return f.sendErr
 	}
 	f.sent = append(f.sent, id)
+	if quote != nil {
+		f.quotes = append(f.quotes, id+":"+quote.ID)
+	}
 	return nil
+}
+
+// React fails with the send error, like Send. A good call is recorded as "id:emoji".
+func (f *Fake) React(_, id, _, emoji string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.reactions = append(f.reactions, id+":"+emoji)
+	return nil
+}
+
+// Quotes lists the sent replies as "id:quotedID", in order. Reactions lists the Reactions as "id:emoji".
+func (f *Fake) Quotes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.quotes...)
+}
+
+func (f *Fake) Reactions() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.reactions...)
 }
 
 // SetDownload scripts Download: it writes content to the file, or fails with err (a non-nil err wins).
@@ -118,6 +148,24 @@ func (f *Fake) Reads() []Read {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]Read{}, f.reads...)
+}
+
+// Plays lists the MarkPlayed calls that worked, in order. Each has one ID.
+func (f *Fake) Plays() []Read {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Read{}, f.plays...)
+}
+
+// MarkPlayed fails with the read error, like MarkRead.
+func (f *Fake) MarkPlayed(chat, sender, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.readErr != nil {
+		return f.readErr
+	}
+	f.plays = append(f.plays, Read{chat, sender, []string{id}})
+	return nil
 }
 
 // ChatReads lists the Chats of the MarkChatRead calls, in order.

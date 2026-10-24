@@ -27,15 +27,22 @@ type Port interface {
 	Disconnect()
 	// NewMessageID returns an unused Message ID. A send and its retries use one ID, so WhatsApp drops a repeat.
 	NewMessageID() string
-	// Send sends a text Message to a Chat. It returns ErrOffline when there is no connection.
+	// Send sends a text Message to a Chat, as a reply to quote when quote is not nil.
+	// It returns ErrOffline when there is no connection.
 	// It can block for a long time: call it off the Daemon loop.
-	Send(chat, id, text string) error
+	Send(chat, id, text string, quote *Quote) error
+	// React sets the Reaction of the user on a Message. An empty emoji removes it.
+	// sender is the author of the Message ("" for the user). It returns ErrOffline when there is no connection.
+	React(chat, id, sender, emoji string) error
 	// Download downloads the plain Media into dst, and checks it against its hashes.
 	// It can block for a long time: call it off the Daemon loop.
 	Download(ref Media, dst *os.File) error
 	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.
 	// It returns ErrOffline when there is no connection.
 	MarkRead(chat, sender string, ids []string) error
+	// MarkPlayed sends a Played receipt for one voice note. In a Group Chat sender is the author.
+	// It returns ErrOffline when there is no connection.
+	MarkPlayed(chat, sender, id string) error
 	// MarkChatRead clears the Read Marker of a Chat on the user's devices (App State). It needs a connection.
 	MarkChatRead(chat string) error
 	// Edit replaces the text of a Message of the user. It returns ErrOffline when there is no connection.
@@ -110,10 +117,18 @@ type Message struct {
 	Time     int64  `json:"time"`
 	Text     string `json:"text"`
 	PushName string `json:"pushName"` // the author's Push Name as sent with the Message, may be empty
+	Quote    *Quote `json:"quote"`    // the Message that this one replies to, nil for none
 	Media    *Media `json:"media"`
 	// Mentions are the JIDs that Text mentions as "@<user part>". MentionsMe tells that one of them is the user.
 	Mentions   []string `json:"mentions"`
 	MentionsMe bool     `json:"mentionsMe"`
+}
+
+// Quote is the Message that a reply quotes. Sender is its author, empty for the user. Text is the preview.
+type Quote struct {
+	ID     string `json:"id"`
+	Sender string `json:"sender"`
+	Text   string `json:"text"`
 }
 
 // HistoryChat is one Chat of a History Sync batch, with the App State that came with it.
@@ -196,6 +211,16 @@ type MessageRevoked struct {
 	ID   string `json:"id"`
 }
 
+// Reaction means a Participant, or another device of the user, set or removed a Reaction on a stored Message.
+// Sender and FromMe name the reactor. An empty Emoji removes it.
+type Reaction struct {
+	Chat   string `json:"chat"`
+	ID     string `json:"id"`
+	Sender string `json:"sender"`
+	FromMe bool   `json:"fromMe"`
+	Emoji  string `json:"emoji"`
+}
+
 // Presence is the availability of a Participant of a Direct Chat. LastSeen is Unix seconds, 0 when WhatsApp hides it.
 type Presence struct {
 	JID      string `json:"jid"`
@@ -227,6 +252,7 @@ func (Presence) isEvent()       {}
 func (ChatPresence) isEvent()   {}
 func (MessageEdited) isEvent()  {}
 func (MessageRevoked) isEvent() {}
+func (Reaction) isEvent()       {}
 func (Connected) isEvent()      {}
 func (Disconnected) isEvent()   {}
 func (QRCode) isEvent()         {}

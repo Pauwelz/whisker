@@ -67,6 +67,7 @@ Item {
   function closeChat() {
     stopTyping()
     // The Daemon deletes the plain Media copies of the Chat.
+    stopPlayer()
     daemon.write(State.mediaReleaseRequest(nextRequestId++, view.openChat.jid))
     view = State.closeChat(view)
     syncAttention()
@@ -99,7 +100,10 @@ Item {
 
   function setPopoutOpen(open) {
     popoutOpen = open
-    if (!open) stopTyping()
+    if (!open) {
+      stopPlayer()
+      stopTyping()
+    }
     syncAttention()
   }
 
@@ -118,6 +122,10 @@ Item {
 
   // Called by Open and by a tap on an image. A path that is already known opens at once.
   function openMedia(message) {
+    if (State.isPlaying(playingKey, message)) {
+      stopPlayer()
+      return
+    }
     var path = State.mediaPath(view, message)
     if (path !== "") {
       launch(message, path)
@@ -132,8 +140,28 @@ Item {
     daemon.write(State.mediaSaveRequest(nextRequestId++, message, path))
   }
 
-  // video in mpv, the rest in the default app
+  // The voice note that plays now, by State.mediaKey. Empty when nothing plays.
+  property string playingKey: ""
+
+  function stopPlayer() {
+    player.running = false
+    playingKey = ""
+  }
+
+  function playVoice(message, path) {
+    stopPlayer()
+    playingKey = State.mediaKey(message.chat, message.id)
+    player.command = State.openCommand(message, path)
+    player.running = true
+    daemon.write(State.playedRequest(nextRequestId++, message))
+  }
+
+  // voice in mpv without a window, video in mpv, the rest in the default app
   function launch(message, path) {
+    if (State.isVoice(message)) {
+      playVoice(message, path)
+      return
+    }
     opener.command = State.openCommand(message, path)
     opener.startDetached()
   }
@@ -171,6 +199,12 @@ Item {
     linkOpener.startDetached()
   }
 
+  // The child process of the voice note. Stop ends it. An exit that is not from a newer note clears playingKey.
+  Process {
+    id: player
+    onExited: if (!running) root.playingKey = ""
+  }
+
   // Called by the "Load older" button of the open Chat.
   function loadOlderMessages() {
     daemon.write(State.messagesRequest(nextRequestId++, view.openChat.jid, view.openChat.messages.length))
@@ -178,8 +212,14 @@ Item {
 
   // Called by the composer. `editingId` is the Message under edit, or "" for a new Message.
   // A new Message: the Daemon stores it as pending and answers with it.
-  function submitComposer(editingId, text) {
-    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, editingId, text))
+  // `quoteId` is the Message to quote, or "" for none.
+  function submitComposer(editingId, text, quoteId) {
+    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, editingId, text, quoteId))
+  }
+
+  // Called by the Reaction picker. `emoji` is the picked emoji; picking the current Reaction removes it.
+  function reactToMessage(message, emoji) {
+    daemon.write(State.reactRequest(nextRequestId++, view.openChat.jid, message.id, State.reactionChoice(message, emoji)))
   }
 
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.

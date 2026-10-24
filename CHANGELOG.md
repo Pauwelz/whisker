@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- A voice note has a Play and Stop button in the pop-out. It plays with `mpv --no-video`. Closing the pop-out stops it. The sender sees the note as played, unless Read Receipts is Off. In On interaction mode, playing also sends Read for that note only.
 - A fresh Profile shows a QR code in the pop-out. The code refreshes while the user waits.
 - A switch in the pop-out links with a Pair Code instead.
 - The pop-out leaves the linking screen when the phone authorizes the Companion Device.
@@ -28,6 +29,9 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - When the phone removes the Companion Device, the Daemon deletes the Profile and the pop-out goes back to linking.
 - The Daemon knows when the pop-out is open and which Chat it shows. Opening a Chat clears its unread mark, also on the phone. A new Message marks its Chat unread.
 - Read Receipts follow the setting: Off sends none, On open sends them for the Chat you view, On interaction sends them for the whole Chat after you send a Message there.
+- Messages show Reactions as emoji with a count. React offers the six default emoji; picking your own again removes it. A Participant has one Reaction per Message. Reactions from the phone and from others show the same way.
+- A reply can quote a Message. The pop-out shows who wrote the quoted Message and a preview. Quotes from the phone and from others show the same way.
+- With Read Receipts on "On interaction", a Reaction or a Quote reply sends the Read Receipts of the Chat, like a sent Message.
 - A new Message raises a desktop notification, except in a Muted Chat, in the Attended Chat, or when notifications are off. A click on it opens the pop-out on that Chat.
 - The bar shows the number of unread Chats, without Muted Chats. It shows only the icon when no Chat is unread.
 - A Direct Chat header shows Online or Last Seen. A Chat shows "typing…" or "recording…", with the Participant name in a Group Chat.

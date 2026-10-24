@@ -300,8 +300,11 @@ function messagesRequest(id, jid, offset) {
   return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.messages", params: { chat: jid, offset: offset } }) + "\n"
 }
 
-function sendRequest(id, jid, text) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.send", params: { chat: jid, text: text } }) + "\n"
+// `quoteId` is the Message that the new Message quotes. Leave it out for a plain Message.
+function sendRequest(id, jid, text, quoteId) {
+  var params = { chat: jid, text: text }
+  if (quoteId) params.quote = quoteId
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.send", params: params }) + "\n"
 }
 
 function retryMessageRequest(id, jid, messageId) {
@@ -401,8 +404,60 @@ function revokeRequest(id, jid, messageId) {
 }
 
 // The request for the composer text: an edit of `editingId`, or a new Message when `editingId` is empty.
-function composerRequest(id, jid, editingId, text) {
-  return editingId ? editRequest(id, jid, editingId, text) : sendRequest(id, jid, text)
+// A new Message quotes `quoteId` when it is set.
+function composerRequest(id, jid, editingId, text, quoteId) {
+  return editingId ? editRequest(id, jid, editingId, text) : sendRequest(id, jid, text, quoteId)
+}
+
+// The Reaction picker: the six default emoji of WhatsApp. Mirror of `ReactionEmoji` in daemon/internal/contract/react.go.
+var REACTION_EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
+
+// The emoji that the user set on a Message, or "".
+function myReaction(message) {
+  var mine = (message.reactions || []).filter(function (r) { return r.fromMe })
+  return mine.length ? mine[0].emoji : ""
+}
+
+// The emoji to send when the user picks `emoji` on a Message: picking the current Reaction removes it.
+function reactionChoice(message, emoji) {
+  return myReaction(message) === emoji ? "" : emoji
+}
+
+function reactRequest(id, jid, messageId, emoji) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.react", params: { chat: jid, id: messageId, emoji: emoji } }) + "\n"
+}
+
+// The Reactions of a Message as "👍 2" chips, in the order the emoji were first used. A Tombstone shows none.
+function reactionChips(message) {
+  if (message.revoked) return []
+  var order = []
+  var counts = {}
+  ;(message.reactions || []).forEach(function (r) {
+    if (!counts[r.emoji]) { counts[r.emoji] = 0; order.push(r.emoji) }
+    counts[r.emoji]++
+  })
+  return order.map(function (emoji) { return { emoji: emoji, count: counts[emoji] } })
+}
+
+// The Quote above a reply: who wrote the quoted Message and a one-line preview. Null when the Message has no Quote.
+var QUOTE_PREVIEW_LENGTH = 80
+
+function quoteView(message) {
+  var quote = message.quote
+  if (!quote) return null
+  var text = String(quote.text).replace(/\s+/g, " ").trim()
+  if (text.length > QUOTE_PREVIEW_LENGTH) text = text.slice(0, QUOTE_PREVIEW_LENGTH - 1) + "…"
+  return { sender: quote.fromMe ? "You" : quote.senderName, text: text }
+}
+
+// A Message can be quoted unless it is a Tombstone.
+function canQuoteMessage(message) {
+  return !message.revoked
+}
+
+// A Message can get a Reaction once WhatsApp has it: any Message of others, or a Message of the user that was sent.
+function canReactToMessage(message) {
+  return !message.revoked && (!message.fromMe || ["sent", "delivered", "read", "played"].indexOf(message.state) >= 0)
 }
 
 // The number of unread Chats the bar shows: a Chat with a Read Marker counts, a Muted Chat does not.
@@ -578,9 +633,30 @@ function canOpenMedia(message) {
   return !!message.media && message.media.state === "ready"
 }
 
-// The command that opens a plain copy: video in mpv, everything else in the default app.
+// The command that opens a plain copy: video in mpv, a voice note in mpv without a window, everything else in the default app.
 function openCommand(message, path) {
+  if (message.media.kind === "voice") return ["mpv", "--no-video", path]
   return message.media.kind === "video" ? ["mpv", path] : ["xdg-open", path]
+}
+
+// Voice notes play in the pop-out. `playingKey` is the mediaKey of the note that plays now, or "".
+function isVoice(message) {
+  return !!message.media && message.media.kind === "voice"
+}
+
+function isPlaying(playingKey, message) {
+  return playingKey !== "" && playingKey === mediaKey(message.chat, message.id)
+}
+
+// The label of the button that opens Media: Play or Stop for a voice note, Open for the rest.
+function openLabel(message, playingKey) {
+  if (!isVoice(message)) return "Open"
+  return isPlaying(playingKey, message) ? "Stop" : "Play"
+}
+
+// The Daemon sends Played (and Read for that Message in On interaction mode) when playback starts.
+function playedRequest(id, message) {
+  return mediaRequest(id, "media.played", { chat: message.chat, id: message.id })
 }
 
 function mediaRequest(id, method, params) {

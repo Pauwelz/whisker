@@ -48,8 +48,10 @@ const (
 	methodMediaOpen     = "media.open"
 	methodMediaSave     = "media.save"
 	methodMediaRelease  = "media.release"
+	methodMediaPlayed   = "media.played"
 	methodChatEdit      = "chat.edit"
 	methodChatRevoke    = "chat.revoke"
+	methodChatReact     = "chat.react"
 	methodChatTyping    = "chat.typing"
 	methodSettingsGet   = "settings.get"
 	methodSettingsSet   = "settings.set"
@@ -161,7 +163,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			sent = box.results
 			loader = newMediaLoader(chats, port, profile.Media(), box.notify, logOut)
 			mediaDone = loader.results
-			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut}
+			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut, played: map[string]bool{}}
 			box.incoming = read.incoming
 			box.notice = (&notifier{chats: chats, prefs: prefs, attn: &attn, logOut: logOut}).frame
 			pres = newPresenter(port, prefs, &attn, logOut)
@@ -256,6 +258,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					Open   bool   `json:"open"`
 					Typing bool   `json:"typing"`
 					ID     string `json:"id"`
+					Emoji  string `json:"emoji"`
+					Quote  string `json:"quote"`
 					Path   string `json:"path"`
 					settings.Update
 				} `json:"params"`
@@ -283,7 +287,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			} else if req.Method == methodChatMessages && ready {
 				reply = chatMessagesReply(chats, req.ID, req.Params.Chat, req.Params.Offset, req.Params.Limit, logOut)
 			} else if req.Method == methodChatSend && ready && port.Linked() {
-				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, logOut)
+				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, req.Params.Quote, logOut)
 			} else if req.Method == methodChatRetry && ready && port.Linked() {
 				reply, submit = chatRetryReply(chats, req.ID, req.Params.Chat, req.Params.ID, logOut)
 			} else if req.Method == methodMediaDownload && ready && port.Linked() {
@@ -299,6 +303,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			} else if req.Method == methodMediaRelease && ready {
 				loader.store.Release(req.Params.Chat)
 				reply = resultReply(req.ID, map[string]any{})
+			} else if req.Method == methodMediaPlayed && ready {
+				reply = loader.playedReply(req.ID, req.Params.Chat, req.Params.ID, read)
 			} else if req.Method == methodAttentionSet && ready {
 				listChanged = read.setAttention(req.Params.Open, req.Params.Chat)
 				pres.sync()
@@ -307,6 +313,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				reply, changed = chatEditReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, req.Params.Text, logOut)
 			} else if req.Method == methodChatRevoke && ready && port.Linked() {
 				reply, changed = chatRevokeReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, logOut)
+			} else if req.Method == methodChatReact && ready && port.Linked() {
+				reply, changed = chatReactReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, req.Params.Emoji, logOut)
 			} else if req.Method == methodChatTyping && ready && port.Linked() {
 				pres.typing(req.Params.Chat, req.Params.Typing)
 				reply = resultReply(req.ID, map[string]any{})
@@ -340,6 +348,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				if req.Method == methodChatSend {
 					read.interaction(submit.Chat) // a sent Message is the interaction
 				}
+			}
+			if changed != nil && req.Method == methodChatReact {
+				read.interaction(changed.Chat) // a Reaction is an interaction, like a sent Message
 			}
 			if download != nil {
 				download()
@@ -383,7 +394,7 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 		ok = send(notification("linkFailed", map[string]any{"reason": ev.Reason}))
 	case whatsapp.LoggedOut:
 		return unlink()
-	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt, whatsapp.MessageEdited, whatsapp.MessageRevoked:
+	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt, whatsapp.MessageEdited, whatsapp.MessageRevoked, whatsapp.Reaction:
 		ok = box.handle(ev)
 		if nm, isNew := ev.(whatsapp.NewMessage); isNew {
 			loader.autoStart(nm)
@@ -450,11 +461,20 @@ func chatMessagesReply(chats *chatstore.Store, id json.RawMessage, chat string, 
 }
 
 // chatSendReply stores the text as a pending Message. The caller sends it after the reply.
-func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, text string, logOut io.Writer) (map[string]any, *chatstore.Message) {
+// A non-empty quoteID makes it a reply: that Message must exist in the Chat and not be a Tombstone.
+func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, text, quoteID string, logOut io.Writer) (map[string]any, *chatstore.Message) {
 	if strings.TrimSpace(text) == "" || utf8.RuneCountInString(text) > maxTextRunes {
 		return errorReply(id, errMessage, "invalid message"), nil
 	}
-	m, err := chats.AddPending(chat, port.NewMessageID(), text)
+	var quote *whatsapp.Quote
+	if quoteID != "" {
+		q, err := chats.Message(chat, quoteID)
+		if err != nil || q.Revoked {
+			return storeOrInvalid(id, err, logOut), nil
+		}
+		quote = &whatsapp.Quote{ID: q.ID, Sender: q.Sender, Text: q.Text}
+	}
+	m, err := chats.AddPending(chat, port.NewMessageID(), text, quote)
 	return messageReply(id, m, err, logOut)
 }
 

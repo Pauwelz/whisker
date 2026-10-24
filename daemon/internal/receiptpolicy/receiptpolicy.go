@@ -13,7 +13,7 @@ const (
 	// Incoming: a new Message arrived in the Chat.
 	Incoming
 	// Interaction: the user sent a Message in the Chat.
-	// Only a sent Message is an interaction now. Reactions and Quotes join later.
+	// A sent Message (also a Quote reply) and a Reaction of the user are interactions.
 	// Edit, Revoke, typing and opening Media are not interactions: they never call Due.
 	Interaction
 )
@@ -28,4 +28,16 @@ func Due(mode string, t Trigger, attended bool) bool {
 		return t == Interaction
 	}
 	return false
+}
+
+// Played reports what to send when the user starts a voice note.
+// played: send Played. read: also send Read for that Message only (never for the rest of the Chat).
+func Played(mode string) (played, read bool) {
+	switch mode {
+	case settings.ReadReceiptsOnOpen:
+		return true, false // Read went out when the Chat became attended
+	case settings.ReadReceiptsOnInteraction:
+		return true, true
+	}
+	return false, false
 }
