@@ -35,7 +35,7 @@ Item {
 
   // Called by the Pair Code form.
   function requestPairCode(phone) {
-    daemon.write(State.pairCodeRequest(nextRequestId++, phone))
+    send(State.pairCodeRequest, phone)
   }
 
   // The text of the search field. It filters every Chat list request.
@@ -43,13 +43,13 @@ Item {
 
   // Called by the "Load more" button of the Chat list.
   function loadMoreChats() {
-    daemon.write(State.chatListRequest(nextRequestId++, view.chats ? view.chats.length : 0, chatQuery))
+    send(State.chatListRequest, view.chats ? view.chats.length : 0, chatQuery)
   }
 
   // Called when the search field changes.
   function searchChats(text) {
     chatQuery = text
-    daemon.write(State.chatListRequest(nextRequestId++, 0, chatQuery))
+    send(State.chatListRequest, 0, chatQuery)
   }
 
   // Called when the user picks a Chat of the Chat list. `chat` is a row of the list.
@@ -57,8 +57,8 @@ Item {
     if (view.openChat) leaveChat() // a notification click can open a Chat while another is open
     view = State.openChat(view, chat)
     syncAttention()
-    daemon.write(State.messagesRequest(nextRequestId++, chat.jid, 0))
-    daemon.write(State.draftGetRequest(nextRequestId++, chat.jid))
+    send(State.messagesRequest, chat.jid, 0)
+    send(State.draftGetRequest, chat.jid)
   }
 
   // Called when the user changes the Draft: the composer text, or a Quote or Edit target. The Daemon stores it.
@@ -66,7 +66,7 @@ Item {
     var next = State.changeDraft(view, changes)
     if (next === view) return
     view = next
-    daemon.write(State.draftSetRequest(nextRequestId++, view.openChat.jid, view.openChat.draft))
+    send(State.draftSetRequest, view.openChat.jid, view.openChat.draft)
   }
 
   // Called by the IPC handler `openChat`, which a click on a notification runs.
@@ -78,7 +78,7 @@ Item {
   function leaveChat() {
     stopTyping()
     stopPlayer()
-    daemon.write(State.mediaReleaseRequest(nextRequestId++, view.openChat.jid))
+    send(State.mediaReleaseRequest, view.openChat.jid)
   }
 
   function closeChat() {
@@ -97,7 +97,7 @@ Item {
     var action = State.typingAction(typingChat !== "", text)
     if (action === "start") {
       typingChat = view.openChat.jid
-      daemon.write(State.typingRequest(nextRequestId++, typingChat, true))
+      send(State.typingRequest, typingChat, true)
     } else if (action === "stop") {
       stopTyping()
     }
@@ -105,7 +105,7 @@ Item {
 
   function stopTyping() {
     if (typingChat === "") return
-    daemon.write(State.typingRequest(nextRequestId++, typingChat, false))
+    send(State.typingRequest, typingChat, false)
     typingChat = ""
   }
 
@@ -124,7 +124,7 @@ Item {
 
   function syncAttention() {
     if (!daemon.running) return
-    daemon.write(State.attentionRequest(nextRequestId++, popoutOpen, view.openChat ? view.openChat.jid : ""))
+    send(State.attentionRequest, popoutOpen, view.openChat ? view.openChat.jid : "")
   }
 
   // Media the user clicked to open, by key, until its path arrives.
@@ -132,7 +132,7 @@ Item {
 
   // Called by the Download button.
   function downloadMedia(message) {
-    daemon.write(State.mediaDownloadRequest(nextRequestId++, message))
+    send(State.mediaDownloadRequest, message)
   }
 
   // Called by Open and by a tap on an image. A path that is already known opens at once.
@@ -144,13 +144,13 @@ Item {
       launch(message, step.path)
     } else {
       pendingOpen = State.rememberOpen(pendingOpen, message)
-      daemon.write(State.mediaOpenRequest(nextRequestId++, message))
+      send(State.mediaOpenRequest, message)
     }
   }
 
   // Called by Save as, with an absolute path.
   function saveMedia(message, path) {
-    daemon.write(State.mediaSaveRequest(nextRequestId++, message, path))
+    send(State.mediaSaveRequest, message, path)
   }
 
   // The voice note that plays now, by State.mediaKey. Empty when nothing plays.
@@ -166,7 +166,7 @@ Item {
     playingKey = State.mediaKey(message.chat, message.id)
     player.command = State.openCommand(message, path)
     player.running = true
-    daemon.write(State.playedRequest(nextRequestId++, message))
+    send(State.playedRequest, message)
   }
 
   // voice in mpv without a window, video in mpv, the rest in the default app
@@ -185,7 +185,7 @@ Item {
     view = step.state
     pendingOpen = step.pending
     if (step.launch) launch(step.launch.message, step.launch.path)
-    step.load.forEach(function(m) { daemon.write(State.mediaOpenRequest(nextRequestId++, m)) })
+    step.load.forEach(function(m) { send(State.mediaOpenRequest, m) })
   }
 
   Process {
@@ -212,20 +212,20 @@ Item {
 
   // Called by the "Load older" button of the open Chat.
   function loadOlderMessages() {
-    daemon.write(State.messagesRequest(nextRequestId++, view.openChat.jid, view.openChat.messages.length))
+    send(State.messagesRequest, view.openChat.jid, view.openChat.messages.length)
   }
 
   // Called by the composer. The Draft says whether this is an edit, and what the new Message quotes.
   // The Daemon clears the Draft when it accepts the send or edit; the view clears its copy at once.
   function submitComposer(text) {
     var draft = State.draftOf(view)
-    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, draft.edit, text, draft.quote, draft.attachment))
+    send(State.composerRequest, view.openChat.jid, draft.edit, text, draft.quote, draft.attachment)
     view = State.clearDraft(view)
   }
 
   // Called by the Reaction picker. `emoji` is the picked emoji; picking the current Reaction removes it.
   function reactToMessage(message, emoji) {
-    daemon.write(State.reactRequest(nextRequestId++, view.openChat.jid, message.id, State.reactionChoice(message, emoji)))
+    send(State.reactRequest, view.openChat.jid, message.id, State.reactionChoice(message, emoji))
   }
 
   // Called by the file picker of the composer. `url` is the picked file. It waits in the Draft until the user sends.
@@ -235,22 +235,22 @@ Item {
 
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.
   function revokeMessage(messageId) {
-    daemon.write(State.revokeRequest(nextRequestId++, view.openChat.jid, messageId))
+    send(State.revokeRequest, view.openChat.jid, messageId)
   }
 
   // Called by the Retry button of a failed Message.
   function retryMessage(messageId) {
-    daemon.write(State.retryMessageRequest(nextRequestId++, view.openChat.jid, messageId))
+    send(State.retryMessageRequest, view.openChat.jid, messageId)
   }
 
   // Called by the settings view. `changes` holds only the settings that change.
   function changeSettings(changes) {
-    daemon.write(State.settingsSetRequest(nextRequestId++, changes))
+    send(State.settingsSetRequest, changes)
   }
 
   // Called by the Log out button, after the user confirmed.
   function logout() {
-    daemon.write(State.logoutRequest(nextRequestId++))
+    send(State.logoutRequest)
   }
 
   // Called by the Retry button.
@@ -258,11 +258,11 @@ Item {
     var kind = State.retryKind(view)
     if (kind === "keyring") {
       view = State.initialState()
-      daemon.write(State.keyringRetryRequest(nextRequestId++))
+      send(State.keyringRetryRequest)
       return
     }
     if (kind === "link") {
-      daemon.write(State.linkRetryRequest(nextRequestId++))
+      send(State.linkRetryRequest)
       return
     }
     downloaded = false
@@ -281,6 +281,11 @@ Item {
   }
 
   property int nextRequestId: 1
+
+  // Sends one request to the Daemon. `builder` is a State.xRequest function; this gives it the next request id, then the other arguments.
+  function send(builder) {
+    daemon.write(builder.apply(State, [nextRequestId++].concat(Array.prototype.slice.call(arguments, 1))))
+  }
 
   FileView {
     path: root.pluginDir + "manifest.json"
@@ -315,11 +320,11 @@ Item {
         if (State.resendsAttention(frame)) root.syncAttention()
         if (State.reloadsOpenChat(root.view, frame)) {
           root.syncAttention()
-          daemon.write(State.messagesRequest(root.nextRequestId++, root.view.openChat.jid, 0))
-          daemon.write(State.draftGetRequest(root.nextRequestId++, root.view.openChat.jid))
+          root.send(State.messagesRequest, root.view.openChat.jid, 0)
+          root.send(State.draftGetRequest, root.view.openChat.jid)
         }
-        if (State.requestsSettings(frame)) daemon.write(State.settingsGetRequest(root.nextRequestId++))
-        if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0, root.chatQuery))
+        if (State.requestsSettings(frame)) root.send(State.settingsGetRequest)
+        if (State.refreshesChats(frame)) root.send(State.chatListRequest, 0, root.chatQuery)
       }
     }
     stderr: SplitParser {
