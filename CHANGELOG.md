@@ -12,3 +12,4 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - A bar icon with a pop-out that shows when the Daemon is ready.
 - The Daemon speaks JSON-RPC over stdio and answers `--version`.
 - `scripts/build-daemon.sh` builds the Daemon for local development.
+- `CONTRIBUTING.md` explains how to send a pull request to `dev`.
