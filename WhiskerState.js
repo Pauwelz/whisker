@@ -389,12 +389,23 @@ function unreadLabel(state) {
   return count > 0 ? String(count) : ""
 }
 
+// What a notification says for a Message with Media and no text. Keys are the Media kinds of docs/contract.md.
+var MEDIA_LABELS = {
+  image: "Photo",
+  sticker: "Sticker",
+  voice: "Voice message",
+  audio: "Audio",
+  video: "Video",
+  document: "Document"
+}
+
 // The command that shows a `notify` frame as a desktop notification. A click runs the Plugin IPC handler `openChat`.
 // A Group Chat shows the sender in front of the text. The headline cannot start with "-": the sender script would read an option.
 // --exec comes last, and each word is one argument, so a Chat id never becomes a command.
 function notifyCommand(params) {
   var headline = params.name.charAt(0) === "-" ? " " + params.name : params.name
-  var body = params.kind === "group" && params.senderName ? params.senderName + ": " + params.text : params.text
+  var text = params.text || MEDIA_LABELS[params.media] || ""
+  var body = params.kind === "group" && params.senderName ? params.senderName + ": " + text : text
   return ["omarchy-notification-send", "--app-name", "whisker", headline, body,
     "--exec", "omarchy-shell", "pauwelz.whisker", "openChat", params.chat]
 }

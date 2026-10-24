@@ -46,5 +46,9 @@ func (n *notifier) frame(ev whatsapp.NewMessage) map[string]any {
 		fmt.Fprintln(n.logOut, "chat store read failed")
 		return nil
 	}
-	return notification("notify", map[string]any{"chat": chat.JID, "kind": chat.Kind, "name": chat.Name, "senderName": m.SenderName, "text": m.Text})
+	params := map[string]any{"chat": chat.JID, "kind": chat.Kind, "name": chat.Name, "senderName": m.SenderName, "text": m.Text}
+	if m.Media != nil {
+		params["media"] = m.Media.Kind // the Plugin names the Media when there is no text
+	}
+	return notification("notify", params)
 }

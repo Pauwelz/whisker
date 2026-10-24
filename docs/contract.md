@@ -118,7 +118,7 @@ Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-f
 
 ### `notify`
 
-A new Message raises a desktop notification. The Daemon sends `notify` after `messageChanged` and `chatsChanged` of that Message. `kind` is the Chat kind, `name` follows the name rule, and `senderName` follows the name rule for Participants.
+A new Message raises a desktop notification. The Daemon sends `notify` after `messageChanged` and `chatsChanged` of that Message. `kind` is the Chat kind, `name` follows the name rule, and `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it.
 
 ```json
 {"jsonrpc":"2.0","method":"notify","params":{"chat":"g1@g.us","kind":"group","name":"Crew","senderName":"Bob","text":"hello"}}
@@ -220,7 +220,7 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 ```
 
 - Offset 0 is the newest page. A page is in time order, oldest first. `more` is true when older Messages exist at `offset + limit`.
-- `senderName` follows the name rule for Participants. It is empty for the Messages of the user.
+- `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it. It is empty for the Messages of the user.
 - `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
 - `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
 - `media` is present only for a Message with Media, see Media below. It never holds a path or bytes.

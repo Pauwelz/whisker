@@ -28,7 +28,7 @@ test("a Chat marked unread on the phone counts after chats.list", () => {
 test("a notify frame becomes a notification whose click opens the Chat", () => {
   const frame = { method: "notify", params: { chat: "g1@g.us", kind: "group", name: "Crew", senderName: "Bob", text: "hi" } };
   assert.equal(State.isNotify(frame), true);
-  assert.deepEqual(State.notifyCommand(frame.params), [
+  assert.deepEqual(JSON.parse(JSON.stringify(State.notifyCommand(frame.params))), [
     "omarchy-notification-send", "--app-name", "whisker", "Crew", "Bob: hi",
     "--exec", "omarchy-shell", "pauwelz.whisker", "openChat", "g1@g.us",
   ]);
@@ -43,5 +43,10 @@ test("a headline that starts with a dash is not read as an option", () => {
 test("chatByJid finds a listed Chat and falls back to a minimal row", () => {
   const chats = [{ jid: "1", name: "Ann", kind: "direct" }];
   assert.equal(State.chatByJid({ chats }, "1").name, "Ann");
-  assert.deepEqual(State.chatByJid({ chats }, "9"), { jid: "9", name: "9", kind: "direct" });
+  assert.deepEqual(JSON.parse(JSON.stringify(State.chatByJid({ chats }, "9"))), { jid: "9", name: "9", kind: "direct" });
+});
+
+test("a Message with Media and no text is named by its Media", () => {
+  const argv = State.notifyCommand({ chat: "1", kind: "direct", name: "Ann", senderName: "Ann", text: "", media: "voice" });
+  assert.equal(argv[4], "Voice message");
 });
