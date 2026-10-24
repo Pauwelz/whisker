@@ -39,9 +39,9 @@ type outbox struct {
 	gen      int // counts the Connected events, so a send can tell that a reconnect came while it ran
 	inflight map[string]bool
 	results  chan sendResult
-	incoming func(whatsapp.NewMessage)                // runs after a new Message is stored, may be nil
-	notice   func(whatsapp.NewMessage) map[string]any // the `notify` frame of a new Message, or nil; may be nil
 	store    *media.Store                             // holds the files of Media to send
+	incoming func(whatsapp.NewMessage)                // runs after a new Message is stored
+	notice   func(whatsapp.NewMessage) map[string]any // the `notify` frame of a new Message, or nil
 }
 
 type sendResult struct {
@@ -50,8 +50,10 @@ type sendResult struct {
 	err      error
 }
 
-func newOutbox(chats *chatstore.Store, port whatsapp.Port, send func(map[string]any) bool, logOut io.Writer) *outbox {
-	return &outbox{chats: chats, port: port, send: send, logOut: logOut, inflight: map[string]bool{}, results: make(chan sendResult, 64)}
+func newOutbox(chats *chatstore.Store, port whatsapp.Port, store *media.Store, send func(map[string]any) bool, logOut io.Writer,
+	incoming func(whatsapp.NewMessage), notice func(whatsapp.NewMessage) map[string]any) *outbox {
+	return &outbox{chats: chats, port: port, store: store, send: send, logOut: logOut, incoming: incoming, notice: notice,
+		inflight: map[string]bool{}, results: make(chan sendResult, 64)}
 }
 
 // submit starts the send of a pending Message. It does nothing offline, or while that Message is in flight.
@@ -74,7 +76,7 @@ func (b *outbox) submit(m chatstore.Message) {
 	}
 	var quote *whatsapp.Quote
 	if m.Quote != nil {
-		quote = &whatsapp.Quote{ID: m.Quote.ID, Sender: m.Quote.Sender, Text: m.Quote.Text}
+		quote = whatsappQuote(m.Quote.ID, m.Quote.Sender, m.Quote.Text)
 	}
 	go func() {
 		b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text, quote, timer)}
@@ -146,46 +148,55 @@ func (b *outbox) notify(chat, id string) bool {
 	return b.send(notification("messageChanged", map[string]any{"message": m}))
 }
 
-// handle turns a connection, Message, edit, revoke, Reaction or receipt event into frames. It returns false when a frame could not be written.
-func (b *outbox) handle(ev whatsapp.Event) bool {
-	switch ev := ev.(type) {
-	case whatsapp.Connected:
-		b.online = true
-		b.gen++
-		if !b.send(notification("connected", nil)) {
+// connected runs when the connection is up: the Plugin hears of it, then every pending Message goes out.
+// Each method below returns false when a frame could not be written.
+func (b *outbox) connected() bool {
+	b.online = true
+	b.gen++
+	if !b.send(notification("connected", nil)) {
+		return false
+	}
+	b.flush()
+	return true
+}
+
+func (b *outbox) disconnected() bool {
+	b.online = false
+	return b.send(notification("disconnected", nil))
+}
+
+// incomingMessage stores a new Message and tells the Plugin: the Message, the Chat list, then the notification if the policy says so.
+func (b *outbox) incomingMessage(ev whatsapp.NewMessage) bool {
+	if err := b.chats.PutLive(ev, livePolicy(ev)); err != nil {
+		fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
+		return true
+	}
+	b.incoming(ev)
+	if !b.notify(ev.Chat, ev.Message.ID) || !b.send(notification("chatsChanged", nil)) {
+		return false
+	}
+	if frame := b.notice(ev); frame != nil {
+		return b.send(frame)
+	}
+	return true
+}
+
+func (b *outbox) edited(ev whatsapp.MessageEdited) bool {
+	return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Edit(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Text) })
+}
+
+func (b *outbox) revoked(ev whatsapp.MessageRevoked) bool {
+	return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Revoke(ev.Chat, ev.ID) })
+}
+
+func (b *outbox) reacted(ev whatsapp.Reaction) bool {
+	return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.SetReaction(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Emoji) })
+}
+
+func (b *outbox) receipt(ev whatsapp.Receipt) bool {
+	for _, id := range ev.IDs {
+		if !b.move(ev.Chat, id, func() (bool, error) { return b.chats.Advance(ev.Chat, id, ev.State) }) {
 			return false
-		}
-		b.flush()
-	case whatsapp.Disconnected:
-		b.online = false
-		return b.send(notification("disconnected", nil))
-	case whatsapp.NewMessage:
-		if err := b.chats.PutLive(ev, livePolicy(ev)); err != nil {
-			fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
-			return true
-		}
-		if b.incoming != nil {
-			b.incoming(ev)
-		}
-		if !b.notify(ev.Chat, ev.Message.ID) || !b.send(notification("chatsChanged", nil)) {
-			return false
-		}
-		if b.notice != nil {
-			if frame := b.notice(ev); frame != nil {
-				return b.send(frame)
-			}
-		}
-	case whatsapp.MessageEdited:
-		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Edit(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Text) })
-	case whatsapp.MessageRevoked:
-		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Revoke(ev.Chat, ev.ID) })
-	case whatsapp.Reaction:
-		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.SetReaction(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Emoji) })
-	case whatsapp.Receipt:
-		for _, id := range ev.IDs {
-			if !b.move(ev.Chat, id, func() (bool, error) { return b.chats.Advance(ev.Chat, id, ev.State) }) {
-				return false
-			}
 		}
 	}
 	return true

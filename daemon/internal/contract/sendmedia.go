@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
@@ -39,8 +38,8 @@ func sniffMime(path string, f *os.File) string {
 // chatSendMediaReply stores the file encrypted in the Profile and adds a pending Message. The caller sends it after the reply.
 // shortcut: the copy into the Profile runs on the Daemon loop, so a very large file blocks other requests for a moment.
 func chatSendMediaReply(chats *chatstore.Store, store *media.Store, newID func() string, id json.RawMessage, chat, path, caption string, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	invalid := errorReply(id, errMessage, "invalid message")
-	if !filepath.IsAbs(path) || utf8.RuneCountInString(caption) > maxTextRunes {
+	invalid := errorReply(id, errMessage, msgInvalidMessage)
+	if !filepath.IsAbs(path) || !fitsMessage(caption) {
 		return invalid, nil
 	}
 	f, err := os.Open(path)
@@ -58,12 +57,12 @@ func chatSendMediaReply(chats *chatstore.Store, store *media.Store, newID func()
 	}
 	if _, err := rand.Read(m.Key); err != nil {
 		fmt.Fprintln(logOut, "media copy failed")
-		return errorReply(id, errMediaFailed, "media copy failed"), nil
+		return errorReply(id, errMediaFailed, msgMediaCopy), nil
 	}
 	msgID := newID()
 	if err := store.Put(chat, msgID, m.Kind, m.Key, f); err != nil {
 		fmt.Fprintln(logOut, "media copy failed") // the error text could hold paths
-		return errorReply(id, errMediaFailed, "media copy failed"), nil
+		return errorReply(id, errMediaFailed, msgMediaCopy), nil
 	}
 	msg, err := chats.AddPendingMedia(chat, msgID, caption, &m)
 	if err != nil {

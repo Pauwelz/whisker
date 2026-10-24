@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
@@ -27,7 +25,7 @@ func sentByWhatsApp(state string) bool {
 func chatEditReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, msgID, text string, logOut io.Writer) (map[string]any, *chatstore.Message) {
 	m, err := chats.Message(chat, msgID)
 	if err != nil || !m.FromMe || m.Revoked || !sentByWhatsApp(m.State) ||
-		strings.TrimSpace(text) == "" || utf8.RuneCountInString(text) > maxTextRunes ||
+		!validText(text) ||
 		Now().Sub(time.Unix(m.Time, 0)) > EditWindow {
 		return storeOrInvalid(id, err, logOut), nil
 	}
@@ -53,24 +51,24 @@ func chatRevokeReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMess
 func storeOrInvalid(id json.RawMessage, err error, logOut io.Writer) map[string]any {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		fmt.Fprintln(logOut, "message read failed")
-		return errorReply(id, errChatStore, "chat store failed")
+		return errorReply(id, errChatStore, msgChatStore)
 	}
-	return errorReply(id, errMessage, "invalid message")
+	return errorReply(id, errMessage, msgInvalidMessage)
 }
 
 func sendFailed(id json.RawMessage, err error, logOut io.Writer) map[string]any {
 	fmt.Fprintln(logOut, "edit or revoke failed") // the error text could hold names
 	if errors.Is(err, whatsapp.ErrOffline) {
-		return errorReply(id, errSendFailed, "not connected")
+		return errorReply(id, errSendFailed, msgNotConnected)
 	}
-	return errorReply(id, errSendFailed, "send failed")
+	return errorReply(id, errSendFailed, msgSendFailed)
 }
 
 // changedReply stores the change and answers with the new Message.
 func changedReply(id json.RawMessage, logOut io.Writer, chats *chatstore.Store, chat, msgID string, change func() (bool, error)) (map[string]any, *chatstore.Message) {
 	if _, err := change(); err != nil {
 		fmt.Fprintln(logOut, "message write failed")
-		return errorReply(id, errChatStore, "chat store failed"), nil
+		return errorReply(id, errChatStore, msgChatStore), nil
 	}
 	m, err := chats.Message(chat, msgID)
 	return messageReply(id, m, err, logOut)

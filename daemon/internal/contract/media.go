@@ -90,14 +90,14 @@ func (l *mediaLoader) downloadReply(id json.RawMessage, chat, msgID string) (map
 	switch {
 	case err != nil:
 		fmt.Fprintln(l.logOut, "chat store write failed")
-		return errorReply(id, errChatStore, "chat store failed"), false
+		return errorReply(id, errChatStore, msgChatStore), false
 	case !changed:
-		return errorReply(id, errMedia, "invalid media"), false
+		return errorReply(id, errMedia, msgInvalidMedia), false
 	}
 	m, err := l.chats.Message(chat, msgID)
 	if err != nil {
 		fmt.Fprintln(l.logOut, "chat store read failed")
-		return errorReply(id, errChatStore, "chat store failed"), false
+		return errorReply(id, errChatStore, msgChatStore), false
 	}
 	return resultReply(id, map[string]any{"message": m}), true
 }
@@ -112,7 +112,7 @@ func (l *mediaLoader) ready(chat, id string) (chatstore.MediaRef, bool) {
 func (l *mediaLoader) openReply(id json.RawMessage, chat, msgID string) map[string]any {
 	ref, ok := l.ready(chat, msgID)
 	if !ok {
-		return errorReply(id, errMedia, "invalid media")
+		return errorReply(id, errMedia, msgInvalidMedia)
 	}
 	// shortcut: the decrypt runs on the Daemon loop, so a very large video blocks other requests for a moment.
 	path, err := l.store.Plain(chat, msgID, extension(ref.Media), ref.Kind, ref.Key)
@@ -126,7 +126,7 @@ func (l *mediaLoader) openReply(id json.RawMessage, chat, msgID string) map[stri
 func (l *mediaLoader) saveReply(id json.RawMessage, chat, msgID, dst string) map[string]any {
 	ref, ok := l.ready(chat, msgID)
 	if !ok || !filepath.IsAbs(dst) {
-		return errorReply(id, errMedia, "invalid media")
+		return errorReply(id, errMedia, msgInvalidMedia)
 	}
 	if err := l.store.Export(chat, msgID, ref.Kind, ref.Key, dst); err != nil {
 		return l.failed(id, err)
@@ -139,7 +139,7 @@ func (l *mediaLoader) playedReply(id json.RawMessage, chat, msgID string, read *
 	ref, ok := l.ready(chat, msgID)
 	m, err := l.chats.Message(chat, msgID)
 	if !ok || err != nil || ref.Kind != media.Voice || m.FromMe {
-		return errorReply(id, errMedia, "invalid media")
+		return errorReply(id, errMedia, msgInvalidMedia)
 	}
 	read.playedNote(chat, m.Sender, msgID)
 	return resultReply(id, map[string]any{})
@@ -148,10 +148,10 @@ func (l *mediaLoader) playedReply(id json.RawMessage, chat, msgID string, read *
 func (l *mediaLoader) failed(id json.RawMessage, err error) map[string]any {
 	if errors.Is(err, media.ErrIntegrity) {
 		fmt.Fprintln(l.logOut, "media failed the integrity check")
-		return errorReply(id, errMediaFailed, "media failed the integrity check")
+		return errorReply(id, errMediaFailed, msgMediaIntegrity)
 	}
 	fmt.Fprintln(l.logOut, "media copy failed") // the error text could hold paths
-	return errorReply(id, errMediaFailed, "media copy failed")
+	return errorReply(id, errMediaFailed, msgMediaCopy)
 }
 
 // extension is the file extension for a plain copy. Other apps use it to pick the type.

@@ -30,7 +30,7 @@ func newStore(t *testing.T) (*chatstore.Store, *sql.DB) {
 
 func apply(t *testing.T, s *chatstore.Store, ev whatsapp.Event) {
 	t.Helper()
-	if err := s.Apply(ev); err != nil {
+	if _, err := s.Apply(ev); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -11,14 +11,11 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"rsc.io/qr"
 
-	"github.com/Pauwelz/whisker/daemon/internal/attention"
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
-	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
@@ -35,32 +32,6 @@ const (
 // MaxLineBytes is the longest accepted input line, without the newline.
 const MaxLineBytes = 1 << 20
 
-const (
-	methodKeyringRetry  = "keyring.retry"
-	methodLinkPairCode  = "link.pairCode"
-	methodLinkRetry     = "link.retry"
-	methodChatsList     = "chats.list"
-	methodChatMessages  = "chat.messages"
-	methodChatSend      = "chat.send"
-	methodChatRetry     = "chat.retry"
-	methodChatSendMedia = "chat.sendMedia"
-	methodAttentionSet  = "attention.set"
-	methodMediaDownload = "media.download"
-	methodMediaOpen     = "media.open"
-	methodMediaSave     = "media.save"
-	methodMediaRelease  = "media.release"
-	methodMediaPlayed   = "media.played"
-	methodChatEdit      = "chat.edit"
-	methodChatRevoke    = "chat.revoke"
-	methodChatReact     = "chat.react"
-	methodChatTyping    = "chat.typing"
-	methodDraftGet      = "draft.get"
-	methodDraftSet      = "draft.set"
-	methodSettingsGet   = "settings.get"
-	methodSettingsSet   = "settings.set"
-	methodLogout        = "profile.logout"
-)
-
 // Page size of chats.list and chat.messages: the default, and the most a request can ask for.
 const (
 	defaultChatsLimit = 50
@@ -69,6 +40,17 @@ const (
 
 // maxTextRunes is the WhatsApp limit for the text of a Message.
 const maxTextRunes = 65536
+
+// fitsMessage tells that text is within the WhatsApp limit.
+func fitsMessage(text string) bool { return utf8.RuneCountInString(text) <= maxTextRunes }
+
+// validText tells that text can be sent or become an edit: not blank, and within the limit.
+func validText(text string) bool { return strings.TrimSpace(text) != "" && fitsMessage(text) }
+
+// whatsappQuote is the part of a quoted Message that goes to WhatsApp.
+func whatsappQuote(id, sender, text string) *whatsapp.Quote {
+	return &whatsapp.Quote{ID: id, Sender: sender, Text: text}
+}
 
 const (
 	errParse          = -32700
@@ -81,6 +63,23 @@ const (
 	errSendFailed     = -32007
 	errMedia          = -32008
 	errMediaFailed    = -32009
+)
+
+// The message of each application error. A code that has two messages has two constants.
+const (
+	msgParse          = "parse error"
+	msgMethodNotFound = "method not found"
+	msgInvalidPhone   = "invalid phone number"
+	msgPairCode       = "pair code failed"
+	msgChatStore      = "chat store failed"
+	msgInvalidSetting = "invalid setting"
+	msgSettingsFailed = "settings failed"
+	msgInvalidMessage = "invalid message"
+	msgNotConnected   = "not connected"
+	msgSendFailed     = "send failed"
+	msgInvalidMedia   = "invalid media"
+	msgMediaIntegrity = "media failed the integrity check"
+	msgMediaCopy      = "media copy failed"
 )
 
 // qrScale is the pixel size of one QR module.
@@ -104,116 +103,17 @@ type NewPort func() (whatsapp.Port, error)
 // It writes frames to out and logs to logOut. It returns the process exit code.
 func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.Store, newPort NewPort) int {
 	enc := json.NewEncoder(out) // Encode ends each frame with a newline.
-	send := func(frame map[string]any) bool {
+	s := &session{profile: profile, prefs: prefs, newPort: newPort, logOut: logOut}
+	s.send = func(frame map[string]any) bool {
 		if err := enc.Encode(frame); err != nil {
 			fmt.Fprintln(logOut, "write failed:", err)
 			return false
 		}
 		return true
 	}
-	ready := false
-	var port whatsapp.Port
-	var events <-chan whatsapp.Event  // nil (never ready) until a port exists
-	var chats *chatstore.Store        // nil until the Profile is open
-	var box *outbox                   // nil until the Profile is open
-	var read *reader                  // clears Read Markers and sends Read Receipts, nil until the Profile is open
-	var pres *presenter               // sends Presence, nil until the Profile is open
-	var attn attention.Attention      // the pop-out state: it outlives the Profile, so a new link keeps it
-	var sent <-chan sendResult        // the results of the sends, nil until the Profile is open
-	var retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
-	var expiryTick <-chan time.Time   // fires when the sweep of Disappearing Messages is due, nil until the Profile is open
-	var loader *mediaLoader           // nil until the Profile is open
-	var mediaDone <-chan mediaResult  // the results of the Media downloads, nil until the Profile is open
-	// The plain copies of Media never outlive the Daemon.
-	defer func() {
-		if loader != nil {
-			loader.store.Wipe()
-		}
-	}()
-
-	// connect connects the port. An unlinked Profile starts linking, and a failure ends it with `linkFailed`.
-	connect := func() bool {
-		if err := port.Connect(); err != nil {
-			fmt.Fprintln(logOut, "connect failed") // the error text could name hosts
-			if !port.Linked() {
-				return send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonConnectFailed}))
-			}
-			retryConnect = time.After(ConnectRetryDelay)
-			return send(notification("disconnected", nil))
-		}
-		return true
-	}
-	// startPort runs after `ready`: a linked Profile says so, then the port connects.
-	startPort := func() bool {
-		if port.Linked() && !send(notification("linked", nil)) {
-			return false
-		}
-		return connect()
-	}
-	// open returns an exit code, or -1 to go on.
-	open := func() int {
-		switch err := profile.Open(); {
-		case err == nil:
-			// The port exists before `ready`, so a test or the Plugin can rely on it from then on.
-			var portErr error
-			if port, portErr = newPort(); portErr != nil {
-				fmt.Fprintln(logOut, "whatsapp client failed")
-				return ExitError
-			}
-			events = port.Events()
-			chats = chatstore.New(profile.Chat(), Now)
-			box = newOutbox(chats, port, send, logOut)
-			sent = box.results
-			loader = newMediaLoader(chats, port, profile.Media(), box.notify, logOut)
-			mediaDone = loader.results
-			// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
-			if _, err := chats.Expire(Now().Unix()); err != nil {
-				fmt.Fprintln(logOut, "chat store write failed")
-			}
-			expiryTick = Timers.After(ExpiryInterval)
-			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut, played: map[string]bool{}}
-			box.incoming = read.incoming
-			box.store = profile.Media()
-			box.notice = (&notifier{chats: chats, prefs: prefs, attn: &attn, logOut: logOut}).frame
-			pres = newPresenter(port, prefs, &attn, logOut)
-			ready = true
-			if !send(notification("ready", nil)) || !startPort() {
-				return ExitError
-			}
-		case errors.Is(err, keystore.ErrUnavailable):
-			fmt.Fprintln(logOut, "keyring unavailable")
-			if !send(notification("keyringUnavailable", nil)) {
-				return ExitError
-			}
-		default:
-			fmt.Fprintln(logOut, "profile open failed") // the error text could name paths
-			return ExitError
-		}
-		return -1
-	}
-	if code := open(); code >= 0 {
+	defer s.wipeMedia()
+	if code := s.open(); code != keepGoing {
 		return code
-	}
-
-	// unlink runs the delete-the-Profile routine, then links again as on a fresh Profile.
-	// `by` is "user" for Log out. It is empty when the phone removed the Companion Device.
-	unlink := func(by string) int {
-		port.Disconnect()
-		loader.store.Wipe()
-		ready, port, events, chats, box, read, pres, sent, retryConnect, loader, mediaDone, expiryTick = false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
-		attn.Set(attn.Open(), "") // the Chat is gone with the Profile
-		if err := profile.Delete(); err != nil {
-			fmt.Fprintln(logOut, "profile delete failed")
-			return ExitError
-		}
-		params := map[string]any{}
-		if by != "" {
-			params["by"] = by
-		}
-		if !send(notification("unlinked", params)) {
-			return ExitError
-		}
-		return open()
 	}
 
 	lines := make(chan []byte)
@@ -229,229 +129,29 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	}()
 
 	for {
+		var code int
 		select {
-		case ev := <-events:
-			if _, ok := ev.(whatsapp.Connected); ok {
-				pres.connected() // before the `connected` frame
-			}
-			if code := handleEvent(ev, logOut, send, chats, box, loader, func() int { return unlink("") }); code >= 0 {
-				return code
-			}
-		case <-expiryTick:
-			expired, err := chats.Expire(Now().Unix())
-			if err != nil {
-				fmt.Fprintln(logOut, "chat store write failed")
-			}
-			expiryTick = Timers.After(ExpiryInterval)
-			for _, e := range expired {
-				if !send(notification("messageExpired", map[string]any{"chat": e.Chat, "id": e.ID})) {
-					return ExitError
-				}
-			}
-		case r := <-mediaDone:
-			if !loader.done(r) {
-				return ExitError
-			}
-		case r := <-sent:
-			if !box.done(r) {
-				return ExitError
-			}
-		case <-retryConnect:
-			retryConnect = nil
-			if !connect() {
-				return ExitError
-			}
+		case ev := <-s.events:
+			code = s.onEvent(ev)
+		case <-s.expiryTick:
+			code = exitIf(s.sweepExpired())
+		case r := <-s.mediaDone:
+			code = exitIf(s.loader.done(r))
+		case r := <-s.sent:
+			code = exitIf(s.box.done(r))
+		case <-s.retryConnect:
+			s.retryConnect = nil
+			code = exitIf(s.connect())
 		case line, ok := <-lines:
 			if !ok {
 				return exitCode(<-scanErr, logOut)
 			}
-			var req struct {
-				ID     json.RawMessage `json:"id"`
-				Method string          `json:"method"`
-				Params struct {
-					Phone   string `json:"phone"`
-					Offset  int    `json:"offset"`
-					Limit   int    `json:"limit"`
-					Query   string `json:"query"`
-					Chat    string `json:"chat"`
-					Text    string `json:"text"`
-					Caption string `json:"caption"`
-					Open    bool   `json:"open"`
-					Typing  bool   `json:"typing"`
-					ID      string `json:"id"`
-					Emoji   string `json:"emoji"`
-					Quote   string `json:"quote"`
-					Edit    string `json:"edit"`
-					Path    string `json:"path"`
-					settings.Update
-				} `json:"params"`
-			}
-			var reply map[string]any
-			retryKeyring, retryLink, logout, listChanged := false, false, false, false
-			var submit *chatstore.Message  // a pending Message to send after the reply
-			var changed *chatstore.Message // an edited or revoked Message to announce after the reply
-			var download func()            // the start of a Media download, after the reply
-			linking := ready && !port.Linked()
-			if err := json.Unmarshal(line, &req); err != nil {
-				reply = errorReply(nil, errParse, "parse error")
-			} else if len(req.ID) == 0 {
-				continue // a notification gets no reply
-			} else if req.Method == methodKeyringRetry && !ready {
-				reply = resultReply(req.ID, map[string]any{})
-				retryKeyring = true
-			} else if req.Method == methodLinkRetry && linking {
-				reply = resultReply(req.ID, map[string]any{})
-				retryLink = true
-			} else if req.Method == methodLinkPairCode && linking {
-				reply = pairCodeReply(port, req.ID, req.Params.Phone, logOut)
-			} else if req.Method == methodChatsList && ready {
-				reply = chatsListReply(chats, req.ID, req.Params.Offset, req.Params.Limit, req.Params.Query, logOut)
-			} else if req.Method == methodChatMessages && ready {
-				reply = chatMessagesReply(chats, req.ID, req.Params.Chat, req.Params.Offset, req.Params.Limit, logOut)
-			} else if req.Method == methodDraftGet && ready {
-				reply = draftGetReply(chats, req.ID, req.Params.Chat, logOut)
-			} else if req.Method == methodDraftSet && ready {
-				reply = draftSetReply(chats, req.ID, req.Params.Chat, chatstore.Draft{Text: req.Params.Text, Quote: req.Params.Quote, Edit: req.Params.Edit}, logOut)
-			} else if req.Method == methodChatSend && ready && port.Linked() {
-				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, req.Params.Quote, logOut)
-			} else if req.Method == methodChatSendMedia && ready && port.Linked() {
-				reply, submit = chatSendMediaReply(chats, profile.Media(), port.NewMessageID, req.ID, req.Params.Chat, req.Params.Path, req.Params.Caption, logOut)
-			} else if req.Method == methodChatRetry && ready && port.Linked() {
-				reply, submit = chatRetryReply(chats, req.ID, req.Params.Chat, req.Params.ID, logOut)
-			} else if req.Method == methodMediaDownload && ready && port.Linked() {
-				var started bool
-				if reply, started = loader.downloadReply(req.ID, req.Params.Chat, req.Params.ID); started {
-					chat, msgID := req.Params.Chat, req.Params.ID
-					download = func() { loader.start(chat, msgID) }
-				}
-			} else if req.Method == methodMediaOpen && ready {
-				reply = loader.openReply(req.ID, req.Params.Chat, req.Params.ID)
-			} else if req.Method == methodMediaSave && ready {
-				reply = loader.saveReply(req.ID, req.Params.Chat, req.Params.ID, req.Params.Path)
-			} else if req.Method == methodMediaRelease && ready {
-				loader.store.Release(req.Params.Chat)
-				reply = resultReply(req.ID, map[string]any{})
-			} else if req.Method == methodMediaPlayed && ready {
-				reply = loader.playedReply(req.ID, req.Params.Chat, req.Params.ID, read)
-			} else if req.Method == methodAttentionSet && ready {
-				listChanged = read.setAttention(req.Params.Open, req.Params.Chat)
-				pres.sync()
-				reply = resultReply(req.ID, map[string]any{})
-			} else if req.Method == methodChatEdit && ready && port.Linked() {
-				reply, changed = chatEditReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, req.Params.Text, logOut)
-			} else if req.Method == methodChatRevoke && ready && port.Linked() {
-				reply, changed = chatRevokeReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, logOut)
-			} else if req.Method == methodChatReact && ready && port.Linked() {
-				reply, changed = chatReactReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, req.Params.Emoji, logOut)
-			} else if req.Method == methodChatTyping && ready && port.Linked() {
-				pres.typing(req.Params.Chat, req.Params.Typing)
-				reply = resultReply(req.ID, map[string]any{})
-			} else if req.Method == methodSettingsGet && ready {
-				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Get() })
-			} else if req.Method == methodSettingsSet && ready {
-				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) {
-					cur, err := prefs.Set(req.Params.Update)
-					pres.sync() // "send online" may have changed
-					return cur, err
-				})
-			} else if req.Method == methodLogout && ready && port.Linked() {
-				// The user must get out even when WhatsApp is out of reach: the Profile goes either way.
-				if err := port.Logout(); err != nil {
-					fmt.Fprintln(logOut, "remote logout failed") // the error text could name hosts
-				}
-				reply = resultReply(req.ID, map[string]any{})
-				logout = true
-			} else {
-				reply = errorReply(req.ID, errMethodNotFound, "method not found")
-			}
-			if !send(reply) {
-				return ExitError
-			}
-			if listChanged && !send(notification("chatsChanged", nil)) {
-				return ExitError
-			}
-			// Sending or editing uses up the Draft of the Chat.
-			if (submit != nil && req.Method == methodChatSend) || (changed != nil && req.Method == methodChatEdit) {
-				if err := chats.ClearDraft(req.Params.Chat); err != nil {
-					fmt.Fprintln(logOut, "draft clear failed")
-				}
-			}
-			if submit != nil {
-				box.submit(*submit)
-				if req.Method == methodChatSend || req.Method == methodChatSendMedia {
-					read.interaction(submit.Chat) // a sent Message is the interaction
-				}
-			}
-			if changed != nil && req.Method == methodChatReact {
-				read.interaction(changed.Chat) // a Reaction is an interaction, like a sent Message
-			}
-			if download != nil {
-				download()
-			}
-			if changed != nil && !send(notification("messageChanged", map[string]any{"message": *changed})) {
-				return ExitError
-			}
-			if retryKeyring {
-				if code := open(); code >= 0 {
-					return code
-				}
-			}
-			if retryLink && !connect() {
-				return ExitError
-			}
-			if logout {
-				if code := unlink("user"); code >= 0 {
-					return code
-				}
-			}
+			code = s.onLine(line)
+		}
+		if code != keepGoing {
+			return code
 		}
 	}
-}
-
-// handleEvent turns a WhatsApp event into frames. unlink runs the delete-the-Profile routine.
-// It returns an exit code, or -1 to go on.
-func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) bool, chats *chatstore.Store, box *outbox, loader *mediaLoader, unlink func() int) int {
-	ok := true
-	switch ev := ev.(type) {
-	case whatsapp.QRCode:
-		uri, err := qrDataURI(ev.Code)
-		if err != nil {
-			fmt.Fprintln(logOut, "qr encode failed")
-			ok = send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonUnexpected}))
-		} else {
-			ok = send(notification("linkQr", map[string]any{"qr": uri}))
-		}
-	case whatsapp.PairSuccess:
-		ok = send(notification("linked", nil))
-	case whatsapp.LinkFailed:
-		ok = send(notification("linkFailed", map[string]any{"reason": ev.Reason}))
-	case whatsapp.LoggedOut:
-		return unlink()
-	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt, whatsapp.MessageEdited, whatsapp.MessageRevoked, whatsapp.Reaction:
-		ok = box.handle(ev)
-		if nm, isNew := ev.(whatsapp.NewMessage); isNew {
-			loader.autoStart(nm)
-		}
-	case whatsapp.Presence:
-		ok = send(notification("presenceChanged", map[string]any{"chat": ev.JID, "online": ev.Online, "lastSeen": ev.LastSeen}))
-	case whatsapp.ChatPresence:
-		name, err := chats.ParticipantName(ev.Sender)
-		if err != nil {
-			fmt.Fprintln(logOut, "chat store read failed")
-			break
-		}
-		ok = send(notification("activityChanged", map[string]any{"chat": ev.Chat, "participant": ev.Sender, "name": name, "state": ev.State}))
-	case whatsapp.HistorySync, whatsapp.PushName, whatsapp.ContactName, whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker, whatsapp.ChatTimer:
-		if err := chats.Apply(ev); err != nil {
-			fmt.Fprintln(logOut, "chat store write failed") // the error text could hold names
-		} else {
-			ok = send(notification("chatsChanged", nil))
-		}
-	}
-	if !ok {
-		return ExitError
-	}
-	return -1
 }
 
 func pairCodeReply(port whatsapp.Port, id json.RawMessage, phone string, logOut io.Writer) map[string]any {
@@ -459,10 +159,10 @@ func pairCodeReply(port whatsapp.Port, id json.RawMessage, phone string, logOut 
 	code, err := port.PairCode(phone)
 	switch {
 	case errors.Is(err, whatsapp.ErrInvalidPhone):
-		return errorReply(id, errInvalidPhone, "invalid phone number")
+		return errorReply(id, errInvalidPhone, msgInvalidPhone)
 	case err != nil:
 		fmt.Fprintln(logOut, "pair code failed") // the error text could hold the phone number
-		return errorReply(id, errPairCode, "pair code failed")
+		return errorReply(id, errPairCode, msgPairCode)
 	}
 	return resultReply(id, map[string]any{"code": code})
 }
@@ -475,12 +175,12 @@ func chatsListReply(chats *chatstore.Store, id json.RawMessage, offset, limit in
 	page, err := chats.List(offset, min(limit, maxChatsLimit), query)
 	if err != nil {
 		fmt.Fprintln(logOut, "chat list failed")
-		return errorReply(id, errChatStore, "chat store failed")
+		return errorReply(id, errChatStore, msgChatStore)
 	}
 	unread, err := chats.UnreadChats()
 	if err != nil {
 		fmt.Fprintln(logOut, "chat list failed")
-		return errorReply(id, errChatStore, "chat store failed")
+		return errorReply(id, errChatStore, msgChatStore)
 	}
 	return resultReply(id, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset, "unreadChats": unread})
 }
@@ -493,7 +193,7 @@ func chatMessagesReply(chats *chatstore.Store, id json.RawMessage, chat string, 
 	page, err := chats.Messages(chat, offset, min(limit, maxChatsLimit))
 	if err != nil {
 		fmt.Fprintln(logOut, "message list failed")
-		return errorReply(id, errChatStore, "chat store failed")
+		return errorReply(id, errChatStore, msgChatStore)
 	}
 	return resultReply(id, map[string]any{"chat": chat, "messages": page.Messages, "more": page.More, "offset": offset})
 }
@@ -501,8 +201,8 @@ func chatMessagesReply(chats *chatstore.Store, id json.RawMessage, chat string, 
 // chatSendReply stores the text as a pending Message. The caller sends it after the reply.
 // A non-empty quoteID makes it a reply: that Message must exist in the Chat and not be a Tombstone.
 func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, text, quoteID string, logOut io.Writer) (map[string]any, *chatstore.Message) {
-	if strings.TrimSpace(text) == "" || utf8.RuneCountInString(text) > maxTextRunes {
-		return errorReply(id, errMessage, "invalid message"), nil
+	if !validText(text) {
+		return errorReply(id, errMessage, msgInvalidMessage), nil
 	}
 	var quote *whatsapp.Quote
 	if quoteID != "" {
@@ -510,7 +210,7 @@ func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessag
 		if err != nil || q.Revoked {
 			return storeOrInvalid(id, err, logOut), nil
 		}
-		quote = &whatsapp.Quote{ID: q.ID, Sender: q.Sender, Text: q.Text}
+		quote = whatsappQuote(q.ID, q.Sender, q.Text)
 	}
 	m, err := chats.AddPending(chat, port.NewMessageID(), text, quote)
 	return messageReply(id, m, err, logOut)
@@ -520,7 +220,7 @@ func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessag
 func chatRetryReply(chats *chatstore.Store, id json.RawMessage, chat, msgID string, logOut io.Writer) (map[string]any, *chatstore.Message) {
 	changed, err := chats.Requeue(chat, msgID)
 	if err == nil && !changed {
-		return errorReply(id, errMessage, "invalid message"), nil
+		return errorReply(id, errMessage, msgInvalidMessage), nil
 	}
 	if err != nil {
 		return messageReply(id, chatstore.Message{}, err, logOut)
@@ -532,10 +232,10 @@ func chatRetryReply(chats *chatstore.Store, id json.RawMessage, chat, msgID stri
 func messageReply(id json.RawMessage, m chatstore.Message, err error, logOut io.Writer) (map[string]any, *chatstore.Message) {
 	switch {
 	case errors.Is(err, chatstore.ErrNoChat):
-		return errorReply(id, errMessage, "invalid message"), nil
+		return errorReply(id, errMessage, msgInvalidMessage), nil
 	case err != nil:
 		fmt.Fprintln(logOut, "message write failed")
-		return errorReply(id, errChatStore, "chat store failed"), nil
+		return errorReply(id, errChatStore, msgChatStore), nil
 	}
 	return resultReply(id, map[string]any{"message": m}), &m
 }
@@ -544,10 +244,10 @@ func settingsReply(id json.RawMessage, logOut io.Writer, apply func() (settings.
 	cur, err := apply()
 	switch {
 	case errors.Is(err, settings.ErrInvalid):
-		return errorReply(id, errSetting, "invalid setting")
+		return errorReply(id, errSetting, msgInvalidSetting)
 	case err != nil:
 		fmt.Fprintln(logOut, "settings failed") // the error text could name paths
-		return errorReply(id, errSetting, "settings failed")
+		return errorReply(id, errSetting, msgSettingsFailed)
 	}
 	return resultReply(id, map[string]any{"readReceipts": cur.ReadReceipts, "sendOnline": cur.SendOnline, "sendTyping": cur.SendTyping, "notifications": cur.Notifications})
 }

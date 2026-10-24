@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"unicode/utf8"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 )
@@ -14,7 +13,7 @@ func draftGetReply(chats *chatstore.Store, id json.RawMessage, chat string, logO
 	d, err := chats.Draft(chat)
 	if err != nil {
 		fmt.Fprintln(logOut, "draft read failed")
-		return errorReply(id, errChatStore, "chat store failed")
+		return errorReply(id, errChatStore, msgChatStore)
 	}
 	d.Quote = liveTarget(chats, chat, d.Quote)
 	d.Edit = liveTarget(chats, chat, d.Edit)
@@ -33,8 +32,8 @@ func liveTarget(chats *chatstore.Store, chat, id string) string {
 
 // draftSetReply stores the Draft of a Chat. Error -32006 means a text that is too long, or a target that is not a stored Message of the Chat.
 func draftSetReply(chats *chatstore.Store, id json.RawMessage, chat string, d chatstore.Draft, logOut io.Writer) map[string]any {
-	if chat == "" || utf8.RuneCountInString(d.Text) > maxTextRunes {
-		return errorReply(id, errMessage, "invalid message")
+	if chat == "" || !fitsMessage(d.Text) {
+		return errorReply(id, errMessage, msgInvalidMessage)
 	}
 	for _, target := range []string{d.Quote, d.Edit} {
 		if target == "" {
@@ -46,7 +45,7 @@ func draftSetReply(chats *chatstore.Store, id json.RawMessage, chat string, d ch
 	}
 	if err := chats.SetDraft(chat, d); err != nil {
 		fmt.Fprintln(logOut, "draft write failed")
-		return errorReply(id, errChatStore, "chat store failed")
+		return errorReply(id, errChatStore, msgChatStore)
 	}
 	return resultReply(id, map[string]any{})
 }

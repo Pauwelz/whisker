@@ -40,12 +40,12 @@ type Page struct {
 	More  bool
 }
 
-// Apply stores what an event carries. It ignores events that are not about Chats.
+// Apply stores what an event of History Sync or App State carries. It reports false for any other event, which it ignores.
 // shortcut: App State for a Chat that History Sync has not stored yet is dropped, upgrade if the phone sends it first.
-func (s *Store) Apply(ev whatsapp.Event) error {
+func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 	switch ev := ev.(type) {
 	case whatsapp.HistorySync:
-		return s.inTx(func(tx *sql.Tx) error {
+		err = s.inTx(func(tx *sql.Tx) error {
 			for _, p := range ev.PushNames {
 				if err := setName(tx, "push_name", p.JID, p.Name); err != nil {
 					return err
@@ -59,19 +59,21 @@ func (s *Store) Apply(ev whatsapp.Event) error {
 			return nil
 		})
 	case whatsapp.PushName:
-		return setName(s.db, "push_name", ev.JID, ev.Name)
+		err = setName(s.db, "push_name", ev.JID, ev.Name)
 	case whatsapp.ContactName:
-		return setName(s.db, "contact_name", ev.JID, ev.Name)
+		err = setName(s.db, "contact_name", ev.JID, ev.Name)
 	case whatsapp.Pin:
-		return s.setFlag("pinned", ev.JID, boolInt(ev.Pinned))
+		err = s.setFlag("pinned", ev.JID, boolInt(ev.Pinned))
 	case whatsapp.Mute:
-		return s.setFlag("muted_until", ev.JID, ev.Until)
+		err = s.setFlag("muted_until", ev.JID, ev.Until)
 	case whatsapp.ReadMarker:
-		return s.setFlag("unread", ev.JID, boolInt(ev.Unread))
+		err = s.setFlag("unread", ev.JID, boolInt(ev.Unread))
 	case whatsapp.ChatTimer:
-		return s.setFlag("timer", ev.Chat, ev.Seconds)
+		err = s.setFlag("timer", ev.Chat, ev.Seconds)
+	default:
+		return false, nil
 	}
-	return nil
+	return true, err
 }
 
 // List returns Chats: Pinned first, then newest first. A Chat with no activity is not listed.
