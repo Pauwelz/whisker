@@ -11,6 +11,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 - A live Message from another person, and a Message that you send from your phone, now show in the open Chat. WhatsApp addresses them by LID, and the Daemon now maps the LID to the phone JID of the Chat.
 - The linked device shows as "whisker" (a desktop) on the phone, not as "Other device". The name applies after a new link.
+- "Load more" no longer shows in the settings view.
 
 ## [1.0.0-rc.2] - 2026-10-24
 

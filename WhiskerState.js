@@ -778,7 +778,7 @@ function panelParts(state, local) {
     pairForm: linking && local.pairMode,
     pairToggle: linking,
     chatList: linked && !local.showSettings && !chat,
-    loadMoreChats: linked && state.moreChats === true && !chat,
+    loadMoreChats: linked && state.moreChats === true && !local.showSettings && !chat,
     settingsButton: linked && !!state.settings && !chat,
     settings: linked && local.showSettings && !!state.settings,
     chat: linked && !local.showSettings && chat

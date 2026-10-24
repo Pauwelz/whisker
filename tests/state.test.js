@@ -478,6 +478,7 @@ test("panelParts: each part shows on its screen only", () => {
   });
   assert.equal(State.panelParts(linked, { ...noLocal, showSettings: true }).settings, true);
   assert.equal(State.panelParts(linked, { ...noLocal, showSettings: true }).chatList, false);
+  assert.equal(State.panelParts(linked, { ...noLocal, showSettings: true }).loadMoreChats, false);
   const inChat = { ...linked, openChat: { jid: "1@s.whatsapp.net" } };
   const chat = State.panelParts(inChat, noLocal);
   assert.deepEqual([chat.chat, chat.chatList, chat.settingsButton, chat.loadMoreChats], [true, false, false, false]);
