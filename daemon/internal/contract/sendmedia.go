@@ -36,22 +36,20 @@ func sniffMime(path string, f *os.File) string {
 	return t
 }
 
-// openSendable opens a file that `chat.sendMedia` accepts: an absolute path to a regular file of 1 B to 100 MiB.
-// `draft.set` uses it too, so both agree on what can be sent. The caller closes the file.
-func openSendable(path string) (*os.File, os.FileInfo, error) {
+// statSendable checks a file that `chat.sendMedia` accepts: an absolute path to a regular file of 1 B to 100 MiB.
+// `draft.set` and `draft.get` use it too, so all agree on what can be sent. It never opens the file, so a FIFO cannot block the loop.
+func statSendable(path string) (os.FileInfo, error) {
 	if !filepath.IsAbs(path) {
-		return nil, nil, errors.New("not absolute")
+		return nil, errors.New("not absolute")
 	}
-	f, err := os.Open(path)
+	st, err := os.Stat(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	st, err := f.Stat()
-	if err != nil || !st.Mode().IsRegular() || st.Size() == 0 || st.Size() > maxSendBytes {
-		f.Close()
-		return nil, nil, errors.New("not sendable")
+	if !st.Mode().IsRegular() || st.Size() == 0 || st.Size() > maxSendBytes {
+		return nil, errors.New("not sendable")
 	}
-	return f, st, nil
+	return st, nil
 }
 
 // chatSendMediaReply stores the file encrypted in the Profile and adds a pending Message. The caller sends it after the reply.
@@ -61,7 +59,11 @@ func chatSendMediaReply(chats *chatstore.Store, store *media.Store, newID func()
 	if !fitsMessage(caption) {
 		return invalid, nil
 	}
-	f, st, err := openSendable(path)
+	st, err := statSendable(path)
+	if err != nil {
+		return invalid, nil
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return invalid, nil
 	}

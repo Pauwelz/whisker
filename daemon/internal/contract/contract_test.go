@@ -51,6 +51,7 @@ type fixtureLine struct {
 	Path          string   `json:"path"`          // dir "file"
 	Content       string   `json:"content"`       // dir "file": the content the file must hold
 	Missing       bool     `json:"missing"`       // dir "file": the file must not exist
+	Remove        bool     `json:"remove"`        // dir "file": the test deletes the file
 	Write         bool     `json:"write"`         // dir "file": the test writes the file with `content`
 	Uploads       []string `json:"uploads"`       // dir "uploaded": "id|kind|mime|name|caption|content" of each Media the fake port has sent
 	Present       bool     `json:"present"`       // dir "file": the file must exist
@@ -315,6 +316,12 @@ func (r *runner) restart(t *testing.T, now *int64) {
 // checkFile checks a plain Media copy in the runtime folder: its content, or that it is gone.
 func (r *runner) checkFile(line fixtureLine) {
 	path := strings.ReplaceAll(strings.ReplaceAll(line.Path, "$RUNTIME", r.runtime), "$PROFILE", r.dir)
+	if line.Remove {
+		if err := os.Remove(path); err != nil {
+			r.t.Fatal(err)
+		}
+		return
+	}
 	if line.Write {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			r.t.Fatal(err)
