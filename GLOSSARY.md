@@ -36,6 +36,10 @@ _Avoid_: Focused chat, open chat, active chat
 A canonical WhatsApp user identity resolved across both phone-number addressing (JID) and privacy-preserving linked identity (LID).
 _Avoid_: User, contact, peer, member, sender
 
+**Phone Contact**:
+A Participant for whom the contacts on the user's primary phone hold a name. A Phone Contact can exist without a Chat.
+_Avoid_: Contact, address book entry, friend
+
 **Push Name**:
 The name that a Participant sets for themselves in WhatsApp. whisker shows it when your phone contacts have no name for that Participant.
 _Avoid_: Nickname, display name, profile name
