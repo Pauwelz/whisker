@@ -101,7 +101,7 @@ func (b *outbox) notify(chat, id string) bool {
 	return b.send(notification("messageChanged", map[string]any{"message": m}))
 }
 
-// handle turns a connection, Message or receipt event into frames. It returns false when a frame could not be written.
+// handle turns a connection, Message, edit, revoke or receipt event into frames. It returns false when a frame could not be written.
 func (b *outbox) handle(ev whatsapp.Event) bool {
 	switch ev := ev.(type) {
 	case whatsapp.Connected:
@@ -120,6 +120,10 @@ func (b *outbox) handle(ev whatsapp.Event) bool {
 			return true
 		}
 		return b.notify(ev.Chat, ev.Message.ID) && b.send(notification("chatsChanged", nil))
+	case whatsapp.MessageEdited:
+		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Edit(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Text) })
+	case whatsapp.MessageRevoked:
+		return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Revoke(ev.Chat, ev.ID) })
 	case whatsapp.Receipt:
 		for _, id := range ev.IDs {
 			if !b.move(ev.Chat, id, func() (bool, error) { return b.chats.Advance(ev.Chat, id, ev.State) }) {

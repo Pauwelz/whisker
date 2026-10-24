@@ -42,6 +42,8 @@ const (
 	methodChatMessages  = "chat.messages"
 	methodChatSend      = "chat.send"
 	methodChatRetry     = "chat.retry"
+	methodChatEdit      = "chat.edit"
+	methodChatRevoke    = "chat.revoke"
 	methodSettingsGet   = "settings.get"
 	methodSettingsSet   = "settings.set"
 	methodLogout        = "profile.logout"
@@ -69,8 +71,9 @@ const (
 	errSetting        = -32004
 	errLogout         = -32005
 	errMessage        = -32006
-	errMedia          = -32007
-	errMediaFailed    = -32008
+	errSendFailed     = -32007
+	errMedia          = -32008
+	errMediaFailed    = -32009
 )
 
 // qrScale is the pixel size of one QR module.
@@ -243,8 +246,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			}
 			var reply map[string]any
 			retryKeyring, retryLink, logout := false, false, false
-			var submit *chatstore.Message // a pending Message to send after the reply
-			var download func()           // the start of a Media download, after the reply
+			var submit *chatstore.Message  // a pending Message to send after the reply
+			var changed *chatstore.Message // an edited or revoked Message to announce after the reply
+			var download func()            // the start of a Media download, after the reply
 			linking := ready && !port.Linked()
 			if err := json.Unmarshal(line, &req); err != nil {
 				reply = errorReply(nil, errParse, "parse error")
@@ -279,6 +283,10 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			} else if req.Method == methodMediaRelease && ready {
 				loader.store.Release(req.Params.Chat)
 				reply = resultReply(req.ID, map[string]any{})
+			} else if req.Method == methodChatEdit && ready && port.Linked() {
+				reply, changed = chatEditReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, req.Params.Text, logOut)
+			} else if req.Method == methodChatRevoke && ready && port.Linked() {
+				reply, changed = chatRevokeReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, logOut)
 			} else if req.Method == methodSettingsGet && ready {
 				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Get() })
 			} else if req.Method == methodSettingsSet && ready {
@@ -302,6 +310,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			}
 			if download != nil {
 				download()
+			}
+			if changed != nil && !send(notification("messageChanged", map[string]any{"message": *changed})) {
+				return ExitError
 			}
 			if retryKeyring {
 				if code := open(); code >= 0 {
@@ -339,7 +350,7 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 		ok = send(notification("linkFailed", map[string]any{"reason": ev.Reason}))
 	case whatsapp.LoggedOut:
 		return unlink()
-	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt:
+	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt, whatsapp.MessageEdited, whatsapp.MessageRevoked:
 		ok = box.handle(ev)
 		if nm, isNew := ev.(whatsapp.NewMessage); isNew {
 			loader.autoStart(nm)

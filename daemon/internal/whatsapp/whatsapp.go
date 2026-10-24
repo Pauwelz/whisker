@@ -33,6 +33,10 @@ type Port interface {
 	// Download downloads the plain Media into dst, and checks it against its hashes.
 	// It can block for a long time: call it off the Daemon loop.
 	Download(ref Media, dst *os.File) error
+	// Edit replaces the text of a Message of the user. It returns ErrOffline when there is no connection.
+	Edit(chat, id, text string) error
+	// Revoke takes back a Message of the user for everyone. It returns ErrOffline when there is no connection.
+	Revoke(chat, id string) error
 	// Events delivers events in order. The channel stays open until the process ends.
 	Events() <-chan Event
 }
@@ -162,24 +166,42 @@ type Receipt struct {
 	State string   `json:"state"`
 }
 
+// MessageEdited means a Participant, or another device of the user, changed the text of a stored Message.
+// Sender and FromMe name the editor: only the author can edit a Message.
+type MessageEdited struct {
+	Chat   string `json:"chat"`
+	ID     string `json:"id"`
+	Sender string `json:"sender"`
+	FromMe bool   `json:"fromMe"`
+	Text   string `json:"text"`
+}
+
+// MessageRevoked means a stored Message was revoked for everyone.
+type MessageRevoked struct {
+	Chat string `json:"chat"`
+	ID   string `json:"id"`
+}
+
 // Connected and Disconnected report the connection to WhatsApp.
 type Connected struct{}
 type Disconnected struct{}
 
-func (NewMessage) isEvent()   {}
-func (Receipt) isEvent()      {}
-func (Connected) isEvent()    {}
-func (Disconnected) isEvent() {}
-func (QRCode) isEvent()       {}
-func (PairSuccess) isEvent()  {}
-func (LinkFailed) isEvent()   {}
-func (LoggedOut) isEvent()    {}
-func (HistorySync) isEvent()  {}
-func (PushName) isEvent()     {}
-func (ContactName) isEvent()  {}
-func (Pin) isEvent()          {}
-func (Mute) isEvent()         {}
-func (ReadMarker) isEvent()   {}
+func (NewMessage) isEvent()     {}
+func (Receipt) isEvent()        {}
+func (MessageEdited) isEvent()  {}
+func (MessageRevoked) isEvent() {}
+func (Connected) isEvent()      {}
+func (Disconnected) isEvent()   {}
+func (QRCode) isEvent()         {}
+func (PairSuccess) isEvent()    {}
+func (LinkFailed) isEvent()     {}
+func (LoggedOut) isEvent()      {}
+func (HistorySync) isEvent()    {}
+func (PushName) isEvent()       {}
+func (ContactName) isEvent()    {}
+func (Pin) isEvent()            {}
+func (Mute) isEvent()           {}
+func (ReadMarker) isEvent()     {}
 
 // Reasons for LinkFailed. docs/contract.md mirrors this list.
 const (

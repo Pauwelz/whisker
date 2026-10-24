@@ -39,6 +39,7 @@ func newMediaLoader(chats *chatstore.Store, port whatsapp.Port, store *media.Sto
 	if err := chats.ResetDownloads(); err != nil {
 		fmt.Fprintln(logOut, "chat store write failed")
 	}
+	chats.RemoveMedia = store.Remove
 	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16)}
 }
 
@@ -76,7 +77,11 @@ func (l *mediaLoader) done(r mediaResult) bool {
 		fmt.Fprintln(l.logOut, "chat store write failed")
 		return true
 	}
-	return !changed || l.notify(r.chat, r.id)
+	if !changed {
+		l.store.Remove(r.chat, r.id) // the Message was revoked meanwhile: keep no file
+		return true
+	}
+	return l.notify(r.chat, r.id)
 }
 
 // downloadReply handles `media.download`. The caller runs start after the reply.

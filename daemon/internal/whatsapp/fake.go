@@ -25,6 +25,8 @@ type Fake struct {
 	content    string
 	dlErr      error
 	downloads  int
+	edits      []string
+	revokes    []string
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -93,6 +95,40 @@ func (f *Fake) Download(_ Media, dst *os.File) error {
 	}
 	_, err = dst.WriteString(content)
 	return err
+}
+
+// Edit and Revoke fail with the send error, like Send. A good call is recorded.
+func (f *Fake) Edit(_, id, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.edits = append(f.edits, id+":"+text)
+	return nil
+}
+
+func (f *Fake) Revoke(_, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.revokes = append(f.revokes, id)
+	return nil
+}
+
+// Edits lists the edits that Edit accepted as "id:text", in order. Revokes lists the revoked IDs.
+func (f *Fake) Edits() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.edits...)
+}
+
+func (f *Fake) Revokes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.revokes...)
 }
 
 // SetLogoutError makes Logout fail with err. Pass nil to stop failing.
