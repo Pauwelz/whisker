@@ -77,3 +77,15 @@ test("the contract doc lists the exit code the Plugin maps", () => {
   const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
   assert.ok(doc.includes(`| ${State.EXIT_OVERSIZED_LINE} |`));
 });
+
+test("an unavailable keyring shows a Retry action", () => {
+  const state = State.applyFrame(State.initialState(), { jsonrpc: "2.0", method: "keyringUnavailable", params: {} });
+  assert.equal(state.screen, "keyring-unavailable");
+  assert.equal(state.canRetry, true);
+});
+
+test("the Retry request is a keyring.retry line", () => {
+  const line = State.keyringRetryRequest(7);
+  assert.ok(line.endsWith("\n"));
+  assert.deepEqual(JSON.parse(line), { jsonrpc: "2.0", id: 7, method: "keyring.retry" });
+});

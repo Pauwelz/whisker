@@ -1,0 +1,9 @@
+{"dir":"keyring","state":"locked"}
+{"dir":"clock","advance":"30s"}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"keyringUnavailable","params":{}}}
+{"dir":"view","expect":{"screen":"keyring-unavailable","canRetry":true}}
+{"dir":"keyring","state":"unlocked"}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"keyring.retry"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"view","expect":{"screen":"ready","canRetry":false}}

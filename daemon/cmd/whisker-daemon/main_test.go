@@ -31,7 +31,9 @@ func buildDaemon(t *testing.T) string {
 func start(t *testing.T, bin, runtimeDir string) *child {
 	t.Helper()
 	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir)
+	// No session bus: the keyring fails at once, so these tests never touch the real keyring.
+	cmd.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir, "XDG_DATA_HOME="+runtimeDir,
+		"DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/bus")
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +59,7 @@ func (c *child) exitCode() int {
 func TestSecondDaemonOnOneProfileExitsProfileInUse(t *testing.T) {
 	bin, dir := buildDaemon(t), t.TempDir()
 	first := start(t, bin, dir)
-	if !first.out.Scan() { // the ready frame: the first Daemon holds the lock
+	if !first.out.Scan() { // the keyring frame: the first Daemon holds the lock
 		t.Fatal("first Daemon sent no frame")
 	}
 	second := start(t, bin, dir)

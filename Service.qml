@@ -21,6 +21,13 @@ Item {
     else daemon.running = true
   }
 
+  property int nextRequestId: 1
+
+  // Ask the Daemon to try the keyring again. The pop-out offers Retry only when the Daemon asks for it.
+  function retryKeyring() {
+    daemon.write(State.keyringRetryRequest(nextRequestId++))
+  }
+
   FileView {
     path: root.pluginDir + "manifest.json"
     printErrors: false

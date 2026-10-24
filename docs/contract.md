@@ -35,7 +35,7 @@ The Go source of truth is `daemon/internal/contract/contract.go`. The Plugin mir
 
 ### `ready`
 
-The Daemon sends `ready` once, before it reads any request. The Daemon can take commands from then on.
+The Daemon sends `ready` once it has opened the Profile (the stores and the store key). The Daemon can take commands from then on.
 
 ```json
 {"jsonrpc":"2.0","method":"ready","params":{}}
@@ -43,9 +43,23 @@ The Daemon sends `ready` once, before it reads any request. The Daemon can take 
 
 Fixture: `contract/fixtures/ready.jsonl`.
 
+If the store key was lost, the Daemon deletes the unreadable Profile first. `ready` then follows as for a new Profile. Fixture: `contract/fixtures/lost-key.jsonl`.
+
+### `keyringUnavailable`
+
+The keyring failed or did not answer in 30 s. The Daemon sends this instead of `ready` and waits for `keyring.retry`. The Plugin shows "keyring unavailable" with Retry.
+
+```json
+{"jsonrpc":"2.0","method":"keyringUnavailable","params":{}}
+```
+
+Fixtures: `contract/fixtures/keyring-missing.jsonl`, `contract/fixtures/keyring-locked.jsonl`.
+
 ## Methods (Plugin to Daemon)
 
-None yet.
+### `keyring.retry`
+
+Valid only after `keyringUnavailable`. The Daemon answers with an empty `result` at once. Then it joins the keyring attempt that is still in flight (or starts one) and sends `ready` or `keyringUnavailable` again. Any other time, the method does not exist.
 
 ## Errors
 
@@ -67,8 +81,11 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `in` | `frame` | The Plugin sends `frame` to the Daemon. A string `frame` is sent as a raw line. |
 | `out` | `frame` | The Daemon sends `frame`. |
 | `view` | `expect` | After the `out` frames above it, the Plugin view state holds every key of `expect`. |
+| `keyring` | `state` | The Go test sets the fake keyring: `missing` (calls fail), `ok`, `locked` (calls block) or `unlocked`. |
+| `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
+| `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
 
-- The Go test (Seam A) sends all `in` lines, then checks that stdout holds exactly the `out` frames in order. It ignores `view` lines.
+- The Go test (Seam A) runs the lines in order: it sends each `in` line and waits for each `out` frame. At the end it checks that no frame is left. It ignores `view` lines.
 - The `node --test` test (Seam B) folds the `out` frames through `WhiskerState.js` and checks each `view` line. It ignores `in` lines.
 - Later tickets add line kinds (fake WhatsApp events, clock steps) here, in this table.
 

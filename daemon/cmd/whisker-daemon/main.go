@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
+	"github.com/Pauwelz/whisker/daemon/internal/keystore"
+	"github.com/Pauwelz/whisker/daemon/internal/profile"
 	"github.com/Pauwelz/whisker/daemon/internal/profilelock"
 )
 
@@ -42,5 +44,16 @@ func run() int {
 		return contract.ExitError
 	}
 	defer lock.Release()
-	return contract.Run(os.Stdin, os.Stdout, os.Stderr)
+	dataDir := os.Getenv("XDG_DATA_HOME")
+	if dataDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "no home directory")
+			return contract.ExitError
+		}
+		dataDir = filepath.Join(home, ".local", "share")
+	}
+	p := profile.New(filepath.Join(dataDir, "whisker"), keystore.New(keystore.SecretService{}, keystore.RealClock))
+	defer p.Close()
+	return contract.Run(os.Stdin, os.Stdout, os.Stderr, p)
 }

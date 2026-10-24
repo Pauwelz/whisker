@@ -2,7 +2,7 @@
 
 // Pure Plugin state logic: Daemon frames and process events in, view state out.
 // No QML imports, so `node --test` can load it (see tests/load.js).
-// A view state is { screen, reason, message }. Views only show it.
+// A view state is { screen, reason, message, canRetry }. Views only show it.
 
 // Mirror of the exit code table in docs/contract.md and daemon/internal/contract.
 var EXIT_OVERSIZED_LINE = 10
@@ -36,7 +36,15 @@ function parseLine(line) {
 }
 
 function applyFrame(state, frame) {
-  if (frame && frame.method === "ready") return { screen: "ready", reason: "", message: "The Daemon is ready." }
+  if (frame && frame.method === "ready")
+    return { screen: "ready", reason: "", message: "The Daemon is ready.", canRetry: false }
+  if (frame && frame.method === "keyringUnavailable")
+    return {
+      screen: "keyring-unavailable",
+      reason: "keyring-unavailable",
+      message: "The keyring is unavailable. Unlock the keyring, then select Retry.",
+      canRetry: true
+    }
   return state
 }
 
@@ -46,4 +54,9 @@ function daemonExited(state, exitCode) {
   if (exitCode === EXIT_PROFILE_IN_USE)
     return error("profile-in-use", "Another whisker Daemon uses this Profile. Close it and restart the shell.")
   return error("daemon-exited", "The Daemon stopped (exit code " + exitCode + ").")
+}
+
+// The request that asks the Daemon to try the keyring again. Send it as one line.
+function keyringRetryRequest(id) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "keyring.retry" }) + "\n"
 }

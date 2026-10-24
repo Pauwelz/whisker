@@ -14,3 +14,6 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - `scripts/build-daemon.sh` builds the Daemon for local development.
 - A second Daemon on one Profile waits 5 s, then exits with code 11. The pop-out shows a "Profile in use" screen.
 - `CONTRIBUTING.md` explains how to send a pull request to `dev`.
+- The Daemon keeps its device store and chat store in encrypted SQLite. The store key lives in the Secret Service.
+- The pop-out shows "keyring unavailable" with Retry when the keyring does not answer in 30 s.
+- The Daemon deletes a Profile whose store key is lost, and starts a fresh one.
