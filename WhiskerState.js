@@ -157,7 +157,7 @@ function refreshesChats(frame) {
 function chatListRequest(id, offset, query) {
   var params = { offset: offset }
   if (query) params.query = query
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chats.list", params: params }) + "\n"
+  return request(id, "chats.list", params)
 }
 
 // The linking screen keeps the QR code and the Pair Code unless a frame changes them.
@@ -177,18 +177,18 @@ function daemonExited(state, exitCode) {
 
 // The request that asks the Daemon to try the keyring again. Send it as one line.
 function keyringRetryRequest(id) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "keyring.retry" }) + "\n"
+  return request(id, "keyring.retry")
 }
 
 // The request that links by Pair Code. `phone` is what the user typed: only the digits count.
 function pairCodeRequest(id, phone) {
   var digits = String(phone).replace(/\D/g, "")
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "link.pairCode", params: { phone: digits } }) + "\n"
+  return request(id, "link.pairCode", { phone: digits })
 }
 
 // The request that restarts linking after a failure.
 function linkRetryRequest(id) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "link.retry" }) + "\n"
+  return request(id, "link.retry")
 }
 
 // What the Retry button does in this view state: "keyring" and "link" ask the Daemon, "download" fetches the Daemon again.
@@ -210,17 +210,22 @@ function requestsSettings(frame) {
 }
 
 function settingsGetRequest(id) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "settings.get" }) + "\n"
+  return request(id, "settings.get")
 }
 
 // `changes` holds only the settings that change, for example { sendTyping: false }.
 function settingsSetRequest(id, changes) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "settings.set", params: changes }) + "\n"
+  return request(id, "settings.set", changes)
 }
 
 // The request for Log out. The Plugin sends it only after the user confirmed.
 function logoutRequest(id) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "profile.logout" }) + "\n"
+  return request(id, "profile.logout")
+}
+
+// One JSON-RPC request line for the Daemon. `params` is left out when undefined.
+function request(id, method, params) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: method, params: params }) + "\n"
 }
 
 // Qt key codes of the two Enter keys. The composer sends the code of the key that was pressed.
@@ -353,33 +358,33 @@ function draftTarget(state, field) {
 }
 
 function draftGetRequest(id, jid) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "draft.get", params: { chat: jid } }) + "\n"
+  return request(id, "draft.get", { chat: jid })
 }
 
 function draftSetRequest(id, jid, draft) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "draft.set", params: { chat: jid, text: draft.text, quote: draft.quote, edit: draft.edit } }) + "\n"
+  return request(id, "draft.set", { chat: jid, text: draft.text, quote: draft.quote, edit: draft.edit })
 }
 
 // The request for one page of the Chat timeline. The next page starts at the number of Messages shown.
 function messagesRequest(id, jid, offset) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.messages", params: { chat: jid, offset: offset } }) + "\n"
+  return request(id, "chat.messages", { chat: jid, offset: offset })
 }
 
 // `quoteId` is the Message that the new Message quotes. Leave it out for a plain Message.
 function sendRequest(id, jid, text, quoteId) {
   var params = { chat: jid, text: text }
   if (quoteId) params.quote = quoteId
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.send", params: params }) + "\n"
+  return request(id, "chat.send", params)
 }
 
 // The request to send a file as Media. `url` is the file:// URL that FileDialog gives; the Daemon needs a path.
 function sendMediaRequest(id, jid, url, caption) {
   var path = decodeURIComponent(String(url).replace(/^file:\/\//, ""))
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.sendMedia", params: { chat: jid, path: path, caption: caption } }) + "\n"
+  return request(id, "chat.sendMedia", { chat: jid, path: path, caption: caption })
 }
 
 function retryMessageRequest(id, jid, messageId) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.retry", params: { chat: jid, id: messageId } }) + "\n"
+  return request(id, "chat.retry", { chat: jid, id: messageId })
 }
 
 // What the composer does with a key press: "send", "swallow" (Enter with nothing to send) or "default" (the text field handles it).
@@ -419,7 +424,7 @@ function canRetryMessage(message) {
 // The request that tells the Daemon about the pop-out: `open`, and the Chat it shows (`jid`, or "" for the Chat list).
 // The Daemon derives the Attended Chat from it. Send it on every change and again on `ready`.
 function attentionRequest(id, open, jid) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "attention.set", params: { open: open, chat: jid || "" } }) + "\n"
+  return request(id, "attention.set", { open: open, chat: jid || "" })
 }
 
 // True when the Plugin must send the pop-out state again after this frame: a new Daemon starts with a closed pop-out.
@@ -479,11 +484,11 @@ function canEditMessage(message, nowSeconds) {
 }
 
 function editRequest(id, jid, messageId, text) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.edit", params: { chat: jid, id: messageId, text: text } }) + "\n"
+  return request(id, "chat.edit", { chat: jid, id: messageId, text: text })
 }
 
 function revokeRequest(id, jid, messageId) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.revoke", params: { chat: jid, id: messageId } }) + "\n"
+  return request(id, "chat.revoke", { chat: jid, id: messageId })
 }
 
 // The request for the composer text: an edit of `editingId`, or a new Message when `editingId` is empty.
@@ -507,7 +512,7 @@ function reactionChoice(message, emoji) {
 }
 
 function reactRequest(id, jid, messageId, emoji) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.react", params: { chat: jid, id: messageId, emoji: emoji } }) + "\n"
+  return request(id, "chat.react", { chat: jid, id: messageId, emoji: emoji })
 }
 
 // The Reactions of a Message as "👍 2" chips, in the order the emoji were first used. A Tombstone shows none.
@@ -641,7 +646,7 @@ function typingAction(wasTyping, text) {
 }
 
 function typingRequest(id, jid, typing) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.typing", params: { chat: jid, typing: typing } }) + "\n"
+  return request(id, "chat.typing", { chat: jid, typing: typing })
 }
 
 // The line under the Chat header: the activity ("typing…") wins over Online and Last Seen.
@@ -738,29 +743,26 @@ function openLabel(message, playingKey) {
 
 // The Daemon sends Played (and Read for that Message in On interaction mode) when playback starts.
 function playedRequest(id, message) {
-  return mediaRequest(id, "media.played", { chat: message.chat, id: message.id })
+  return request(id, "media.played", { chat: message.chat, id: message.id })
 }
 
-function mediaRequest(id, method, params) {
-  return JSON.stringify({ jsonrpc: "2.0", id: id, method: method, params: params }) + "\n"
-}
 
 function mediaDownloadRequest(id, message) {
-  return mediaRequest(id, "media.download", { chat: message.chat, id: message.id })
+  return request(id, "media.download", { chat: message.chat, id: message.id })
 }
 
 function mediaOpenRequest(id, message) {
-  return mediaRequest(id, "media.open", { chat: message.chat, id: message.id })
+  return request(id, "media.open", { chat: message.chat, id: message.id })
 }
 
 // `path` is the file the user chose in the Save as dialog.
 function mediaSaveRequest(id, message, path) {
-  return mediaRequest(id, "media.save", { chat: message.chat, id: message.id, path: path })
+  return request(id, "media.save", { chat: message.chat, id: message.id, path: path })
 }
 
 // The Plugin sends this when a Chat closes, so the Daemon deletes the plain copies.
 function mediaReleaseRequest(id, jid) {
-  return mediaRequest(id, "media.release", { chat: jid })
+  return request(id, "media.release", { chat: jid })
 }
 
 // Which parts of the pop-out show. `local` is the view state that only the pop-out keeps: { pairMode, showSettings }.
