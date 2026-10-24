@@ -126,7 +126,7 @@ type Message struct {
 	// Mentions are the JIDs that Text mentions as "@<user part>". MentionsMe tells that one of them is the user.
 	Mentions   []string `json:"mentions"`
 	MentionsMe bool     `json:"mentionsMe"`
-	Timer    int64  `json:"timer"` // the Disappearing timer in seconds that the Message carries, 0 for none
+	Timer      int64    `json:"timer"` // the Disappearing timer in seconds that the Message carries, 0 for none
 }
 
 // Quote is the Message that a reply quotes. Sender is its author, empty for the user. Text is the preview.
