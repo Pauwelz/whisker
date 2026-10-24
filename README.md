@@ -26,7 +26,7 @@ whisker keeps the Profile in these places:
 Log out in the pop-out deletes the Profile and the key. It keeps the Profile Settings. `omarchy plugin remove` does not delete any of these.
 To delete everything by hand, remove both folders and the keyring item.
 
-The key protects the stores only as well as your keyring. Set a password on the login keyring, so that a stolen disk or an unlocked session does not open it.
+The key protects the stores only as well as your keyring. Set a password on the login keyring. Without one, a person with your disk can read the key.
 
 ## Keyboard shortcuts
 
