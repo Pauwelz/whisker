@@ -103,6 +103,12 @@ func (s *Store) Pending() ([]Message, error) {
 
 // AddPending stores a new Message of the user in the Chat, in state pending. The Chat must exist.
 func (s *Store) AddPending(chat, id, text string) (Message, error) {
+	return s.AddPendingMedia(chat, id, text, nil)
+}
+
+// AddPendingMedia is AddPending for a Message with Media (text is the caption). The file is in the Media store already,
+// encrypted with m.Key, so the Media is ready at once and a restart or a Retry sends it again.
+func (s *Store) AddPendingMedia(chat, id, text string, m *whatsapp.Media) (Message, error) {
 	now := s.now().Unix()
 	err := s.inTx(func(tx *sql.Tx) error {
 		res, err := tx.Exec(`UPDATE chats SET last_active = MAX(last_active, ?) WHERE jid = ?`, now, chat)
@@ -114,6 +120,11 @@ func (s *Store) AddPending(chat, id, text string) (Message, error) {
 		}
 		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state) VALUES (?, ?, '', 1, ?, ?, ?)`,
 			chat, id, now, text, whatsapp.StatePending)
+		if err != nil || m == nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO media (chat_jid, id, kind, mime, name, size, media_key, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, id, m.Kind, m.Mime, m.Name, m.Size, m.Key, MediaReady)
 		return err
 	})
 	if err != nil {

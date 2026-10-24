@@ -376,6 +376,22 @@ Panel {
             }
           }
 
+          // The picker loads on demand, see MediaPicker.qml. The composer text becomes the caption.
+          Loader {
+            id: picker
+            active: false
+            source: "MediaPicker.qml"
+            onLoaded: item.picked.connect(function(file) {
+              root.whiskerService.sendMedia(file, composer.text)
+              composer.text = ""
+            })
+          }
+          Button {
+            text: "Attach"
+            bordered: true
+            onClicked: { picker.active = false; picker.active = true }
+          }
+
           TextEdit {
             id: composer
             width: parent.width

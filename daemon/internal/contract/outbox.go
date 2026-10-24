@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
@@ -30,6 +32,7 @@ type outbox struct {
 	inflight map[string]bool
 	results  chan sendResult
 	incoming func(whatsapp.NewMessage) // runs after a new Message is stored, may be nil
+	store    *media.Store              // holds the files of Media to send
 }
 
 type sendResult struct {
@@ -49,7 +52,32 @@ func (b *outbox) submit(m chatstore.Message) {
 	}
 	b.inflight[m.ID] = true
 	gen := b.gen
-	go func() { b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text)} }()
+	if m.Media == nil {
+		go func() { b.results <- sendResult{m.Chat, m.ID, gen, b.port.Send(m.Chat, m.ID, m.Text)} }()
+		return
+	}
+	ref, err := b.chats.MediaOf(m.Chat, m.ID)
+	go func() {
+		if err == nil {
+			err = b.sendMedia(m, ref.Media)
+		}
+		b.results <- sendResult{m.Chat, m.ID, gen, err}
+	}()
+}
+
+// sendMedia decrypts the stored file to a plain copy for the upload and removes the copy after.
+func (b *outbox) sendMedia(m chatstore.Message, ref whatsapp.Media) error {
+	path, err := b.store.Plain(m.Chat, m.ID, extension(ref), ref.Kind, ref.Key)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return b.port.SendMedia(m.Chat, m.ID, ref, f, m.Text)
 }
 
 // flush starts the send of every pending Message, oldest first.

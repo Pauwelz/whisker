@@ -234,6 +234,14 @@ Fixtures: `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`.
 
 Params: `chat` and `id` of a `failed` Message. The Daemon makes it `pending`, answers `{"message": {...}}` and sends it. Error -32006 means no such failed Message. Fixture: `chat-failed.jsonl`.
 
+### `chat.sendMedia`
+
+Params: `chat`, `path` (absolute path of a file) and `caption` (optional, at most 65536 characters). Valid once the Daemon is `ready` and linked. The file must be a regular file of 1 byte to 100 MiB. A JPEG, PNG or WebP file goes out as `image`. Every other file goes out as `document` with its file name.
+
+The Daemon encrypts a copy of the file in the Profile (see Media), stores the Message as `pending` with `media.state` `ready`, answers `{"message": {...}}` at once, and uploads it when the connection is up. `messageChanged` reports `sent`, or `failed`. `chat.retry` works as for text. The Message keeps one ID for life. A restart keeps the Media: `media.open` works at once. The copy into the Profile blocks the Daemon for a moment on a large file.
+
+Error -32006 means a relative or unreadable `path`, a file that is empty, too large or not a regular file, a too long caption, or an unknown Chat. Error -32009 means the copy into the Profile failed. Fixtures: `chat-send-media.jsonl`, `chat-send-media-offline.jsonl`.
+
 ### `chat.edit`
 
 Params: `chat`, `id` and `text` (not blank, at most 65536 characters). Valid once the Daemon is `ready` and linked. The Message must be a Message of the user that WhatsApp accepted (`sent` or later), not a Tombstone, and at most 20 minutes old. The Daemon sends the edit to WhatsApp, stores the new text with `edited: true`, answers `{"message": {...}}` and sends `messageChanged`. The Message keeps its place.
@@ -313,7 +321,7 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32003 | chat store failed | `chats.list`, `chat.messages`, `chat.send` or `chat.retry` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
 | -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
-| -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. |
+| -32006 | invalid message | `chat.send` or `chat.sendMedia` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. |
 | -32007 | send failed | `chat.edit` or `chat.revoke` could not reach WhatsApp. The Message is unchanged. |
 | -32008 | invalid media | `media.download`, `media.open`, `media.save` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
@@ -348,7 +356,8 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `sent` | `ids` | The Go test checks the Message IDs that the fake port has sent so far, in order. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
-| `file` | `path`, and `content` or `missing` | The Go test checks a file: it holds `content`, or (`missing`: true) it does not exist. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
+| `uploaded` | `uploads` | The Go test checks the Media that the fake port has uploaded and sent so far, in order, as `"id\|kind\|mime\|name\|caption\|content"`. |
+| `file` | `path`, and `content` or `missing` | With `write`: true the Go test writes the file with `content` (a source file for `chat.sendMedia`). Otherwise the Go test checks a file: it holds `content`, or (`missing`: true) it does not exist. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
 | `plugin` | `openChat` | The Plugin test opens this Chat (`jid`, `name`, `kind`) as the user does. The Go test ignores it. |
 | `whatsapp` | one of the keys below | The Go test scripts the fake WhatsApp port. |
 

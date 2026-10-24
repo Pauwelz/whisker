@@ -304,6 +304,12 @@ function sendRequest(id, jid, text) {
   return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.send", params: { chat: jid, text: text } }) + "\n"
 }
 
+// The request to send a file as Media. `url` is the file:// URL that FileDialog gives; the Daemon needs a path.
+function sendMediaRequest(id, jid, url, caption) {
+  var path = decodeURIComponent(String(url).replace(/^file:\/\//, ""))
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.sendMedia", params: { chat: jid, path: path, caption: caption } }) + "\n"
+}
+
 function retryMessageRequest(id, jid, messageId) {
   return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.retry", params: { chat: jid, id: messageId } }) + "\n"
 }

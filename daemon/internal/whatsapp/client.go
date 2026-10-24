@@ -28,6 +28,7 @@ const (
 	// shortcut: one fixed limit for every download, upgrade to a size based limit if a large video times out.
 	downloadTimeout = 10 * time.Minute
 	editTimeout     = 15 * time.Second
+	uploadTimeout   = 10 * time.Minute
 )
 
 // Client is the whatsmeow adapter: the only place whatsmeow types appear.
@@ -116,6 +117,36 @@ func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
 func (c *Client) Send(chat, id, text string) error {
 	return c.send(chat, sendTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
 		return &waE2E.Message{Conversation: proto.String(text)}, whatsmeow.SendRequestExtra{ID: id}
+	})
+}
+
+// SendMedia uploads plain, then sends the Media Message. A retry uses the same Message ID.
+func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption string) error {
+	if !c.cli.IsConnected() {
+		return ErrOffline
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
+	defer cancel()
+	up, err := c.cli.UploadReader(ctx, plain, nil, whatsmeow.MediaType(m.Kind.Info()))
+	if err != nil {
+		return err
+	}
+	msg := &waE2E.Message{}
+	if m.Kind == media.Image {
+		msg.ImageMessage = &waE2E.ImageMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: proto.Uint64(up.FileLength),
+			Mimetype: proto.String(m.Mime), Caption: proto.String(caption),
+		}
+	} else {
+		msg.DocumentMessage = &waE2E.DocumentMessage{
+			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
+			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: proto.Uint64(up.FileLength),
+			Mimetype: proto.String(m.Mime), FileName: proto.String(m.Name), Caption: proto.String(caption),
+		}
+	}
+	return c.send(chat, sendTimeout, func(types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
+		return msg, whatsmeow.SendRequestExtra{ID: id}
 	})
 }
 

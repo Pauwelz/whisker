@@ -346,3 +346,7 @@ test("the composer sends an edit when a Message is under edit, otherwise a new M
   assert.deepEqual(JSON.parse(State.composerRequest(5, direct.jid, "", "hi")), { jsonrpc: "2.0", id: 5, method: "chat.send", params: { chat: direct.jid, text: "hi" } });
   assert.deepEqual(JSON.parse(State.revokeRequest(6, direct.jid, "m1")), { jsonrpc: "2.0", id: 6, method: "chat.revoke", params: { chat: direct.jid, id: "m1" } });
 });
+
+test("sendMediaRequest turns a file URL into a path", () => {
+  assert.deepEqual(JSON.parse(State.sendMediaRequest(7, direct.jid, "file:///home/me/My%20Doc%C3%A9.pdf", "hi")), { jsonrpc: "2.0", id: 7, method: "chat.sendMedia", params: { chat: direct.jid, path: "/home/me/My Docé.pdf", caption: "hi" } });
+});

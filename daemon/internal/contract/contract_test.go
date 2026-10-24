@@ -41,11 +41,13 @@ type fixtureLine struct {
 	Edits     []string        `json:"edits"`     // dir "edited": "id:text" of each edit the fake port has sent so far
 	Event     json.RawMessage `json:"event"`
 
-	Download      *string `json:"download"`      // dir "whatsapp": the plain Media the next downloads return
-	DownloadError *string `json:"downloadError"` // dir "whatsapp": "" lets downloads work again
-	Path          string  `json:"path"`          // dir "file"
-	Content       string  `json:"content"`       // dir "file": the content the file must hold
-	Missing       bool    `json:"missing"`       // dir "file": the file must not exist
+	Download      *string  `json:"download"`      // dir "whatsapp": the plain Media the next downloads return
+	DownloadError *string  `json:"downloadError"` // dir "whatsapp": "" lets downloads work again
+	Path          string   `json:"path"`          // dir "file"
+	Content       string   `json:"content"`       // dir "file": the content the file must hold
+	Missing       bool     `json:"missing"`       // dir "file": the file must not exist
+	Write         bool     `json:"write"`         // dir "file": the test writes the file with `content`
+	Uploads       []string `json:"uploads"`       // dir "uploaded": "id|kind|mime|name|caption|content" of each Media the fake port has sent
 }
 
 // runner runs the Daemon on pipes, with a fake keyring, a manual clock and a Profile in a temp dir.
@@ -217,6 +219,10 @@ func TestFixtures(t *testing.T) {
 					if got := r.currentPort().Revokes(); !reflect.DeepEqual(got, append([]string{}, line.IDs...)) {
 						t.Errorf("revokes = %v, want %v", got, line.IDs)
 					}
+				case "uploaded":
+					if got := r.currentPort().Uploads(); !reflect.DeepEqual(got, append([]string{}, line.Uploads...)) {
+						t.Errorf("uploads = %v, want %v", got, line.Uploads)
+					}
 				case "file":
 					r.checkFile(line)
 				case "clock":
@@ -239,6 +245,15 @@ func TestFixtures(t *testing.T) {
 // checkFile checks a plain Media copy in the runtime folder: its content, or that it is gone.
 func (r *runner) checkFile(line fixtureLine) {
 	path := strings.ReplaceAll(line.Path, "$RUNTIME", r.runtime)
+	if line.Write {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			r.t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(line.Content), 0o600); err != nil {
+			r.t.Fatal(err)
+		}
+		return
+	}
 	got, err := os.ReadFile(path)
 	switch {
 	case line.Missing && err == nil:

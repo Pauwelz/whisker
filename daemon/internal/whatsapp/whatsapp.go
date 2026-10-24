@@ -30,6 +30,9 @@ type Port interface {
 	// Send sends a text Message to a Chat. It returns ErrOffline when there is no connection.
 	// It can block for a long time: call it off the Daemon loop.
 	Send(chat, id, text string) error
+	// SendMedia uploads the plain Media in plain and sends it with the caption. Call it off the Daemon loop.
+	// It returns ErrOffline when there is no connection.
+	SendMedia(chat, id string, m Media, plain *os.File, caption string) error
 	// Download downloads the plain Media into dst, and checks it against its hashes.
 	// It can block for a long time: call it off the Daemon loop.
 	Download(ref Media, dst *os.File) error

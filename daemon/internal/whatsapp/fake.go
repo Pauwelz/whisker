@@ -2,7 +2,9 @@ package whatsapp
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -18,6 +20,7 @@ type Fake struct {
 	connects   int
 	sendErr    error
 	sent       []string
+	uploads    []string
 	attempts   int
 	ids        int
 	logoutErr  error
@@ -76,6 +79,30 @@ func (f *Fake) Send(_, id, _ string) error {
 	}
 	f.sent = append(f.sent, id)
 	return nil
+}
+
+// SendMedia fails with the send error, like Send. A good call records the Media and its plain content.
+func (f *Fake) SendMedia(_, id string, m Media, plain *os.File, caption string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.attempts++
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	content, err := io.ReadAll(plain)
+	if err != nil {
+		return err
+	}
+	f.sent = append(f.sent, id)
+	f.uploads = append(f.uploads, strings.Join([]string{id, string(m.Kind), m.Mime, m.Name, caption, string(content)}, "|"))
+	return nil
+}
+
+// Uploads lists the Media that SendMedia accepted as "id|kind|mime|name|caption|content", in order.
+func (f *Fake) Uploads() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.uploads...)
 }
 
 // SetDownload scripts Download: it writes content to the file, or fails with err (a non-nil err wins).

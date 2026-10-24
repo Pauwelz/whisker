@@ -43,6 +43,7 @@ const (
 	methodChatMessages  = "chat.messages"
 	methodChatSend      = "chat.send"
 	methodChatRetry     = "chat.retry"
+	methodChatSendMedia = "chat.sendMedia"
 	methodAttentionSet  = "attention.set"
 	methodMediaDownload = "media.download"
 	methodMediaOpen     = "media.open"
@@ -161,6 +162,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			mediaDone = loader.results
 			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut}
 			box.incoming = read.incoming
+			box.store = profile.Media()
 			ready = true
 			if !send(notification("ready", nil)) || !startPort() {
 				return ExitError
@@ -240,15 +242,16 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				ID     json.RawMessage `json:"id"`
 				Method string          `json:"method"`
 				Params struct {
-					Phone  string `json:"phone"`
-					Offset int    `json:"offset"`
-					Limit  int    `json:"limit"`
-					Query  string `json:"query"`
-					Chat   string `json:"chat"`
-					Text   string `json:"text"`
-					Open   bool   `json:"open"`
-					ID     string `json:"id"`
-					Path   string `json:"path"`
+					Phone   string `json:"phone"`
+					Offset  int    `json:"offset"`
+					Limit   int    `json:"limit"`
+					Query   string `json:"query"`
+					Chat    string `json:"chat"`
+					Text    string `json:"text"`
+					Caption string `json:"caption"`
+					Open    bool   `json:"open"`
+					ID      string `json:"id"`
+					Path    string `json:"path"`
 					settings.Update
 				} `json:"params"`
 			}
@@ -276,6 +279,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				reply = chatMessagesReply(chats, req.ID, req.Params.Chat, req.Params.Offset, req.Params.Limit, logOut)
 			} else if req.Method == methodChatSend && ready && port.Linked() {
 				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, logOut)
+			} else if req.Method == methodChatSendMedia && ready && port.Linked() {
+				reply, submit = chatSendMediaReply(chats, profile.Media(), port.NewMessageID, req.ID, req.Params.Chat, req.Params.Path, req.Params.Caption, logOut)
 			} else if req.Method == methodChatRetry && ready && port.Linked() {
 				reply, submit = chatRetryReply(chats, req.ID, req.Params.Chat, req.Params.ID, logOut)
 			} else if req.Method == methodMediaDownload && ready && port.Linked() {
@@ -321,7 +326,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			}
 			if submit != nil {
 				box.submit(*submit)
-				if req.Method == methodChatSend {
+				if req.Method == methodChatSend || req.Method == methodChatSendMedia {
 					read.interaction(submit.Chat) // a sent Message is the interaction
 				}
 			}

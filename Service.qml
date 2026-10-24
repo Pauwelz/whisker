@@ -141,6 +141,11 @@ Item {
     daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, editingId, text))
   }
 
+  // Called by the file picker of the composer. `url` is the picked file, the composer text is its caption.
+  function sendMedia(url, caption) {
+    daemon.write(State.sendMediaRequest(nextRequestId++, view.openChat.jid, url, caption))
+  }
+
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.
   function revokeMessage(messageId) {
     daemon.write(State.revokeRequest(nextRequestId++, view.openChat.jid, messageId))
