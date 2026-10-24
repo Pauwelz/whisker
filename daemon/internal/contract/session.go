@@ -47,6 +47,8 @@ type session struct {
 	mediaDone    <-chan mediaResult // the results of the Media downloads
 	expiryTick   <-chan time.Time   // fires when the sweep of Disappearing Messages is due
 	retryConnect <-chan time.Time   // fires when a failed connect of a linked Profile is due again
+	muteTick     <-chan time.Time   // fires when the next Mute ends, so the bar count moves
+	muteAt       int64              // the Mute end that muteTick waits for
 }
 
 // open opens the Profile and sends `ready`, or tells the Plugin that the keyring is unavailable.
@@ -74,6 +76,7 @@ func (s *session) open() int {
 			fmt.Fprintln(s.logOut, "chat store write failed")
 		}
 		s.expiryTick = Timers.After(ExpiryInterval)
+		s.scheduleMuteEnd()
 		s.pres = newPresenter(s.port, s.prefs, &s.attn, s.logOut)
 		s.ready = true
 		if !s.send(notification("ready", nil)) || !s.startPort() {
@@ -125,7 +128,7 @@ func (s *session) unlink(by string) int {
 	s.port.Disconnect()
 	s.wipeMedia()
 	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader = false, nil, nil, nil, nil, nil, nil, nil, nil
-	s.sent, s.mediaDone, s.expiryTick, s.retryConnect = nil, nil, nil, nil
+	s.sent, s.mediaDone, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, 0
 	s.attn.Set(s.attn.Open(), "") // the Chat is gone with the Profile
 	if err := s.profile.Delete(); err != nil {
 		fmt.Fprintln(s.logOut, "profile delete failed")
@@ -208,6 +211,7 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 			fmt.Fprintln(s.logOut, "chat store write failed") // the error text could hold names
 		} else if stored {
 			ok = s.send(notification("chatsChanged", nil))
+			s.scheduleMuteEnd()
 		}
 	}
 	return exitIf(ok)
@@ -230,5 +234,20 @@ func (s *session) merge(a whatsapp.ChatAlias) bool {
 	if s.attn.Attended() == a.LID {
 		s.attn.Set(true, a.Phone)
 	}
+	s.scheduleMuteEnd()
 	return s.send(notification("chatMerged", map[string]any{"from": a.LID, "to": a.Phone})) && s.send(notification("chatsChanged", nil))
+}
+
+// scheduleMuteEnd sets one timer for the earliest Mute end, so the Plugin counts the Chat again when its Mute ends.
+// It keeps the timer that waits for the same end, and drops an older one.
+func (s *session) scheduleMuteEnd() {
+	until, ok, err := s.chats.NextMuteEnd()
+	switch {
+	case err != nil:
+		fmt.Fprintln(s.logOut, "chat store read failed")
+	case !ok:
+		s.muteTick, s.muteAt = nil, 0
+	case until != s.muteAt:
+		s.muteTick, s.muteAt = Timers.After(time.Duration(until-Now().Unix())*time.Second), until
+	}
 }

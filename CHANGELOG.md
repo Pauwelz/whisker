@@ -14,6 +14,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- The bar count now matches the Chat list: a Chat with no activity no longer counts. The count also updates when a Mute ends.
 - History Sync now fills Pin, Mute, unread and the Disappearing timer of a Chat that a live Message created first. A later History Sync batch no longer overwrites a value that a live event set.
 - A Chat merge no longer deletes Media files when a move fails. The Daemon logs "media move failed" and keeps the files.
 - A Message that you sent while two Chats merged now shows as sent in the merged Chat. Before, it stayed Sending.

@@ -81,13 +81,15 @@ Fixtures: `contract/fixtures/link-qr.jsonl`, `link-failed.jsonl`, `link-unlinked
 
 ### `chatsChanged`
 
-The chat store changed: History Sync brought Chats, or App State, a contact name or a Push Name changed. The Plugin asks for the Chat list again (`chats.list`, offset 0). The Plugin also asks once after `linked`.
+The chat store changed: History Sync brought Chats, or App State, a contact name or a Push Name changed. The Plugin asks for the Chat list again (`chats.list`, offset 0). The Plugin also asks once after `linked`. The Daemon also sends it when the earliest Mute ends, because the unread count then changes.
 
 ```json
 {"jsonrpc":"2.0","method":"chatsChanged","params":{}}
 ```
 
-Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-state.jsonl`.
+Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-state.jsonl`, `chats-mute-ends.jsonl`, `chats-history-after-live.jsonl`.
+
+History Sync fills `pinned`, `muted`, `unread` and `timer` of a Chat only until a live event has set that field.
 
 ### `chatMerged`
 
@@ -185,7 +187,7 @@ Params, all optional: `offset` (default 0), `limit` (default 50, at most 200) an
 - Order: Pinned Chats first, then newest `lastActive` first (Unix seconds). A Chat with no activity is not listed.
 - `kind` is `direct`, `group` or `self`.
 - `muted` is true for a Muted Chat whose mute has not ended. `unread` is the Read Marker. `pinned`, `muted` and `unread` come from App State.
-- `unreadChats` is the number of unread Chats that are not Muted, over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
+- `unreadChats` is the number of unread Chats that are not Muted and that the list shows (a Chat with no activity is not listed), over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
 - `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
 - `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
 - Error -32003 means the chat store failed.
@@ -471,7 +473,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `quoted` | `quotes` | The Go test checks the replies that the fake port has sent with a Quote so far, in order, as `"id:quotedID"`. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
 | `uploaded` | `uploads` | The Go test checks the Media that the fake port has uploaded and sent so far, in order, as `"id\|kind\|mime\|name\|caption\|content"`. |
-| `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest sweep timer of Disappearing Messages. Without it, the line fires the keyring timeout as above. |
+| `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest timer of the Daemon clock. That is the sweep of Disappearing Messages, then a Mute end, in the order the Daemon set them. Without it, the line fires the keyring timeout as above. |
 | `restart` | `now` (optional) | The Go test stops the Daemon like a closed stdin and starts it again on the same Profile, with a new fake WhatsApp port. `now` sets the Daemon time while it was off. Put the `whatsapp` start-up lines after it. |
 | `file` | `path`, and `content` or `missing` | With `write`: true the Go test writes the file with `content` (a source file for `chat.sendMedia`). With `remove`: true the Go test deletes the file. Otherwise the Go test checks a file: it holds `content`, or (`missing`: true) it does not exist, or (`present`: true) it exists. `$PROFILE` in `path` is the Profile folder. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
 | `plugin` | `openChat` | The Plugin test opens this Chat (`jid`, `name`, `kind`) as the user does. The Go test ignores it. |

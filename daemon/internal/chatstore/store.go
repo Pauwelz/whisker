@@ -87,7 +87,7 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 		sqlLimit, sqlOffset = -1, 0
 	}
 	rows, err := s.db.Query(selectChat+`
-		WHERE c.last_active > 0
+		WHERE `+listed+`
 		ORDER BY c.pinned DESC, c.last_active DESC, c.jid
 		LIMIT ? OFFSET ?`, s.now().Unix(), sqlLimit, sqlOffset)
 	if err != nil {
@@ -120,15 +120,29 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 }
 
 // UnreadChats counts the unread Chats that are not Muted, over the whole chat store. The bar shows it.
+// It counts the Chats that List shows, so the bar and the list agree.
 func (s *Store) UnreadChats() (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM chats WHERE unread AND NOT (muted_until = -1 OR muted_until > ?)`, s.now().Unix()).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM chats c WHERE `+listed+` AND c.unread AND NOT `+mutedNow, s.now().Unix()).Scan(&n)
 	return n, err
 }
 
+// NextMuteEnd returns the earliest future end of a Mute, in Unix seconds. It reports false when no Mute will end.
+func (s *Store) NextMuteEnd() (until int64, ok bool, err error) {
+	var end sql.NullInt64
+	err = s.db.QueryRow(`SELECT MIN(c.muted_until) FROM chats c WHERE c.muted_until > ?`, s.now().Unix()).Scan(&end)
+	return end.Int64, end.Valid, err
+}
+
+// listed is the SQL condition of a Chat that List shows. mutedNow is the condition of a Muted Chat, with one time parameter.
+const (
+	listed   = `c.last_active > 0`
+	mutedNow = `(c.muted_until = -1 OR c.muted_until > ?)`
+)
+
 const selectChat = `
 	SELECT c.jid, c.kind, c.pinned, c.unread, c.last_active,
-	       c.muted_until = -1 OR c.muted_until > ?, c.timer,
+	       ` + mutedNow + `, c.timer,
 	       c.subject, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
 	FROM chats c LEFT JOIN names n ON n.jid = c.jid `
 
