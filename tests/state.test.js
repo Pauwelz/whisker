@@ -53,6 +53,21 @@ test("any other Daemon exit shows an error screen", () => {
   assert.equal(state.reason, "daemon-exited");
 });
 
+test("a Profile in use exit shows its own error screen", () => {
+  const state = State.daemonExited(State.initialState(), 11);
+  assert.equal(state.screen, "error");
+  assert.equal(state.reason, "profile-in-use");
+});
+
+test("a clean Daemon exit shows the stopped screen", () => {
+  assert.equal(State.daemonExited(State.initialState(), 0).reason, "daemon-exited");
+});
+
+test("the contract doc lists the Profile in use code", () => {
+  const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
+  assert.ok(doc.includes(`| ${State.EXIT_PROFILE_IN_USE} |`));
+});
+
 test("parseLine ignores a line that is not JSON", () => {
   assert.equal(State.parseLine("log noise"), null);
   assert.equal(State.parseLine('{"method":"ready"}').method, "ready");

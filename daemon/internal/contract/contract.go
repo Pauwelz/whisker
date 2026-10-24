@@ -14,6 +14,7 @@ const (
 	ExitOK            = 0
 	ExitError         = 1
 	ExitOversizedLine = 10
+	ExitProfileInUse  = 11
 )
 
 // MaxLineBytes is the longest accepted input line, without the newline.

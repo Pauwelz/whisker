@@ -7,6 +7,8 @@
 // Mirror of the exit code table in docs/contract.md and daemon/internal/contract.
 var EXIT_OVERSIZED_LINE = 10
 
+var EXIT_PROFILE_IN_USE = 11
+
 function error(reason, message) {
   return { screen: "error", reason: reason, message: message }
 }
@@ -41,5 +43,7 @@ function applyFrame(state, frame) {
 function daemonExited(state, exitCode) {
   if (exitCode === EXIT_OVERSIZED_LINE)
     return error("oversized-line", "The Daemon stopped because it got a line that was too long.")
+  if (exitCode === EXIT_PROFILE_IN_USE)
+    return error("profile-in-use", "Another whisker Daemon uses this Profile. Close it and restart the shell.")
   return error("daemon-exited", "The Daemon stopped (exit code " + exitCode + ").")
 }
