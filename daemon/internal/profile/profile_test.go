@@ -126,6 +126,29 @@ func TestUnavailableKeyringLeavesTheProfileAlone(t *testing.T) {
 	}
 }
 
+// A chat store from a newer Daemon is not a wrong key: Open fails and keeps the Profile and its key.
+func TestNewerChatStoreFailsOpenAndKeepsTheProfile(t *testing.T) {
+	fake := keystore.NewFake()
+	p := newProfile(t, fake)
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Chat().ExecContext(context.Background(), "PRAGMA user_version = 999"); err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
+	key, _ := fake.Get()
+	if err := p.Open(); err == nil {
+		t.Fatal("Open accepted a chat store from a newer Daemon")
+	}
+	if _, err := os.Stat(filepath.Join(p.Dir, "chat.db")); err != nil {
+		t.Errorf("the Profile must stay: %v", err)
+	}
+	if got, _ := fake.Get(); got != key || got == "" {
+		t.Error("the key must stay in the keyring")
+	}
+}
+
 func TestDeleteRemovesTheProfileAndItsKey(t *testing.T) {
 	fake := keystore.NewFake()
 	p := newProfile(t, fake)
