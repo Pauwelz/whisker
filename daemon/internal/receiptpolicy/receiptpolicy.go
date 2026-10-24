@@ -29,3 +29,15 @@ func Due(mode string, t Trigger, attended bool) bool {
 	}
 	return false
 }
+
+// Played reports what to send when the user starts a voice note.
+// played: send Played. read: also send Read for that Message only (never for the rest of the Chat).
+func Played(mode string) (played, read bool) {
+	switch mode {
+	case settings.ReadReceiptsOnOpen:
+		return true, false // Read went out when the Chat became attended
+	case settings.ReadReceiptsOnInteraction:
+		return true, true
+	}
+	return false, false
+}

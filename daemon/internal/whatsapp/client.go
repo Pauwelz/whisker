@@ -153,6 +153,14 @@ func (c *Client) send(chat string, timeout time.Duration, build func(types.JID) 
 }
 
 func (c *Client) MarkRead(chat, sender string, ids []string) error {
+	return c.receipt(chat, sender, ids)
+}
+
+func (c *Client) MarkPlayed(chat, sender, id string) error {
+	return c.receipt(chat, sender, []string{id}, types.ReceiptTypePlayed)
+}
+
+func (c *Client) receipt(chat, sender string, ids []string, kind ...types.ReceiptType) error {
 	chatJID, err := types.ParseJID(chat)
 	if err != nil {
 		return err
@@ -163,7 +171,7 @@ func (c *Client) MarkRead(chat, sender string, ids []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
-	err = c.cli.MarkRead(ctx, ids, time.Now(), chatJID, senderJID)
+	err = c.cli.MarkRead(ctx, ids, time.Now(), chatJID, senderJID, kind...)
 	if errors.Is(err, whatsmeow.ErrNotConnected) {
 		return ErrOffline
 	}

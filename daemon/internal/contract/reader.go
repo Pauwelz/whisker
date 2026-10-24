@@ -21,6 +21,7 @@ type reader struct {
 	prefs  *settings.Store
 	attn   *attention.Attention
 	logOut io.Writer
+	played map[string]bool // Played sent, by Chat and Message; lost at restart
 }
 
 // setAttention records the pop-out state. It reports whether the Chat list changed (a Read Marker cleared).
@@ -89,4 +90,36 @@ func (r *reader) receipts(chat string, t receiptpolicy.Trigger) {
 			fmt.Fprintln(r.logOut, "chat store write failed")
 		}
 	}
+}
+
+// playedNote runs when the user starts a voice note of another Participant. It sends Played, and Read for that Message only, as the mode says.
+// shortcut: a repeat play after a Daemon restart sends Played again, which WhatsApp ignores; store the flag if that shows.
+func (r *reader) playedNote(chat, sender, id string) {
+	key := chat + "\x00" + id
+	if r.played[key] {
+		return
+	}
+	prefs, err := r.prefs.Get()
+	if err != nil {
+		fmt.Fprintln(r.logOut, "settings failed")
+		return
+	}
+	played, read := receiptpolicy.Played(prefs.ReadReceipts)
+	if !played {
+		return
+	}
+	if read {
+		if err := r.port.MarkRead(chat, sender, []string{id}); err != nil {
+			fmt.Fprintln(r.logOut, "read receipt failed")
+			return
+		}
+		if err := r.chats.Receipted(chat, []string{id}); err != nil {
+			fmt.Fprintln(r.logOut, "chat store write failed")
+		}
+	}
+	if err := r.port.MarkPlayed(chat, sender, id); err != nil {
+		fmt.Fprintln(r.logOut, "played receipt failed")
+		return
+	}
+	r.played[key] = true
 }

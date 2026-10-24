@@ -37,6 +37,9 @@ type Port interface {
 	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.
 	// It returns ErrOffline when there is no connection.
 	MarkRead(chat, sender string, ids []string) error
+	// MarkPlayed sends a Played receipt for one voice note. In a Group Chat sender is the author.
+	// It returns ErrOffline when there is no connection.
+	MarkPlayed(chat, sender, id string) error
 	// MarkChatRead clears the Read Marker of a Chat on the user's devices (App State). It needs a connection.
 	MarkChatRead(chat string) error
 	// Edit replaces the text of a Message of the user. It returns ErrOffline when there is no connection.

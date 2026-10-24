@@ -386,6 +386,51 @@ function composerRequest(id, jid, editingId, text) {
   return editingId ? editRequest(id, jid, editingId, text) : sendRequest(id, jid, text)
 }
 
+// The number of unread Chats the bar shows: a Chat with a Read Marker counts, a Muted Chat does not.
+// shortcut: it counts the Chats the Plugin has loaded (the first page, or a search result), upgrade to a Daemon count if that shows.
+function unreadCount(state) {
+  return (state.chats || []).filter(function(chat) { return chat.unread && !chat.muted }).length
+}
+
+// The bar label: the count, or "" so that only the icon shows when no Chat is unread.
+function unreadLabel(state) {
+  var count = unreadCount(state)
+  return count > 0 ? String(count) : ""
+}
+
+// What a notification says for a Message with Media and no text. Keys are the Media kinds of docs/contract.md.
+var MEDIA_LABELS = {
+  image: "Photo",
+  sticker: "Sticker",
+  voice: "Voice message",
+  audio: "Audio",
+  video: "Video",
+  document: "Document"
+}
+
+// The command that shows a `notify` frame as a desktop notification. A click runs the Plugin IPC handler `openChat`.
+// A Group Chat shows the sender in front of the text. The headline cannot start with "-": the sender script would read an option.
+// --exec comes last, and each word is one argument, so a Chat id never becomes a command.
+function notifyCommand(params) {
+  var headline = params.name.charAt(0) === "-" ? " " + params.name : params.name
+  var text = params.text || MEDIA_LABELS[params.media] || ""
+  var body = params.kind === "group" && params.senderName ? params.senderName + ": " + text : text
+  return ["omarchy-notification-send", "--app-name", "whisker", headline, body,
+    "--exec", "omarchy-shell", "pauwelz.whisker", "openChat", params.chat]
+}
+
+// True when the frame asks the Plugin to show a desktop notification.
+function isNotify(frame) {
+  return !!frame && frame.method === "notify"
+}
+
+// The Chat of the Chat list with this id. A Chat that is not loaded gets a minimal row, so a click on a notification still opens it.
+// shortcut: the fallback kind is "direct", so a Group Chat that is not loaded shows no sender names until the list loads it.
+function chatByJid(state, jid) {
+  var found = (state.chats || []).filter(function(chat) { return chat.jid === jid })
+  return found.length > 0 ? found[0] : { jid: jid, name: jid, kind: "direct" }
+}
+
 // Presence. `presence[jid]` is { online, lastSeen } of a Participant of a Direct Chat.
 // `activity[chat]` lists who is composing or recording there: { participant, name, state }.
 function foldPresenceFrame(state, frame) {
@@ -514,9 +559,30 @@ function canOpenMedia(message) {
   return !!message.media && message.media.state === "ready"
 }
 
-// The command that opens a plain copy: video in mpv, everything else in the default app.
+// The command that opens a plain copy: video in mpv, a voice note in mpv without a window, everything else in the default app.
 function openCommand(message, path) {
+  if (message.media.kind === "voice") return ["mpv", "--no-video", path]
   return message.media.kind === "video" ? ["mpv", path] : ["xdg-open", path]
+}
+
+// Voice notes play in the pop-out. `playingKey` is the mediaKey of the note that plays now, or "".
+function isVoice(message) {
+  return !!message.media && message.media.kind === "voice"
+}
+
+function isPlaying(playingKey, message) {
+  return playingKey !== "" && playingKey === mediaKey(message.chat, message.id)
+}
+
+// The label of the button that opens Media: Play or Stop for a voice note, Open for the rest.
+function openLabel(message, playingKey) {
+  if (!isVoice(message)) return "Open"
+  return isPlaying(playingKey, message) ? "Stop" : "Play"
+}
+
+// The Daemon sends Played (and Read for that Message in On interaction mode) when playback starts.
+function playedRequest(id, message) {
+  return mediaRequest(id, "media.played", { chat: message.chat, id: message.id })
 }
 
 function mediaRequest(id, method, params) {

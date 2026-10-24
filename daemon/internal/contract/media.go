@@ -134,6 +134,17 @@ func (l *mediaLoader) saveReply(id json.RawMessage, chat, msgID, dst string) map
 	return resultReply(id, map[string]any{})
 }
 
+// playedReply handles `media.played`: the user started a voice note. Only a ready voice note of another Participant counts.
+func (l *mediaLoader) playedReply(id json.RawMessage, chat, msgID string, read *reader) map[string]any {
+	ref, ok := l.ready(chat, msgID)
+	m, err := l.chats.Message(chat, msgID)
+	if !ok || err != nil || ref.Kind != media.Voice || m.FromMe {
+		return errorReply(id, errMedia, "invalid media")
+	}
+	read.playedNote(chat, m.Sender, msgID)
+	return resultReply(id, map[string]any{})
+}
+
 func (l *mediaLoader) failed(id json.RawMessage, err error) map[string]any {
 	if errors.Is(err, media.ErrIntegrity) {
 		fmt.Fprintln(l.logOut, "media failed the integrity check")

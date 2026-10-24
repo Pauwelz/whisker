@@ -48,6 +48,7 @@ const (
 	methodMediaOpen     = "media.open"
 	methodMediaSave     = "media.save"
 	methodMediaRelease  = "media.release"
+	methodMediaPlayed   = "media.played"
 	methodChatEdit      = "chat.edit"
 	methodChatRevoke    = "chat.revoke"
 	methodChatTyping    = "chat.typing"
@@ -167,8 +168,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				fmt.Fprintln(logOut, "chat store write failed")
 			}
 			expiryTick = Timers.After(ExpiryInterval)
-			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut}
+			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut, played: map[string]bool{}}
 			box.incoming = read.incoming
+			box.notice = (&notifier{chats: chats, prefs: prefs, attn: &attn, logOut: logOut}).frame
 			pres = newPresenter(port, prefs, &attn, logOut)
 			ready = true
 			if !send(notification("ready", nil)) || !startPort() {
@@ -315,6 +317,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			} else if req.Method == methodMediaRelease && ready {
 				loader.store.Release(req.Params.Chat)
 				reply = resultReply(req.ID, map[string]any{})
+			} else if req.Method == methodMediaPlayed && ready {
+				reply = loader.playedReply(req.ID, req.Params.Chat, req.Params.ID, read)
 			} else if req.Method == methodAttentionSet && ready {
 				listChanged = read.setAttention(req.Params.Open, req.Params.Chat)
 				pres.sync()

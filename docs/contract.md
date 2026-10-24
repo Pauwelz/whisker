@@ -132,6 +132,25 @@ The Daemon deletes expired Messages at start-up before `ready`, so a Message tha
 
 Fixtures: `disappearing-expire.jsonl`, `disappearing-restart.jsonl`, `disappearing-send.jsonl`.
 
+### `notify`
+
+A new Message raises a desktop notification. The Daemon sends `notify` after `messageChanged` and `chatsChanged` of that Message. `kind` is the Chat kind, `name` follows the name rule, and `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it.
+
+```json
+{"jsonrpc":"2.0","method":"notify","params":{"chat":"g1@g.us","kind":"group","name":"Crew","senderName":"Bob","text":"hello"}}
+```
+
+The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies unless one of these is true:
+
+| Rule | Fixture |
+|---|---|
+| The notifications setting is off. | `notify-off.jsonl` |
+| The Chat is Muted. | `notify-muted.jsonl` |
+| The Chat is the Attended Chat. | `notify-attended.jsonl` |
+| The user sent the Message from another device. | `notify-own-message.jsonl` |
+
+`notify-new.jsonl` shows a Message that notifies. The Plugin shows the notification with `omarchy-notification-send`. An `--exec` action runs the Plugin IPC handler `openChat` with the Chat id (`omarchy-shell pauwelz.whisker openChat <chat>`). A click opens the pop-out on that Chat. Mentions in a Muted Group Chat join later.
+
 ## Methods (Plugin to Daemon)
 
 ### `chats.list`
@@ -217,7 +236,7 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 ```
 
 - Offset 0 is the newest page. A page is in time order, oldest first. `more` is true when older Messages exist at `offset + limit`.
-- `senderName` follows the name rule for Participants. It is empty for the Messages of the user.
+- `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it. It is empty for the Messages of the user.
 - `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
 - `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
 - `media` is present only for a Message with Media, see Media below. It never holds a path or bytes.
@@ -318,6 +337,20 @@ Params: `chat` and `id`. Valid for Media in state `ready`. The result is `{"chat
 
 Params: `chat`, `id` and `path` (absolute). The Daemon writes a plain copy to `path` (mode 0600) and answers an empty `result`. This is an explicit export: the Daemon does not delete it. Errors as for `media.open`, and -32008 for a relative `path`.
 
+#### `media.played`
+
+Params: `chat` and `id`. The Plugin sends it when a voice note starts to play. Valid for a `ready` voice note of another Participant. Error -32008 means anything else. The Daemon answers an empty `result` and the policy (`receiptpolicy.Played`) decides what goes out:
+
+| Read Receipts | Sent |
+|---|---|
+| `off` | Nothing. |
+| `onOpen` | `Played`. Read went out when the Chat became attended. |
+| `onInteraction` | `Read` and `Played` for that Message only. The rest of the Chat stays unread for the sender. |
+
+A repeat play of the same note sends nothing (the Daemon remembers until restart). A receipt that fails (offline) is logged and sent again at the next play.
+
+Fixtures: `played-off.jsonl`, `played-on-open.jsonl`, `played-on-interaction.jsonl`, `played-invalid.jsonl`.
+
 #### `media.release`
 
 Params: `chat`. The Daemon deletes the plain copies of that Chat and answers an empty `result`. The Plugin sends it when the Chat closes.
@@ -351,7 +384,7 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
 | -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. |
 | -32007 | send failed | `chat.edit` or `chat.revoke` could not reach WhatsApp. The Message is unchanged. |
-| -32008 | invalid media | `media.download`, `media.open`, `media.save` got Media that does not exist or is in the wrong state, or a relative `path`. |
+| -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
@@ -379,8 +412,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `view` | `expect` | After the `out` frames above it, the Plugin view state holds every key of `expect`. |
 | `keyring` | `state` | The Go test sets the fake keyring: `missing` (calls fail), `ok`, `locked` (calls block) or `unlocked`. |
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
-| `read` | `receipts`, `markers` | The Go test checks the Read Receipts (`chat`, `sender`, `ids`) and the Chats whose Read Marker the fake port cleared, both so far, in order. |
-| `presence` | `online`, `typing`, `subscribed` | The Go test checks the availability calls (booleans), the Composing and Paused calls (`"chat:composing"`) and the Presence subscriptions that the fake port got so far, in order. |
+| `read` | `receipts`, `plays`, `markers` | The Go test checks the Read Receipts and the Played receipts (`chat`, `sender`, `ids`) and the Chats whose Read Marker the fake port cleared, all so far, in order. |
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
 | `sent` | `ids`, `timers` (optional) | The Go test checks the Message IDs that the fake port has sent so far, in order. With `timers`, it also checks the Disappearing timer of each, in seconds. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
