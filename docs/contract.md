@@ -169,6 +169,29 @@ Params: any of the settings above. A key that is left out stays as it is. The Da
 
 No params. Valid only once the Daemon is `ready` and the Profile is linked. The Daemon asks WhatsApp to remove the Companion Device, so the phone no longer lists it. It then answers with an empty `result` and runs the delete-the-Profile routine (`Profile.Delete`). `unlinked` with `by: "user"` and `ready` follow, then linking starts. Profile Settings stay. If WhatsApp cannot be reached, the Daemon gives error -32005 and keeps the Profile. The Plugin asks the user to confirm before it sends this request. Fixture: `logout.jsonl`.
 
+### `attention.set`
+
+Params: `open` (boolean) and `chat` (JID, or empty for the Chat list). Valid once the Daemon is `ready`. The Plugin sends it when the pop-out opens or closes, when it shows another Chat, and again after each `ready`. The result is empty.
+
+The Daemon derives the **Attended Chat** from it: `chat` while `open` is true, otherwise none. The Go accessor is `attention.Attention` in `daemon/internal/attention`: `Attended()` gives the JID or empty, and `Open()` tells whether the pop-out is open. Notifications (#36) and Presence (#43) read these two. The state survives Log out, but the Chat is cleared with the Profile.
+
+When a Chat becomes attended, or a new Message arrives in it:
+
+1. The Read Marker clears in every mode, locally and on the phone (App State). If it was set, `chatsChanged` follows the reply.
+2. Read Receipts go out when the policy says so (`daemon/internal/receiptpolicy`), one call per sender, so each sender in a Group Chat gets their own.
+
+A new Message of another Participant sets the Read Marker (`unread`) of its Chat, then step 1 clears it if the Chat is attended.
+
+| Read Receipts | Read Receipts are sent |
+|---|---|
+| `off` | Never. |
+| `onOpen` | When the Chat becomes attended (all unread Messages), and for each new Message while it stays attended. |
+| `onInteraction` | After the user sends a Message (`chat.send`) in the Chat, for all unread Messages at that moment. |
+
+Edit, Revoke, typing and opening Media are not interactions. Reactions and Quotes join later: add a `receiptpolicy.Interaction` call for each. A Read Receipt that fails (offline) stays due and goes out with the next one for that Chat.
+
+Fixtures: `read-on-open.jsonl`, `read-off.jsonl`, `read-on-interaction.jsonl`, `read-group.jsonl`, `read-offline.jsonl`, `attention-closed.jsonl`.
+
 ### `chat.messages`
 
 Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and optional `offset` (default 0) and `limit` (default 50, at most 200). Valid once the Daemon is `ready`. A Chat with no Messages, or an unknown one, gives an empty page.
@@ -320,6 +343,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `view` | `expect` | After the `out` frames above it, the Plugin view state holds every key of `expect`. |
 | `keyring` | `state` | The Go test sets the fake keyring: `missing` (calls fail), `ok`, `locked` (calls block) or `unlocked`. |
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
+| `read` | `receipts`, `markers` | The Go test checks the Read Receipts (`chat`, `sender`, `ids`) and the Chats whose Read Marker the fake port cleared, both so far, in order. |
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
 | `sent` | `ids` | The Go test checks the Message IDs that the fake port has sent so far, in order. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
@@ -338,6 +362,7 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `sendError` | `offline`, any other text, or empty: the fake port fails every send, edit and revoke with that error, or works again (empty). |
 | `download` | The plain Media that the next downloads write. |
 | `downloadError` | Any text, or empty: the fake port fails every download with that error, or works again (empty). |
+| `readError` | `offline`, or empty: the fake port fails every Read Receipt, or works again (empty). |
 | `event` | The fake port plays this event now. `kind` is `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`), `loggedOut`, `connected` or `disconnected`. |
 
 The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.

@@ -29,6 +29,7 @@ type outbox struct {
 	gen      int // counts the Connected events, so a send can tell that a reconnect came while it ran
 	inflight map[string]bool
 	results  chan sendResult
+	incoming func(whatsapp.NewMessage) // runs after a new Message is stored, may be nil
 }
 
 type sendResult struct {
@@ -118,6 +119,9 @@ func (b *outbox) handle(ev whatsapp.Event) bool {
 		if err := b.chats.Apply(ev); err != nil {
 			fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
 			return true
+		}
+		if b.incoming != nil {
+			b.incoming(ev)
 		}
 		return b.notify(ev.Chat, ev.Message.ID) && b.send(notification("chatsChanged", nil))
 	case whatsapp.MessageEdited:

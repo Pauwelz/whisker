@@ -33,6 +33,11 @@ type Port interface {
 	// Download downloads the plain Media into dst, and checks it against its hashes.
 	// It can block for a long time: call it off the Daemon loop.
 	Download(ref Media, dst *os.File) error
+	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.
+	// It returns ErrOffline when there is no connection.
+	MarkRead(chat, sender string, ids []string) error
+	// MarkChatRead clears the Read Marker of a Chat on the user's devices (App State). It needs a connection.
+	MarkChatRead(chat string) error
 	// Edit replaces the text of a Message of the user. It returns ErrOffline when there is no connection.
 	Edit(chat, id, text string) error
 	// Revoke takes back a Message of the user for everyone. It returns ErrOffline when there is no connection.

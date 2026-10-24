@@ -330,6 +330,17 @@ function canRetryMessage(message) {
   return message.fromMe === true && message.state === "failed"
 }
 
+// The request that tells the Daemon about the pop-out: `open`, and the Chat it shows (`jid`, or "" for the Chat list).
+// The Daemon derives the Attended Chat from it. Send it on every change and again on `ready`.
+function attentionRequest(id, open, jid) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "attention.set", params: { open: open, chat: jid || "" } }) + "\n"
+}
+
+// True when the Plugin must send the pop-out state again after this frame: a new Daemon starts with a closed pop-out.
+function resendsAttention(frame) {
+  return !!frame && frame.method === "ready"
+}
+
 // The text of a Tombstone, shown at the position of the revoked Message.
 var TOMBSTONE_TEXT = "This message was deleted"
 

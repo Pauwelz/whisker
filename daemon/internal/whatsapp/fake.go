@@ -25,6 +25,9 @@ type Fake struct {
 	content    string
 	dlErr      error
 	downloads  int
+	readErr    error
+	reads      []Read
+	chatReads  []string
 	edits      []string
 	revokes    []string
 }
@@ -95,6 +98,47 @@ func (f *Fake) Download(_ Media, dst *os.File) error {
 	}
 	_, err = dst.WriteString(content)
 	return err
+}
+
+// Read is one MarkRead call that worked.
+type Read struct {
+	Chat   string   `json:"chat"`
+	Sender string   `json:"sender"`
+	IDs    []string `json:"ids"`
+}
+
+// SetReadError makes MarkRead fail with err. Pass nil to stop failing.
+func (f *Fake) SetReadError(err error) { f.mu.Lock(); f.readErr = err; f.mu.Unlock() }
+
+// Reads lists the MarkRead calls that worked, in order.
+func (f *Fake) Reads() []Read {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Read{}, f.reads...)
+}
+
+// ChatReads lists the Chats of the MarkChatRead calls, in order.
+func (f *Fake) ChatReads() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.chatReads...)
+}
+
+func (f *Fake) MarkRead(chat, sender string, ids []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.readErr != nil {
+		return f.readErr
+	}
+	f.reads = append(f.reads, Read{chat, sender, append([]string{}, ids...)})
+	return nil
+}
+
+func (f *Fake) MarkChatRead(chat string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.chatReads = append(f.chatReads, chat)
+	return nil
 }
 
 // Edit and Revoke fail with the send error, like Send. A good call is recorded.

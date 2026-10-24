@@ -311,6 +311,17 @@ test("the contract doc lists the Chat methods and the message error code", () =>
     assert.ok(doc.includes(needle), needle);
 });
 
+test("the attention request carries the pop-out state and the shown Chat", () => {
+  assert.deepEqual(JSON.parse(State.attentionRequest(3, true, direct.jid)), { jsonrpc: "2.0", id: 3, method: "attention.set", params: { open: true, chat: direct.jid } });
+  assert.equal(JSON.parse(State.attentionRequest(4, true)).params.chat, "");
+  assert.equal(JSON.parse(State.attentionRequest(5, false, direct.jid)).params.open, false);
+});
+
+test("the Plugin sends the pop-out state again when the Daemon is ready", () => {
+  assert.equal(State.resendsAttention({ method: "ready" }), true);
+  assert.equal(State.resendsAttention({ method: "linked" }), false);
+});
+
 const sentMessage = (extra) => Object.assign({ id: "m1", chat: direct.jid, fromMe: true, time: 1000, text: "hi", state: "sent", edited: false, revoked: false }, extra);
 
 test("a Tombstone shows a fixed text, an edited Message shows Edited", () => {

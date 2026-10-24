@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -140,6 +141,38 @@ func (c *Client) send(chat string, timeout time.Duration, build func(types.JID) 
 	defer cancel()
 	msg, extra := build(jid)
 	_, err = c.cli.SendMessage(ctx, jid, msg, extra)
+	if errors.Is(err, whatsmeow.ErrNotConnected) {
+		return ErrOffline
+	}
+	return err
+}
+
+func (c *Client) MarkRead(chat, sender string, ids []string) error {
+	chatJID, err := types.ParseJID(chat)
+	if err != nil {
+		return err
+	}
+	senderJID, err := types.ParseJID(sender)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+	err = c.cli.MarkRead(ctx, ids, time.Now(), chatJID, senderJID)
+	if errors.Is(err, whatsmeow.ErrNotConnected) {
+		return ErrOffline
+	}
+	return err
+}
+
+func (c *Client) MarkChatRead(chat string) error {
+	jid, err := types.ParseJID(chat)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+	err = c.cli.SendAppState(ctx, appstate.BuildMarkChatAsRead(jid, true, time.Now(), nil))
 	if errors.Is(err, whatsmeow.ErrNotConnected) {
 		return ErrOffline
 	}
