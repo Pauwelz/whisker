@@ -5,9 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 
+	"github.com/ncruces/go-sqlite3"
 	_ "github.com/ncruces/go-sqlite3/driver"       // registers the "sqlite3" database/sql driver
 	_ "github.com/ncruces/go-sqlite3/vfs/adiantum" // registers the "adiantum" VFS
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -45,18 +47,35 @@ func (p *Profile) Media() *media.Store {
 func (p *Profile) Device() *sqlstore.Container { return p.device }
 
 // Open loads the store key and opens both stores with it.
-// If the key is new but the Profile directory exists, the key was lost: the old stores are unreadable, so Open deletes them.
+// A store that the key cannot open is unreadable. This happens when the key is new but the Profile directory exists (lost key),
+// and when the key is in the keyring but is wrong. Open then deletes the old stores and starts a fresh Profile.
 // A keyring error leaves the Profile alone and returns keystore.ErrUnavailable.
 func (p *Profile) Open() error {
 	key, created, err := p.keys.Load()
 	if err != nil {
 		return err
 	}
-	if _, statErr := os.Stat(p.Dir); created && statErr == nil {
-		if err := os.RemoveAll(p.Dir); err != nil {
+	if created {
+		if err := p.removeData(); err != nil {
 			return err
 		}
 	}
+	err = p.openStores(key)
+	if err == nil || created || !errors.Is(err, sqlite3.NOTADB) {
+		return err
+	}
+	// Wrong key: replace it, because the old one opens nothing.
+	if err := p.Delete(); err != nil {
+		return err
+	}
+	key, _, err = p.keys.Load()
+	if err != nil {
+		return err
+	}
+	return p.openStores(key)
+}
+
+func (p *Profile) openStores(key []byte) (err error) {
 	if err := os.MkdirAll(p.Dir, 0o700); err != nil {
 		return err
 	}
@@ -64,6 +83,7 @@ func (p *Profile) Open() error {
 
 	p.device, err = sqlstore.New(context.Background(), "sqlite3", dsn(filepath.Join(p.Dir, "device.db"), hexKey), waLog.Noop)
 	if err != nil {
+		p.Close()
 		return err
 	}
 	p.chat, err = sql.Open("sqlite3", dsn(filepath.Join(p.Dir, "chat.db"), hexKey))
@@ -94,11 +114,16 @@ func (p *Profile) Close() {
 // Delete is the one routine that deletes a Profile: the stores, the Media and the store key.
 // Profile Settings live in $XDG_CONFIG_HOME and stay.
 func (p *Profile) Delete() error {
-	p.Close()
-	if err := os.RemoveAll(p.Dir); err != nil {
+	if err := p.removeData(); err != nil {
 		return err
 	}
 	return p.keys.Delete()
+}
+
+// removeData closes the stores and removes the Profile directory. Delete and Open (lost key) share it.
+func (p *Profile) removeData() error {
+	p.Close()
+	return os.RemoveAll(p.Dir)
 }
 
 // dsn opens an adiantum-encrypted file. whatsmeow needs foreign keys on. Setting any _pragma drops the default busy timeout.

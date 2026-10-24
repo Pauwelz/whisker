@@ -3,6 +3,7 @@ package profile_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -80,6 +81,30 @@ func TestLostKeyDeletesTheUnreadableProfile(t *testing.T) {
 	fresh, _ := os.ReadFile(filepath.Join(p.Dir, "device.db"))
 	if bytes.Equal(old, fresh) {
 		t.Error("the old stores are still there")
+	}
+}
+
+// A key in the keyring that does not open the stores (wrong key) starts a fresh Profile.
+func TestWrongKeyStartsAFreshProfile(t *testing.T) {
+	fake := keystore.NewFake()
+	p := newProfile(t, fake)
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
+	wrong := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	if err := fake.Set(wrong); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Open(); err != nil {
+		t.Fatalf("Open with a wrong key: %v", err)
+	}
+	defer p.Close()
+	if got, _ := fake.Get(); got == wrong {
+		t.Error("the wrong key is still in the keyring")
+	}
+	if _, err := p.Chat().ExecContext(context.Background(), "SELECT count(*) FROM chats"); err != nil {
+		t.Errorf("fresh chat store unusable: %v", err)
 	}
 }
 

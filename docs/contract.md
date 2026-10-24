@@ -43,7 +43,7 @@ The Daemon sends `ready` once it has opened the Profile (the stores and the stor
 
 Fixture: `contract/fixtures/ready.jsonl`.
 
-If the store key was lost, the Daemon deletes the unreadable Profile first. `ready` then follows as for a new Profile. Fixture: `contract/fixtures/lost-key.jsonl`.
+If the store key was lost, or the key in the keyring does not open the stores, the Daemon deletes the unreadable Profile first and makes a new key. `ready` then follows as for a new Profile. Fixture: `contract/fixtures/lost-key.jsonl`.
 
 ### `keyringUnavailable`
 

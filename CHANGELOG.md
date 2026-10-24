@@ -42,6 +42,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - A mention shows the Participant name in bold. A Message that mentions you notifies even in a Muted Group Chat.
 - whisker sends Composing while you type, if "send typing" is on. It sends Online while the pop-out is open, if "send online" is on.
 
+### Fixed
+
+- A Profile whose store key is in the keyring but wrong no longer stops the Daemon. The Daemon deletes the unreadable Profile and starts linking.
+
 ## [1.0.0-rc.1] - 2026-10-24
 
 ### Added
