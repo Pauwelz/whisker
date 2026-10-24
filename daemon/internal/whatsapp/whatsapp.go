@@ -1,6 +1,7 @@
 // Package whatsapp is the WhatsApp port: a small interface over the WhatsApp client.
 // Later tickets add methods (sends, receipts, Presence) and event kinds here.
-// Only the adapter in client.go imports whatsmeow, and it maps whatsmeow types to these types.
+// Only the adapter (client.go and content.go) imports whatsmeow here, and it maps whatsmeow types to these types.
+// The device store (internal/profile) and the Media crypto (internal/media) import small whatsmeow parts.
 package whatsapp
 
 import (

@@ -44,7 +44,7 @@ contract/fixtures/*.jsonl  golden fixtures
 - **Daemon (Go).** It owns the Profile: the stores, the Media, the session and linking.
 - **Seam 1: stdio JSON-RPC.** This is the only runtime seam between the Plugin and the Daemon (section 7). The Go tests and the Plugin's JS tests both read the golden fixtures in `contract/fixtures/*.jsonl`. This keeps both sides in step.
 - **Seam 2: the Daemon binary.** The Plugin gets the binary through `scripts/fetch-daemon.sh`. It calls the script through `Quickshell.Io` and reads the exit code (section 8).
-- **Seam 3: whatsmeow.** The Daemon embeds whatsmeow in-process. whatsmeow's `sqlstore` runs on the encrypted SQLite driver. At runtime only `daemon/internal/whatsapp/client.go` imports whatsmeow packages. Tests in `daemon/internal/whatsapp` may import them to build inputs, such as a History Sync batch.
+- **Seam 3: whatsmeow.** The Daemon embeds whatsmeow in-process. whatsmeow's `sqlstore` runs on the encrypted SQLite driver. At runtime whatsmeow packages stay inside `daemon/internal/whatsapp` (the client in `client.go` and the message content in `content.go`). Two other packages import small parts: `internal/profile` opens the device store (`sqlstore`), and `internal/media` uses the crypto helpers (`cbcutil`, `hkdfutil`). Tests in `daemon/internal/whatsapp` may import whatsmeow to build inputs, such as a History Sync batch.
 - **Store.** The Daemon has a device store (whatsmeow's) and a chat store (Chats, messages, Drafts and the FTS index). Both are encrypted SQLite (section 5).
 
 The split of `daemon/internal/...` into packages is not decided (see section 9).
