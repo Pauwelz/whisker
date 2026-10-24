@@ -388,6 +388,9 @@ func (c *Client) handle(evt any) {
 // handleProtocol turns an edit or a revoke into its event. It reports whether the Message was one of them.
 func (c *Client) handleProtocol(evt *events.Message) bool {
 	pm := evt.Message.GetProtocolMessage()
+	if pm == nil {
+		return false // the zero type of a missing ProtocolMessage is REVOKE
+	}
 	chat, id := c.chatOf(evt.Info.MessageSource).String(), pm.GetKey().GetID()
 	switch {
 	case pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT:
