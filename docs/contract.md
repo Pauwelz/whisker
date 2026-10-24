@@ -29,6 +29,7 @@ The Go source of truth is `daemon/internal/contract/contract.go`. The Plugin mir
 | 0 | OK | The Daemon stopped on stdin EOF. |
 | 1 | Error | An I/O error. |
 | 10 | Oversized line | An input line was over 1 MiB. |
+| 11 | Profile in use | Another Daemon holds the Profile lock. The Daemon waits 5 s for it first. |
 
 ## Notifications (Daemon to Plugin)
 

@@ -106,7 +106,7 @@ func TestContractDocListsExitCodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, code := range []int{contract.ExitOK, contract.ExitError, contract.ExitOversizedLine} {
+	for _, code := range []int{contract.ExitOK, contract.ExitError, contract.ExitOversizedLine, contract.ExitProfileInUse} {
 		if !strings.Contains(string(doc), fmt.Sprintf("| %d |", code)) {
 			t.Errorf("docs/contract.md has no row for exit code %d", code)
 		}
