@@ -2,7 +2,31 @@
 
 A WhatsApp client for the Omarchy shell: a Quickshell Plugin and its own Go Daemon, built on whatsmeow. Linux only.
 
-whisker is in early development and is not ready to install. The architecture is in [docs/architecture.md](docs/architecture.md).
+whisker is in early development. The architecture is in [docs/architecture.md](docs/architecture.md).
+
+## Install and remove
+
+```sh
+omarchy plugin add https://github.com/Pauwelz/whisker   # install
+omarchy plugin remove pauwelz.whisker                    # remove the Plugin and its Daemon binary
+```
+
+The Plugin downloads its Daemon on first start and checks it against `SHA256SUMS`.
+
+## Your data
+
+whisker keeps the Profile in these places:
+
+| Place | Holds |
+|---|---|
+| `$XDG_DATA_HOME/whisker` (default `~/.local/share/whisker`) | The encrypted device store, chat store and Media. |
+| `$XDG_CONFIG_HOME/whisker` (default `~/.config/whisker`) | Profile Settings, as plain `settings.json`. |
+| The login keyring, item `whisker` / `store-key` | The key that opens the stores. |
+
+Log out in the pop-out deletes the Profile and the key. It keeps the Profile Settings. `omarchy plugin remove` does not delete any of these.
+To delete everything by hand, remove both folders and the keyring item.
+
+The key protects the stores only as well as your keyring. Set a password on the login keyring, so that a stolen disk or an unlocked session does not open it.
 
 ## Keyboard shortcuts
 
