@@ -6,7 +6,7 @@ Issues and specs are tracked in GitHub Issues (`Pauwelz/whisker`) using the `gh`
 
 ### Triage labels
 
-Uses the five canonical triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`).
+Uses the five canonical triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
