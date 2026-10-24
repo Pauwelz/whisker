@@ -14,7 +14,7 @@ var ErrNoChat = errors.New("no such chat")
 // Message is one Message of a Chat timeline, as the Plugin sees it.
 // State is the Delivery State of the user's own Messages, and empty for the Messages of others.
 // SenderName follows the name rule and is empty for the user's own Messages.
-// Later tickets add keys here (Quote, Reactions, edit and revoke marks, Media).
+// Later tickets add keys here (Quote, Reactions, Media).
 type Message struct {
 	ID         string `json:"id"`
 	Chat       string `json:"chat"`
@@ -24,6 +24,8 @@ type Message struct {
 	Time       int64  `json:"time"`
 	Text       string `json:"text"`
 	State      string `json:"state"`
+	Edited     bool   `json:"edited"`
+	Revoked    bool   `json:"revoked"` // a Tombstone: the text is empty
 }
 
 // MessagePage is a page of a Chat timeline, oldest first. More tells whether older Messages exist.
@@ -37,7 +39,7 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 
 // Timeline order: by time, then by arrival (rowid), so two Messages in one second keep their order.
 const selectMessage = `
-	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
+	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
 	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid `
 
 // Messages returns one page of a Chat timeline. Offset 0 is the newest page.
@@ -124,6 +126,18 @@ func (s *Store) Requeue(chat, id string) (bool, error) {
 	return s.move(chat, id, whatsapp.StateFailed, whatsapp.StatePending)
 }
 
+// Edit replaces the text of a Message that is not a Tombstone and marks it edited.
+// Only the author can edit: fromMe and sender must match the stored Message. It reports whether the Message changed.
+func (s *Store) Edit(chat, id, sender string, fromMe bool, text string) (bool, error) {
+	return s.change(`UPDATE messages SET text = ?, edited = 1 WHERE chat_jid = ? AND id = ? AND revoked = 0 AND from_me = ? AND (from_me = 1 OR sender_jid = ?)`,
+		text, chat, id, boolInt(fromMe), sender)
+}
+
+// Revoke turns a Message into a Tombstone: it empties the text and keeps the position. It reports whether the Message changed.
+func (s *Store) Revoke(chat, id string) (bool, error) {
+	return s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1 WHERE chat_jid = ? AND id = ? AND revoked = 0`, chat, id)
+}
+
 func (s *Store) move(chat, id, from, to string) (bool, error) {
 	return s.change(`UPDATE messages SET state = ? WHERE chat_jid = ? AND id = ? AND state = ?`, to, chat, id, from)
 }
@@ -147,7 +161,7 @@ func (s *Store) query(query string, args ...any) ([]Message, error) {
 	var contact, push string
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &contact, &push); err != nil {
+		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push); err != nil {
 			return nil, err
 		}
 		if !m.FromMe {

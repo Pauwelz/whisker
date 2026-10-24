@@ -110,9 +110,11 @@ A Message was added or changed: it arrived, the user sent it, or its Delivery St
 {"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"3EB0","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"sent"}}}
 ```
 
-Later tickets (edit, Reaction, revoke, Quote, Media) add keys to the Message and send `messageChanged` for each change.
+An edit and a revoke also send `messageChanged`, whether the user, another device or the other Participant made them. See `chat.edit` and `chat.revoke`.
 
-Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`.
+Later tickets (Reaction, Quote, Media) add keys to the Message and send `messageChanged` for each change.
+
+Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`, `chat-edit.jsonl`, `chat-revoke.jsonl`.
 
 ## Methods (Plugin to Daemon)
 
@@ -178,6 +180,7 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 - Offset 0 is the newest page. A page is in time order, oldest first. `more` is true when older Messages exist at `offset + limit`.
 - `senderName` follows the name rule for Participants. It is empty for the Messages of the user.
 - `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
+- `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
 - Error -32003 means the chat store failed.
 
 Delivery State of a Message of the user:
@@ -207,6 +210,20 @@ Fixtures: `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`.
 
 Params: `chat` and `id` of a `failed` Message. The Daemon makes it `pending`, answers `{"message": {...}}` and sends it. Error -32006 means no such failed Message. Fixture: `chat-failed.jsonl`.
 
+### `chat.edit`
+
+Params: `chat`, `id` and `text` (not blank, at most 65536 characters). Valid once the Daemon is `ready` and linked. The Message must be a Message of the user that WhatsApp accepted (`sent` or later), not a Tombstone, and at most 20 minutes old. The Daemon sends the edit to WhatsApp, stores the new text with `edited: true`, answers `{"message": {...}}` and sends `messageChanged`. The Message keeps its place.
+
+Error -32006 means the Message cannot be edited (unknown, not the user's, not sent yet, a Tombstone, too old, or a blank or too long text). Error -32007 means WhatsApp could not be reached (offline or a failed call): nothing changed. The call blocks the Daemon for up to 15 s.
+
+An edit from another device, or from another Participant, arrives as `messageChanged` with `edited: true`. The Daemon drops an edit from someone other than the author. Fixture: `chat-edit.jsonl`.
+
+### `chat.revoke`
+
+Params: `chat` and `id`. Same rules as `chat.edit`, without the 20 minute limit. The Daemon revokes the Message for everyone. It becomes a Tombstone: the store empties the text (and, with Media, the cached Media) and keeps the position. The Daemon answers `{"message": {...}}` and sends `messageChanged` with `revoked: true`.
+
+A revoke from the phone or from the other Participant arrives as `messageChanged` with `revoked: true`. A revoke of an unknown or revoked Message sends nothing. Errors as for `chat.edit`. Fixture: `chat-revoke.jsonl`.
+
 ### `link.pairCode`
 
 Params: `phone` (digits, international, no `+`). Valid only while the Profile is not linked. The result is `{"code": "ABCD-1234"}`: the Pair Code as text. The user types it on the phone. Success then follows as `linked`. Errors: -32001 and -32002 (see Errors). Fixtures: `link-pair-code.jsonl`, `link-pair-code-invalid.jsonl`.
@@ -232,7 +249,8 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32003 | chat store failed | `chats.list`, `chat.messages`, `chat.send` or `chat.retry` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
 | -32005 | log out failed | `profile.logout` could not reach WhatsApp. The Profile is unchanged. |
-| -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. |
+| -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. |
+| -32007 | send failed | `chat.edit` or `chat.revoke` could not reach WhatsApp. The Message is unchanged. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 
@@ -261,6 +279,8 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
 | `sent` | `ids` | The Go test checks the Message IDs that the fake port has sent so far, in order. |
+| `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
+| `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
 | `plugin` | `openChat` | The Plugin test opens this Chat (`jid`, `name`, `kind`) as the user does. The Go test ignores it. |
 | `whatsapp` | one of the keys below | The Go test scripts the fake WhatsApp port. |
 
@@ -271,12 +291,12 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `linked` | `true` or `false`: the Profile is linked at start-up. Put the line before the first `out`. |
 | `pairCode` | The code that the next `link.pairCode` returns. |
 | `pairError` | `invalid-phone`, or any text: the next `link.pairCode` fails. |
-| `sendError` | `offline`, any other text, or empty: the fake port fails every send with that error, or works again (empty). |
+| `sendError` | `offline`, any other text, or empty: the fake port fails every send, edit and revoke with that error, or works again (empty). |
 | `event` | The fake port plays this event now. `kind` is `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`), `loggedOut`, `connected` or `disconnected`. |
 
 The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
 
-The `event` kinds `newMessage` and `receipt` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
+The `event` kinds `newMessage`, `receipt`, `messageEdited` and `messageRevoked` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
 
 The events are the event kinds of the WhatsApp port (`daemon/internal/whatsapp`). A new port event kind gets a new `event` kind here. A new port method that a fixture must script gets a new key.
 
