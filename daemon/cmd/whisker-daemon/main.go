@@ -71,6 +71,7 @@ func run() int {
 	prefs := settings.New(filepath.Join(configDir, "whisker", "settings.json"))
 	p := profile.New(filepath.Join(dataDir, "whisker"), keystore.New(keystore.SecretService{}, clock.Real))
 	defer p.Close()
+	whatsapp.SetDeviceIdentity(version)
 	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
 	return contract.Run(stdinUntilSignal(), os.Stdout, os.Stderr, p, prefs, newPort)
 }

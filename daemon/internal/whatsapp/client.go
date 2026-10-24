@@ -3,14 +3,17 @@ package whatsapp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/appstate"
+	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -37,6 +40,15 @@ type Client struct {
 	cli    *whatsmeow.Client
 	events chan Event
 	mu     sync.Mutex // one Connect at a time
+}
+
+// SetDeviceIdentity names the linked device "whisker" on the phone. Call it once, before the first connect and pair.
+// A version that is not "major.minor.patch" at its start counts as 0.0.0.
+func SetDeviceIdentity(version string) {
+	var v [3]uint32
+	fmt.Sscanf(version, "%d.%d.%d", &v[0], &v[1], &v[2])
+	store.SetOSInfo("whisker", v)
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
 }
 
 // NewClient loads the device from the device store (a new unpaired device if there is none).
