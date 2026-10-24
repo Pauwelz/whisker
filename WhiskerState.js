@@ -337,4 +337,38 @@ function attentionRequest(id, open, jid) {
 // True when the Plugin must send the pop-out state again after this frame: a new Daemon starts with a closed pop-out.
 function resendsAttention(frame) {
   return !!frame && frame.method === "ready"
+// The text of a Tombstone, shown at the position of the revoked Message.
+var TOMBSTONE_TEXT = "This message was deleted"
+
+// WhatsApp lets the user edit a Message for 20 minutes. The Daemon enforces it; the Plugin only hides the button.
+var EDIT_WINDOW_SECONDS = 20 * 60
+
+function messageBody(message) {
+  return message.revoked ? TOMBSTONE_TEXT : message.text
+}
+
+function editedLabel(message) {
+  return message.edited && !message.revoked ? "Edited" : ""
+}
+
+// A Message of the user that WhatsApp accepted and that is not a Tombstone.
+function canRevokeMessage(message) {
+  return message.fromMe === true && !message.revoked && ["sent", "delivered", "read", "played"].indexOf(message.state) >= 0
+}
+
+function canEditMessage(message, nowSeconds) {
+  return canRevokeMessage(message) && nowSeconds - message.time <= EDIT_WINDOW_SECONDS
+}
+
+function editRequest(id, jid, messageId, text) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.edit", params: { chat: jid, id: messageId, text: text } }) + "\n"
+}
+
+function revokeRequest(id, jid, messageId) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "chat.revoke", params: { chat: jid, id: messageId } }) + "\n"
+}
+
+// The request for the composer text: an edit of `editingId`, or a new Message when `editingId` is empty.
+function composerRequest(id, jid, editingId, text) {
+  return editingId ? editRequest(id, jid, editingId, text) : sendRequest(id, jid, text)
 }

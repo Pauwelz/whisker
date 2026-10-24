@@ -307,7 +307,7 @@ test("the Chat requests are JSON-RPC lines", () => {
 
 test("the contract doc lists the Chat methods and the message error code", () => {
   const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
-  for (const needle of ["`chat.messages`", "`chat.send`", "`chat.retry`", "`messageChanged`", "`connected`", "`disconnected`", "| -32006 |"])
+  for (const needle of ["`chat.messages`", "`chat.send`", "`chat.retry`", "`chat.edit`", "`chat.revoke`", "`messageChanged`", "`connected`", "`disconnected`", "| -32006 |", "| -32007 |"])
     assert.ok(doc.includes(needle), needle);
 });
 
@@ -320,4 +320,27 @@ test("the attention request carries the pop-out state and the shown Chat", () =>
 test("the Plugin sends the pop-out state again when the Daemon is ready", () => {
   assert.equal(State.resendsAttention({ method: "ready" }), true);
   assert.equal(State.resendsAttention({ method: "linked" }), false);
+const sentMessage = (extra) => Object.assign({ id: "m1", chat: direct.jid, fromMe: true, time: 1000, text: "hi", state: "sent", edited: false, revoked: false }, extra);
+
+test("a Tombstone shows a fixed text, an edited Message shows Edited", () => {
+  assert.equal(State.messageBody(sentMessage({ revoked: true, text: "" })), "This message was deleted");
+  assert.equal(State.messageBody(sentMessage()), "hi");
+  assert.equal(State.editedLabel(sentMessage({ edited: true })), "Edited");
+  assert.equal(State.editedLabel(sentMessage()), "");
+  assert.equal(State.editedLabel(sentMessage({ edited: true, revoked: true })), "");
+});
+
+test("Edit and Delete show for sent Messages of the user; Edit ends after 20 minutes", () => {
+  assert.equal(State.canEditMessage(sentMessage(), 1000 + 1200), true);
+  assert.equal(State.canEditMessage(sentMessage(), 1000 + 1201), false);
+  assert.equal(State.canRevokeMessage(sentMessage(), 1000 + 99999), true);
+  for (const state of ["pending", "failed", ""]) assert.equal(State.canRevokeMessage(sentMessage({ state })), false, state);
+  assert.equal(State.canRevokeMessage(sentMessage({ fromMe: false })), false);
+  assert.equal(State.canRevokeMessage(sentMessage({ revoked: true })), false);
+});
+
+test("the composer sends an edit when a Message is under edit, otherwise a new Message", () => {
+  assert.deepEqual(JSON.parse(State.composerRequest(4, direct.jid, "m1", "fixed")), { jsonrpc: "2.0", id: 4, method: "chat.edit", params: { chat: direct.jid, id: "m1", text: "fixed" } });
+  assert.deepEqual(JSON.parse(State.composerRequest(5, direct.jid, "", "hi")), { jsonrpc: "2.0", id: 5, method: "chat.send", params: { chat: direct.jid, text: "hi" } });
+  assert.deepEqual(JSON.parse(State.revokeRequest(6, direct.jid, "m1")), { jsonrpc: "2.0", id: 6, method: "chat.revoke", params: { chat: direct.jid, id: "m1" } });
 });

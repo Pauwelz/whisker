@@ -8,16 +8,16 @@
 {"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
 {"dir":"whatsapp","sendError":"boom"}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.send","params":{"chat":"1@s.whatsapp.net","text":"hi"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"pending"}}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"failed"}}}}
-{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"failed"}],"moreMessages":false}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"pending","edited":false,"revoked":false}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"failed","edited":false,"revoked":false}}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"failed","edited":false,"revoked":false}],"moreMessages":false}}}
 {"dir":"sent","ids":[]}
 {"dir":"whatsapp","sendError":""}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.retry","params":{"chat":"1@s.whatsapp.net","id":"fake-1"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"pending"}}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"sent"}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"pending","edited":false,"revoked":false}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"sent","edited":false,"revoked":false}}}}
 {"dir":"sent","ids":["fake-1"]}
-{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"sent"}],"moreMessages":false}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hi","state":"sent","edited":false,"revoked":false}],"moreMessages":false}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.retry","params":{"chat":"1@s.whatsapp.net","id":"fake-1"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"error":{"code":-32006,"message":"invalid message"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.send","params":{"chat":"1@s.whatsapp.net","text":"  \n"}}}

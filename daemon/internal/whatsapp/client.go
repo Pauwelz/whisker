@@ -18,9 +18,11 @@ import (
 )
 
 // pairTimeout bounds the PairPhone network call. sendTimeout bounds one Send.
+// editTimeout bounds one Edit or Revoke, which block the Daemon loop.
 const (
 	pairTimeout = 30 * time.Second
 	sendTimeout = 90 * time.Second
+	editTimeout = 15 * time.Second
 )
 
 // Client is the whatsmeow adapter: the only place whatsmeow types appear.
@@ -107,13 +109,33 @@ func (c *Client) PairCode(phone string) (string, error) {
 func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
 
 func (c *Client) Send(chat, id, text string) error {
+	return c.send(chat, sendTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
+		return &waE2E.Message{Conversation: proto.String(text)}, whatsmeow.SendRequestExtra{ID: id}
+	})
+}
+
+func (c *Client) Edit(chat, id, text string) error {
+	return c.send(chat, editTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
+		return c.cli.BuildEdit(jid, id, &waE2E.Message{Conversation: proto.String(text)}), whatsmeow.SendRequestExtra{}
+	})
+}
+
+func (c *Client) Revoke(chat, id string) error {
+	return c.send(chat, editTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
+		return c.cli.BuildRevoke(jid, types.EmptyJID, id), whatsmeow.SendRequestExtra{}
+	})
+}
+
+// send sends the Message that build makes and maps a missing connection to ErrOffline.
+func (c *Client) send(chat string, timeout time.Duration, build func(types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra)) error {
 	jid, err := types.ParseJID(chat)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	_, err = c.cli.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(text)}, whatsmeow.SendRequestExtra{ID: id})
+	msg, extra := build(jid)
+	_, err = c.cli.SendMessage(ctx, jid, msg, extra)
 	if errors.Is(err, whatsmeow.ErrNotConnected) {
 		return ErrOffline
 	}
@@ -159,7 +181,10 @@ func (c *Client) handle(evt any) {
 	case *events.Disconnected:
 		c.events <- Disconnected{}
 	case *events.Message:
-		// Edits, revokes and Reactions have no text yet, and nor has Media: they are skipped until their tickets.
+		if c.handleProtocol(evt) {
+			return
+		}
+		// Reactions have no text yet, and nor has Media: they are skipped until their tickets.
 		text := messageText(evt.Message)
 		if text == "" || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
 			return
@@ -202,6 +227,23 @@ func (c *Client) handle(evt any) {
 	case *events.MarkChatAsRead:
 		c.events <- ReadMarker{JID: evt.JID.String(), Unread: !evt.Action.GetRead()}
 	}
+}
+
+// handleProtocol turns an edit or a revoke into its event. It reports whether the Message was one of them.
+func (c *Client) handleProtocol(evt *events.Message) bool {
+	pm := evt.Message.GetProtocolMessage()
+	chat, id := evt.Info.Chat.String(), pm.GetKey().GetID()
+	switch {
+	case pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT:
+		if text := messageText(pm.GetEditedMessage()); text != "" {
+			c.events <- MessageEdited{Chat: chat, ID: id, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe, Text: text}
+		}
+	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
+		c.events <- MessageRevoked{Chat: chat, ID: id}
+	default:
+		return false
+	}
+	return true
 }
 
 func receiptState(t types.ReceiptType) string {

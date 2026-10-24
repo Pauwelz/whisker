@@ -34,10 +34,11 @@ type fixtureLine struct {
 	PairCode  string          `json:"pairCode"`
 	PairError string          `json:"pairError"`
 	SendError *string         `json:"sendError"` // "" lets sends work again
-	IDs       []string        `json:"ids"`       // dir "sent": the Message IDs the fake port has sent so far
 	ReadError *string         `json:"readError"` // "" lets Read Receipts work again
 	Receipts  []whatsapp.Read `json:"receipts"`  // dir "read": the Read Receipts the fake port has sent so far
 	Markers   []string        `json:"markers"`   // dir "read": the Chats whose Read Marker the fake port has cleared
+	IDs       []string        `json:"ids"`       // dir "sent" and "revoked": the Message IDs
+	Edits     []string        `json:"edits"`     // dir "edited": "id:text" of each edit the fake port has sent so far
 	Event     json.RawMessage `json:"event"`
 }
 
@@ -198,6 +199,14 @@ func TestFixtures(t *testing.T) {
 					if got, want := mustJSON(f.ChatReads()), mustJSON(append([]string{}, line.Markers...)); got != want {
 						t.Errorf("Read Markers cleared = %s, want %s", got, want)
 					}
+				case "edited":
+					if got := r.currentPort().Edits(); !reflect.DeepEqual(got, append([]string{}, line.Edits...)) {
+						t.Errorf("edits = %v, want %v", got, line.Edits)
+					}
+				case "revoked":
+					if got := r.currentPort().Revokes(); !reflect.DeepEqual(got, append([]string{}, line.IDs...)) {
+						t.Errorf("revokes = %v, want %v", got, line.IDs)
+					}
 				case "clock":
 					r.start()
 					r.clock.Fire()
@@ -280,6 +289,10 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.NewMessage](r.t, f, line.Event)
 		case "receipt":
 			emitJSON[whatsapp.Receipt](r.t, f, line.Event)
+		case "messageEdited":
+			emitJSON[whatsapp.MessageEdited](r.t, f, line.Event)
+		case "messageRevoked":
+			emitJSON[whatsapp.MessageRevoked](r.t, f, line.Event)
 		case "connected":
 			f.Emit(whatsapp.Connected{})
 		case "disconnected":

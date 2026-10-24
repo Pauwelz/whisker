@@ -16,6 +16,7 @@ Panel {
   // Settings view and Log out confirmation: the user picks them, so they are view state only.
   property bool showSettings: false
   property bool confirmLogout: false
+  property string editingId: "" // the Message under edit in the composer, or empty
   readonly property var settings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
   readonly property var openChat: root.view.openChat || null
@@ -218,7 +219,10 @@ Panel {
           Button {
             text: "Back: " + (root.openChat ? root.openChat.name : "")
             bordered: true
-            onClicked: root.whiskerService.closeChat()
+            onClicked: {
+              root.editingId = ""
+              root.whiskerService.closeChat()
+            }
           }
 
           Button {
@@ -250,7 +254,8 @@ Panel {
                 width: parent.width
                 wrapMode: Text.Wrap
                 textFormat: Text.PlainText
-                text: modelData.text
+                text: State.messageBody(modelData)
+                font.italic: modelData.revoked === true
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
@@ -265,6 +270,30 @@ Panel {
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.caption
                 }
+                Text {
+                  visible: text !== ""
+                  text: State.editedLabel(modelData)
+                  color: root.contentForeground
+                  opacity: 0.6
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                }
+                Button {
+                  visible: State.canEditMessage(modelData, Math.floor(Date.now() / 1000))
+                  text: "Edit"
+                  bordered: true
+                  onClicked: {
+                    root.editingId = modelData.id
+                    composer.text = modelData.text
+                    composer.forceActiveFocus()
+                  }
+                }
+                Button {
+                  visible: State.canRevokeMessage(modelData)
+                  text: "Delete"
+                  bordered: true
+                  onClicked: root.whiskerService.revokeMessage(modelData.id)
+                }
                 Button {
                   visible: State.canRetryMessage(modelData)
                   text: "Retry"
@@ -272,6 +301,16 @@ Panel {
                   onClicked: root.whiskerService.retryMessage(modelData.id)
                 }
               }
+            }
+          }
+
+          Button {
+            visible: root.editingId !== ""
+            text: "Cancel edit"
+            bordered: true
+            onClicked: {
+              root.editingId = ""
+              composer.text = ""
             }
           }
 
@@ -287,7 +326,8 @@ Panel {
               if (action === "default") return
               event.accepted = true
               if (action === "send") {
-                root.whiskerService.sendText(text)
+                root.whiskerService.submitComposer(root.editingId, text)
+                root.editingId = ""
                 text = ""
               }
             }

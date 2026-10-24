@@ -82,9 +82,15 @@ Item {
     daemon.write(State.messagesRequest(nextRequestId++, view.openChat.jid, view.openChat.messages.length))
   }
 
-  // Called by the composer. The Daemon stores the Message as pending and answers with it.
-  function sendText(text) {
-    daemon.write(State.sendRequest(nextRequestId++, view.openChat.jid, text))
+  // Called by the composer. `editingId` is the Message under edit, or "" for a new Message.
+  // A new Message: the Daemon stores it as pending and answers with it.
+  function submitComposer(editingId, text) {
+    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, editingId, text))
+  }
+
+  // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.
+  function revokeMessage(messageId) {
+    daemon.write(State.revokeRequest(nextRequestId++, view.openChat.jid, messageId))
   }
 
   // Called by the Retry button of a failed Message.
