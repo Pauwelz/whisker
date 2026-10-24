@@ -455,13 +455,92 @@ test("chatStatusLabel prefers the activity over Presence", () => {
 });
 
 test("fixed shortcuts: Escape goes back one level, Ctrl+F searches the Chat list", () => {
-  const list = { chatOpen: false, settingsOpen: false, linked: true };
-  assert.equal(State.shortcutAction("Escape", { ...list, chatOpen: true }), "closeChat");
-  assert.equal(State.shortcutAction("Escape", { ...list, settingsOpen: true }), "closeSettings");
-  assert.equal(State.shortcutAction("Escape", list), "closePopout");
-  assert.equal(State.shortcutAction("Ctrl+F", list), "focusSearch");
-  assert.equal(State.shortcutAction("Ctrl+F", { ...list, chatOpen: true }), "none");
-  assert.equal(State.shortcutAction("Ctrl+F", { ...list, settingsOpen: true }), "none");
-  assert.equal(State.shortcutAction("Ctrl+F", { ...list, linked: false }), "none");
-  assert.equal(State.shortcutAction("F5", list), "none");
+  const list = { screen: "linked" };
+  const none = { showSettings: false };
+  assert.equal(State.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, none), "closeChat");
+  assert.equal(State.shortcutAction("Escape", list, { showSettings: true }), "closeSettings");
+  assert.equal(State.shortcutAction("Escape", list, none), "closePopout");
+  assert.equal(State.shortcutAction("Ctrl+F", list, none), "focusSearch");
+  assert.equal(State.shortcutAction("Ctrl+F", { ...list, openChat: { jid: "1" } }, none), "none");
+  assert.equal(State.shortcutAction("Ctrl+F", list, { showSettings: true }), "none");
+  assert.equal(State.shortcutAction("Ctrl+F", { screen: "linking" }, none), "none");
+  assert.equal(State.shortcutAction("F5", list, none), "none");
+});
+
+const plain = (value) => JSON.parse(JSON.stringify(value));
+const noLocal = { pairMode: false, showSettings: false };
+
+test("panelParts: each part shows on its screen only", () => {
+  const linked = { screen: State.SCREEN.LINKED, connection: "offline", settings: { sendOnline: true }, moreChats: true };
+  assert.deepEqual(plain(State.panelParts(linked, noLocal)), {
+    error: false, banner: true, qr: false, pairForm: false, pairToggle: false,
+    chatList: true, loadMoreChats: true, settingsButton: true, settings: false, chat: false,
+  });
+  assert.equal(State.panelParts(linked, { ...noLocal, showSettings: true }).settings, true);
+  assert.equal(State.panelParts(linked, { ...noLocal, showSettings: true }).chatList, false);
+  const inChat = { ...linked, openChat: { jid: "1@s.whatsapp.net" } };
+  const chat = State.panelParts(inChat, noLocal);
+  assert.deepEqual([chat.chat, chat.chatList, chat.settingsButton, chat.loadMoreChats], [true, false, false, false]);
+  assert.equal(State.panelParts({ ...linked, settings: undefined }, { ...noLocal, showSettings: true }).settings, false);
+});
+
+test("panelParts: linking shows the QR code or the Pair Code form, and an error shows as error", () => {
+  const linking = { screen: State.SCREEN.LINKING, qr: "data:image/png;base64,AA" };
+  assert.equal(State.panelParts(linking, noLocal).qr, true);
+  assert.equal(State.panelParts(linking, { ...noLocal, pairMode: true }).qr, false);
+  assert.equal(State.panelParts(linking, { ...noLocal, pairMode: true }).pairForm, true);
+  assert.equal(State.panelParts(linking, noLocal).pairToggle, true);
+  assert.equal(State.panelParts({ screen: State.SCREEN.ERROR }, noLocal).error, true);
+  assert.equal(State.panelParts({ screen: State.SCREEN.STARTING }, noLocal).pairToggle, false);
+});
+
+test("settings labels show On or Off and mark the Read Receipts mode that is set", () => {
+  assert.equal(State.onOffLabel("Send online", true), "Send online: On");
+  assert.equal(State.onOffLabel("Send typing", false), "Send typing: Off");
+  const mode = State.READ_RECEIPT_MODES[0];
+  assert.equal(State.readReceiptLabel(mode, { readReceipts: mode.value }), "Read Receipts: " + mode.label + " (selected)");
+  assert.equal(State.readReceiptLabel(mode, { readReceipts: "other" }), "Read Receipts: " + mode.label);
+  assert.equal(State.readReceiptLabel(mode, null), "Read Receipts: " + mode.label);
+});
+
+test("a failed Media download shows Retry download", () => {
+  const msg = (state) => ({ media: { state } });
+  assert.equal(State.mediaFailed(msg(State.MEDIA_STATE.FAILED)), true);
+  assert.equal(State.downloadLabel(msg(State.MEDIA_STATE.FAILED)), "Retry download");
+  assert.equal(State.downloadLabel(msg(State.MEDIA_STATE.NONE)), "Download");
+  assert.equal(State.mediaFailed({}), false);
+});
+
+test("composerQuoteView previews the Message that the next send quotes", () => {
+  assert.equal(State.composerQuoteView(null), null);
+  assert.deepEqual(plain(State.composerQuoteView({ fromMe: true, senderName: "", text: "hello", revoked: false })), { sender: "You", text: "hello" });
+  assert.deepEqual(plain(State.composerQuoteView({ fromMe: false, senderName: "Ann", text: "hi" })), { sender: "Ann", text: "hi" });
+});
+
+test("openMediaStep: stop the playing note, launch a known path, or ask for the path", () => {
+  const voice = { chat: "c", id: "m1", media: { kind: "voice" } };
+  const key = State.mediaKey("c", "m1");
+  assert.equal(State.openMediaStep({}, key, voice).action, "stop");
+  assert.deepEqual(plain(State.openMediaStep({ mediaPaths: { [key]: "/run/x.ogg" } }, "", voice)), { action: "launch", path: "/run/x.ogg" });
+  assert.equal(State.openMediaStep({}, "", voice).action, "request");
+  assert.equal(State.openMediaStep({ mediaPaths: { [key]: "" } }, "", voice).action, "request"); // asked, no path yet
+});
+
+test("mediaFrameStep launches Media the user clicked once its path arrives, and asks for new image paths once", () => {
+  const doc = { chat: "c", id: "d1", media: { kind: "document", state: "ready" } };
+  const pending = State.rememberOpen({}, doc);
+  assert.deepEqual(Object.keys(pending), [State.mediaKey("c", "d1")]);
+  const other = State.mediaFrameStep({}, pending, { result: { chat: "c", id: "zz", path: "/p" } });
+  assert.equal(other.launch, null);
+  assert.deepEqual(Object.keys(other.pending), [State.mediaKey("c", "d1")]);
+  const hit = State.mediaFrameStep({}, pending, { result: { chat: "c", id: "d1", path: "/run/d.pdf" } });
+  assert.deepEqual(plain(hit.launch), { message: doc, path: "/run/d.pdf" });
+  assert.deepEqual(plain(hit.pending), {});
+
+  const image = { chat: "c", id: "i1", media: { kind: "image", state: "ready" } };
+  const view = { openChat: { jid: "c", messages: [image] } };
+  const first = State.mediaFrameStep(view, {}, { method: "connected" });
+  assert.deepEqual(plain(first.load), [image]);
+  const second = State.mediaFrameStep(first.state, {}, { method: "connected" });
+  assert.deepEqual(plain(second.load), []);
 });

@@ -11,7 +11,7 @@ Panel {
   manageIpc: false // the handler below adds openChat to the standard methods
 
   readonly property var whiskerService: bar && bar.shell ? bar.shell.serviceFor("pauwelz.whisker") : null
-  readonly property var view: whiskerService ? whiskerService.view : ({ screen: "starting", message: "" })
+  readonly property var view: whiskerService ? whiskerService.view : State.initialState()
   // Which linking method the pop-out shows. The user picks it, so it is view state only.
   property bool pairMode: false
   // Settings view and Log out confirmation: the user picks them, so they are view state only.
@@ -26,13 +26,15 @@ Panel {
   readonly property var settings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
   readonly property var openChat: root.view.openChat || null
+  // Which parts show. The decision is State.panelParts.
+  readonly property var parts: State.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings })
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   // Runs a fixed shortcut. The decision is State.shortcutAction.
   function runShortcut(shortcut) {
-    var action = State.shortcutAction(shortcut, { chatOpen: !!root.openChat, settingsOpen: root.showSettings, linked: root.view.screen === "linked" })
+    var action = State.shortcutAction(shortcut, root.view, { showSettings: root.showSettings })
     if (action === "closeChat") {
       root.reactingId = ""
       root.whiskerService.closeChat()
@@ -112,14 +114,14 @@ Panel {
           wrapMode: Text.Wrap
           textFormat: Text.PlainText
           text: root.view.message
-          color: root.view.screen === "error" ? Color.urgent : root.contentForeground
+          color: root.parts.error ? Color.urgent : root.contentForeground
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
         }
 
         // "Connecting…" or "Offline" while the connection is not up.
         Text {
-          visible: root.view.screen === "linked" && State.connectionBanner(root.view) !== ""
+          visible: root.parts.banner
           width: parent.width
           text: State.connectionBanner(root.view)
           color: root.view.connection === "offline" ? Color.urgent : root.contentForeground
@@ -130,7 +132,7 @@ Panel {
 
         // The Daemon sends the QR code as a data: URI.
         Image {
-          visible: root.view.screen === "linking" && !!root.view.qr && !root.pairMode
+          visible: root.parts.qr
           source: root.view.qr || ""
           width: Style.space(232)
           height: width
@@ -148,7 +150,7 @@ Panel {
 
         TextInput {
           id: phoneInput
-          visible: root.view.screen === "linking" && root.pairMode
+          visible: root.parts.pairForm
           width: parent.width
           color: root.contentForeground
           font.family: root.contentFontFamily
@@ -158,14 +160,14 @@ Panel {
         }
 
         Button {
-          visible: root.view.screen === "linking" && root.pairMode
+          visible: root.parts.pairForm
           text: "Get Pair Code"
           bordered: true
           onClicked: root.whiskerService.requestPairCode(phoneInput.text)
         }
 
         Button {
-          visible: root.view.screen === "linking"
+          visible: root.parts.pairToggle
           text: root.pairMode ? "Use a QR code" : "Use a Pair Code"
           bordered: true
           onClicked: root.pairMode = !root.pairMode
@@ -173,7 +175,7 @@ Panel {
 
         TextInput {
           id: searchInput
-          visible: root.view.screen === "linked" && !root.showSettings && !root.openChat
+          visible: root.parts.chatList
           width: parent.width
           color: root.contentForeground
           font.family: root.contentFontFamily
@@ -183,7 +185,7 @@ Panel {
         }
 
         Button {
-          visible: root.view.screen === "linked" && !!root.settings && !root.openChat
+          visible: root.parts.settingsButton
           text: root.showSettings ? "Back to Chats" : "Settings"
           bordered: true
           onClicked: {
@@ -194,30 +196,30 @@ Panel {
 
         // Profile Settings. The Daemon owns the values: each button sends one change.
         Column {
-          visible: root.view.screen === "linked" && root.showSettings && !!root.settings
+          visible: root.parts.settings
           width: parent.width
           spacing: Style.space(8)
 
           Repeater {
             model: State.READ_RECEIPT_MODES
             Button {
-              text: "Read Receipts: " + modelData.label + (root.settings && root.settings.readReceipts === modelData.value ? " (selected)" : "")
+              text: State.readReceiptLabel(modelData, root.settings)
               bordered: true
               onClicked: root.whiskerService.changeSettings({ readReceipts: modelData.value })
             }
           }
           Button {
-            text: "Send online: " + (root.settings && root.settings.sendOnline ? "On" : "Off")
+            text: State.onOffLabel("Send online", root.settings && root.settings.sendOnline)
             bordered: true
             onClicked: root.whiskerService.changeSettings({ sendOnline: !root.settings.sendOnline })
           }
           Button {
-            text: "Send typing: " + (root.settings && root.settings.sendTyping ? "On" : "Off")
+            text: State.onOffLabel("Send typing", root.settings && root.settings.sendTyping)
             bordered: true
             onClicked: root.whiskerService.changeSettings({ sendTyping: !root.settings.sendTyping })
           }
           Button {
-            text: "Notifications: " + (root.settings && root.settings.notifications ? "On" : "Off")
+            text: State.onOffLabel("Notifications", root.settings && root.settings.notifications)
             bordered: true
             onClicked: root.whiskerService.changeSettings({ notifications: !root.settings.notifications })
           }
@@ -256,7 +258,7 @@ Panel {
 
         // The open Chat: its timeline, newest at the bottom, and the composer. Enter sends, Shift+Enter adds a line.
         Column {
-          visible: root.view.screen === "linked" && !root.showSettings && !!root.openChat
+          visible: root.parts.chat
           width: parent.width
           spacing: Style.space(8)
           onVisibleChanged: if (visible) composer.forceActiveFocus()
@@ -350,13 +352,13 @@ Panel {
                 Text {
                   text: State.mediaLabel(modelData) + (State.mediaStatus(modelData) !== "" ? " - " + State.mediaStatus(modelData) : "")
                   textFormat: Text.PlainText
-                  color: modelData.media && modelData.media.state === "failed" ? Color.urgent : root.contentForeground
+                  color: State.mediaFailed(modelData) ? Color.urgent : root.contentForeground
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.caption
                 }
                 Button {
                   visible: State.canDownloadMedia(modelData)
-                  text: modelData.media && modelData.media.state === "failed" ? "Retry download" : "Download"
+                  text: State.downloadLabel(modelData)
                   bordered: true
                   onClicked: root.whiskerService.downloadMedia(modelData)
                 }
@@ -422,7 +424,7 @@ Panel {
                 Text {
                   visible: text !== ""
                   text: State.deliveryLabel(modelData)
-                  color: modelData.state === "failed" ? Color.urgent : root.contentForeground
+                  color: State.canRetryMessage(modelData) ? Color.urgent : root.contentForeground
                   opacity: 0.6
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.caption
@@ -499,7 +501,7 @@ Panel {
           }
 
           Text {
-            readonly property var quote: root.quoting ? State.quoteView({ quote: { fromMe: root.quoting.fromMe, senderName: root.quoting.senderName, text: State.messageBody(root.quoting) } }) : null
+            readonly property var quote: State.composerQuoteView(root.quoting)
             visible: quote !== null
             width: parent.width
             elide: Text.ElideRight
@@ -541,7 +543,7 @@ Panel {
 
         // The Chat list: the Daemon sends the Chats in order, with the name and the marks.
         ListView {
-          visible: root.view.screen === "linked" && !root.showSettings && !root.openChat
+          visible: root.parts.chatList
           width: parent.width
           height: visible ? Style.space(320) : 0
           clip: true
@@ -577,7 +579,7 @@ Panel {
         }
 
         Button {
-          visible: root.view.screen === "linked" && root.view.moreChats === true && !root.openChat
+          visible: root.parts.loadMoreChats
           text: "Load more"
           bordered: true
           onClicked: root.whiskerService.loadMoreChats()

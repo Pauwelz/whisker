@@ -33,12 +33,24 @@ var PAIR_CODE_ERRORS = {
   "-32002": "WhatsApp gave no Pair Code. Try again."
 }
 
+// The screens of the pop-out, and the states of Media. The Daemon sends the Media states (docs/contract.md).
+var SCREEN = {
+  STARTING: "starting",
+  ERROR: "error",
+  READY: "ready",
+  KEYRING_UNAVAILABLE: "keyring-unavailable",
+  LINKING: "linking",
+  LINKED: "linked"
+}
+
+var MEDIA_STATE = { NONE: "none", DOWNLOADING: "downloading", READY: "ready", FAILED: "failed" }
+
 function error(reason, message) {
-  return { screen: "error", reason: reason, message: message }
+  return { screen: SCREEN.ERROR, reason: reason, message: message }
 }
 
 function initialState() {
-  return { screen: "starting", reason: "", message: "Starting whisker…" }
+  return { screen: SCREEN.STARTING, reason: "", message: "Starting whisker…" }
 }
 
 // Returns an error state when the Daemon binary must not start, otherwise null.
@@ -57,7 +69,7 @@ function versionStep(expected, output, downloaded) {
   var failure = checkVersion(expected, output)
   if (!failure) return { action: "start", view: initialState() }
   if (downloaded) return { action: "fail", view: failure }
-  return { action: "download", view: { screen: "starting", reason: "", message: "Downloading the Daemon…" } }
+  return { action: "download", view: { screen: SCREEN.STARTING, reason: "", message: "Downloading the Daemon…" } }
 }
 
 function downloadFailed(exitCode) {
@@ -95,10 +107,10 @@ function foldFrame(state, frame) {
     return withSettings
   }
   if (frame && frame.method === "ready")
-    return { screen: "ready", reason: "", message: "The Daemon is ready.", canRetry: false }
+    return { screen: SCREEN.READY, reason: "", message: "The Daemon is ready.", canRetry: false }
   if (frame && frame.method === "keyringUnavailable")
     return {
-      screen: "keyring-unavailable",
+      screen: SCREEN.KEYRING_UNAVAILABLE,
       reason: "keyring-unavailable",
       message: "The keyring is unavailable. Unlock the keyring, then select Retry.",
       canRetry: true
@@ -106,11 +118,11 @@ function foldFrame(state, frame) {
   if (frame && frame.method === "linkQr")
     return linking(state, { qr: frame.params.qr, reason: "", message: "Scan this QR code in WhatsApp: Linked devices, Link a device.", canRetry: false })
   if (frame && frame.method === "linked")
-    return { screen: "linked", reason: "", message: "whisker is linked.", canRetry: false, connection: "connecting" }
+    return { screen: SCREEN.LINKED, reason: "", message: "whisker is linked.", canRetry: false, connection: "connecting" }
   if (frame && frame.method === "unlinked" && frame.params && frame.params.by === "user")
-    return { screen: "linking", reason: "logged-out", message: "You logged out. Link whisker again.", qr: "", pairCode: "", canRetry: false }
+    return { screen: SCREEN.LINKING, reason: "logged-out", message: "You logged out. Link whisker again.", qr: "", pairCode: "", canRetry: false }
   if (frame && frame.method === "unlinked")
-    return { screen: "linking", reason: "unlinked", message: "Your phone removed this device. Link whisker again.", qr: "", pairCode: "", canRetry: false }
+    return { screen: SCREEN.LINKING, reason: "unlinked", message: "Your phone removed this device. Link whisker again.", qr: "", pairCode: "", canRetry: false }
   if (frame && frame.method === "linkFailed") {
     var reason = frame.params.reason
     return linking(state, { qr: "", reason: reason, message: LINK_FAILURES[reason] || LINK_FAILURES.unexpected, canRetry: true })
@@ -150,7 +162,7 @@ function chatListRequest(id, offset, query) {
 
 // The linking screen keeps the QR code and the Pair Code unless a frame changes them.
 function linking(state, changes) {
-  var next = { screen: "linking", reason: "", message: "", qr: state.qr || "", pairCode: state.pairCode || "", canRetry: false }
+  var next = { screen: SCREEN.LINKING, reason: "", message: "", qr: state.qr || "", pairCode: state.pairCode || "", canRetry: false }
   for (var key in changes) next[key] = changes[key]
   return next
 }
@@ -181,8 +193,8 @@ function linkRetryRequest(id) {
 
 // What the Retry button does in this view state: "keyring" and "link" ask the Daemon, "download" fetches the Daemon again.
 function retryKind(state) {
-  if (state.screen === "keyring-unavailable") return "keyring"
-  return state.screen === "linking" ? "link" : "download"
+  if (state.screen === SCREEN.KEYRING_UNAVAILABLE) return "keyring"
+  return state.screen === SCREEN.LINKING ? "link" : "download"
 }
 
 // The Read Receipt modes in the order the settings view lists them. Mirror of daemon/internal/settings.
@@ -255,7 +267,7 @@ function connectionBanner(state) {
 
 // The bar icon dims unless the Plugin is ready or linked, and while offline.
 function barDimmed(state) {
-  if (state.screen !== "ready" && state.screen !== "linked") return true
+  if (state.screen !== SCREEN.READY && state.screen !== SCREEN.LINKED) return true
   return state.connection === "offline"
 }
 
@@ -378,15 +390,15 @@ function composerAction(key, shift, text) {
   return String(text).trim() === "" ? "swallow" : "send"
 }
 
-// The fixed shortcuts of the pop-out. `shortcut` is "Escape" or "Ctrl+F"; `context` says what the pop-out shows.
+// The fixed shortcuts of the pop-out. `shortcut` is "Escape" or "Ctrl+F"; `local` is { showSettings } as in panelParts.
 // Escape goes back one level: Chat, then settings, then it closes the pop-out. Ctrl+F searches, on the Chat list only.
 // Returns "closeChat", "closeSettings", "closePopout", "focusSearch" or "none".
-function shortcutAction(shortcut, context) {
+function shortcutAction(shortcut, state, local) {
   if (shortcut === "Escape") {
-    if (context.chatOpen) return "closeChat"
-    return context.settingsOpen ? "closeSettings" : "closePopout"
+    if (state.openChat) return "closeChat"
+    return local.showSettings ? "closeSettings" : "closePopout"
   }
-  var onList = context.linked && !context.chatOpen && !context.settingsOpen
+  var onList = panelParts(state, { pairMode: false, showSettings: local.showSettings }).chatList
   return shortcut === "Ctrl+F" && onList ? "focusSearch" : "none"
 }
 
@@ -655,7 +667,7 @@ function mediaPath(state, message) {
 
 // Images and stickers show inside the pop-out once the Daemon holds them.
 function showsInline(message) {
-  return !!message.media && message.media.state === "ready" && (message.media.kind === "image" || message.media.kind === "sticker")
+  return !!message.media && message.media.state === MEDIA_STATE.READY && (message.media.kind === "image" || message.media.kind === "sticker")
 }
 
 // The Messages of the open Chat whose path the Plugin must ask for. markMediaRequested then stops a second request.
@@ -691,16 +703,16 @@ function formatSize(bytes) {
 // The state text of Media that is not ready: "" when there is nothing to say.
 function mediaStatus(message) {
   if (!message.media) return ""
-  if (message.media.state === "downloading") return "Downloading…"
-  return message.media.state === "failed" ? "Download failed" : ""
+  if (message.media.state === MEDIA_STATE.DOWNLOADING) return "Downloading…"
+  return message.media.state === MEDIA_STATE.FAILED ? "Download failed" : ""
 }
 
 function canDownloadMedia(message) {
-  return !!message.media && (message.media.state === "none" || message.media.state === "failed")
+  return !!message.media && (message.media.state === MEDIA_STATE.NONE || message.media.state === MEDIA_STATE.FAILED)
 }
 
 function canOpenMedia(message) {
-  return !!message.media && message.media.state === "ready"
+  return !!message.media && message.media.state === MEDIA_STATE.READY
 }
 
 // The command that opens a plain copy: video in mpv, a voice note in mpv without a window, everything else in the default app.
@@ -749,4 +761,88 @@ function mediaSaveRequest(id, message, path) {
 // The Plugin sends this when a Chat closes, so the Daemon deletes the plain copies.
 function mediaReleaseRequest(id, jid) {
   return mediaRequest(id, "media.release", { chat: jid })
+}
+
+// Which parts of the pop-out show. `local` is the view state that only the pop-out keeps: { pairMode, showSettings }.
+// The views read these flags and hold no screen checks of their own.
+function panelParts(state, local) {
+  var linked = state.screen === SCREEN.LINKED
+  var linking = state.screen === SCREEN.LINKING
+  var chat = !!state.openChat
+  return {
+    error: state.screen === SCREEN.ERROR,
+    banner: linked && connectionBanner(state) !== "",
+    qr: linking && !!state.qr && !local.pairMode,
+    pairForm: linking && local.pairMode,
+    pairToggle: linking,
+    chatList: linked && !local.showSettings && !chat,
+    loadMoreChats: linked && state.moreChats === true && !chat,
+    settingsButton: linked && !!state.settings && !chat,
+    settings: linked && local.showSettings && !!state.settings,
+    chat: linked && !local.showSettings && chat
+  }
+}
+
+// The text of a settings button: "Send online: On".
+function onOffLabel(title, on) {
+  return title + ": " + (on ? "On" : "Off")
+}
+
+// The text of a Read Receipts mode button. The mode that is set is marked.
+function readReceiptLabel(mode, settings) {
+  return "Read Receipts: " + mode.label + (settings && settings.readReceipts === mode.value ? " (selected)" : "")
+}
+
+// True when the download of the Media of a Message failed.
+function mediaFailed(message) {
+  return !!message.media && message.media.state === MEDIA_STATE.FAILED
+}
+
+function downloadLabel(message) {
+  return mediaFailed(message) ? "Retry download" : "Download"
+}
+
+// The Quote above the composer: the Message that the next send quotes, shown like the Quote of a sent reply. Null for none.
+function composerQuoteView(quoting) {
+  if (!quoting) return null
+  return quoteView({ quote: { fromMe: quoting.fromMe, senderName: quoting.senderName, text: messageBody(quoting) } })
+}
+
+// What to do when the user asks to open Media: "stop" the playing note, "launch" at once (path known), or "request" the path.
+function openMediaStep(state, playingKey, message) {
+  if (isPlaying(playingKey, message)) return { action: "stop", path: "" }
+  var path = mediaPath(state, message)
+  return path !== "" ? { action: "launch", path: path } : { action: "request", path: "" }
+}
+
+// Media the user clicked to open, by mediaKey, until its path arrives. These two keep that table without changing it.
+function rememberOpen(pending, message) {
+  var entry = {}
+  entry[mediaKey(message.chat, message.id)] = message
+  return withChanges(pending, entry)
+}
+
+// A media.open result: the Message that waits for this path (or null), and the table without it.
+function takeOpen(pending, result) {
+  var key = mediaKey(result.chat, result.id)
+  if (!pending[key]) return { message: null, pending: pending }
+  var rest = {}
+  for (var k in pending) if (k !== key) rest[k] = pending[k]
+  return { message: pending[key], pending: rest }
+}
+
+// What a Daemon frame means for Media. Returns { state, pending, launch, load }:
+// launch is { message, path } for Media the user clicked and whose path just arrived, or null;
+// load lists the Messages whose path the Plugin must ask for now (state already marks them as asked).
+function mediaFrameStep(state, pending, frame) {
+  var result = frame.result
+  var launch = null
+  if (result && result.path) {
+    var taken = takeOpen(pending, result)
+    pending = taken.pending
+    if (taken.message) launch = { message: taken.message, path: result.path }
+  }
+  var load = mediaToLoad(state)
+  if (load.length > 0) state = markMediaRequested(state, load)
+  return { state: state, pending: pending, launch: launch, load: load }
 }

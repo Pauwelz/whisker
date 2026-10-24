@@ -137,17 +137,15 @@ Item {
 
   // Called by Open and by a tap on an image. A path that is already known opens at once.
   function openMedia(message) {
-    if (State.isPlaying(playingKey, message)) {
+    var step = State.openMediaStep(view, playingKey, message)
+    if (step.action === "stop") {
       stopPlayer()
-      return
+    } else if (step.action === "launch") {
+      launch(message, step.path)
+    } else {
+      pendingOpen = State.rememberOpen(pendingOpen, message)
+      daemon.write(State.mediaOpenRequest(nextRequestId++, message))
     }
-    var path = State.mediaPath(view, message)
-    if (path !== "") {
-      launch(message, path)
-      return
-    }
-    pendingOpen[State.mediaKey(message.chat, message.id)] = message
-    daemon.write(State.mediaOpenRequest(nextRequestId++, message))
   }
 
   // Called by Save as, with an absolute path.
@@ -183,19 +181,11 @@ Item {
 
   // Asks for the path of each image and sticker that is ready, and opens Media that the user clicked.
   function handleMediaFrame(frame) {
-    var result = frame.result
-    if (result && result.path) {
-      var key = State.mediaKey(result.chat, result.id)
-      var message = pendingOpen[key]
-      if (message) {
-        delete pendingOpen[key]
-        launch(message, result.path)
-      }
-    }
-    var todo = State.mediaToLoad(view)
-    if (todo.length === 0) return
-    view = State.markMediaRequested(view, todo)
-    todo.forEach(function(m) { daemon.write(State.mediaOpenRequest(nextRequestId++, m)) })
+    var step = State.mediaFrameStep(view, pendingOpen, frame)
+    view = step.state
+    pendingOpen = step.pending
+    if (step.launch) launch(step.launch.message, step.launch.path)
+    step.load.forEach(function(m) { daemon.write(State.mediaOpenRequest(nextRequestId++, m)) })
   }
 
   Process {
