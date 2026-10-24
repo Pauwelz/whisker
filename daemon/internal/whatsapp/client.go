@@ -39,7 +39,12 @@ func NewClient(container *sqlstore.Container) (*Client, error) {
 
 func (c *Client) Linked() bool         { return c.cli.Store.ID != nil }
 func (c *Client) Events() <-chan Event { return c.events }
-func (c *Client) Disconnect()          { c.cli.Disconnect() }
+func (c *Client) Logout() error {
+	ctx, cancel := context.WithTimeout(context.Background(), pairTimeout)
+	defer cancel()
+	return c.cli.Logout(ctx)
+}
+func (c *Client) Disconnect() { c.cli.Disconnect() }
 
 func (c *Client) Connect() error {
 	c.mu.Lock()

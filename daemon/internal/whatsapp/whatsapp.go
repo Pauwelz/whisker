@@ -15,6 +15,9 @@ type Port interface {
 	// PairCode asks for a Pair Code for the phone number (digits, international, no "+").
 	// Call it after Connect on an unlinked Profile. It returns ErrInvalidPhone for a bad number.
 	PairCode(phone string) (string, error)
+	// Logout tells WhatsApp to remove this Companion Device, so the phone no longer lists it.
+	// It needs a connection. On error the device stays linked.
+	Logout() error
 	// Disconnect closes the connection. It sends no event.
 	Disconnect()
 	// Events delivers events in order. The channel stays open until the process ends.

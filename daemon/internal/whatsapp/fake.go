@@ -12,6 +12,8 @@ type Fake struct {
 	pairErr    error
 	connectErr error
 	connects   int
+	logoutErr  error
+	logouts    int
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -28,6 +30,19 @@ func (f *Fake) SetPairCode(code string, err error) {
 
 // SetConnectError makes Connect fail with err. Pass nil to stop failing.
 func (f *Fake) SetConnectError(err error) { f.mu.Lock(); f.connectErr = err; f.mu.Unlock() }
+
+// SetLogoutError makes Logout fail with err. Pass nil to stop failing.
+func (f *Fake) SetLogoutError(err error) { f.mu.Lock(); f.logoutErr = err; f.mu.Unlock() }
+
+// Logouts counts the Logout calls.
+func (f *Fake) Logouts() int { f.mu.Lock(); defer f.mu.Unlock(); return f.logouts }
+
+func (f *Fake) Logout() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logouts++
+	return f.logoutErr
+}
 
 // Connects counts the Connect calls.
 func (f *Fake) Connects() int { f.mu.Lock(); defer f.mu.Unlock(); return f.connects }

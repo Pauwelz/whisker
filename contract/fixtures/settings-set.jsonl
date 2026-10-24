@@ -1,0 +1,6 @@
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"settings.set","params":{"readReceipts":"off","sendTyping":false}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"off","sendOnline":true,"sendTyping":false,"notifications":true}}}
+{"dir":"view","expect":{"settings":{"readReceipts":"off","sendOnline":true,"sendTyping":false,"notifications":true}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"settings.get"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"readReceipts":"off","sendOnline":true,"sendTyping":false,"notifications":true}}}

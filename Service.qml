@@ -42,6 +42,16 @@ Item {
     daemon.write(State.chatListRequest(nextRequestId++, view.chats ? view.chats.length : 0))
   }
 
+  // Called by the settings view. `changes` holds only the settings that change.
+  function changeSettings(changes) {
+    daemon.write(State.settingsSetRequest(nextRequestId++, changes))
+  }
+
+  // Called by the Log out button, after the user confirmed.
+  function logout() {
+    daemon.write(State.logoutRequest(nextRequestId++))
+  }
+
   // Called by the Retry button.
   function retry() {
     var kind = State.retryKind(view)
@@ -99,6 +109,7 @@ Item {
         var frame = State.parseLine(line)
         if (!frame) return
         root.view = State.applyFrame(root.view, frame)
+        if (State.requestsSettings(frame)) daemon.write(State.settingsGetRequest(root.nextRequestId++))
         if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0))
       }
     }

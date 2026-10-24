@@ -18,6 +18,7 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
+	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
@@ -86,7 +87,7 @@ func (r *runner) start() {
 	r.done = make(chan int, 1)
 	p := profile.New(r.dir, keystore.New(r.fake, r.clock))
 	go func() {
-		r.done <- contract.Run(inR, outW, &r.errOut, p, r.newPort)
+		r.done <- contract.Run(inR, outW, &r.errOut, p, settings.New(filepath.Join(r.dir, "..", "settings.json")), r.newPort)
 		p.Close()
 		outW.Close()
 	}()
@@ -275,7 +276,7 @@ func run(t *testing.T, input string) (int, string, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
 	p := profile.New(filepath.Join(t.TempDir(), "whisker"), keystore.New(keystore.NewFake(), keystore.NewManualClock()))
-	code := contract.Run(strings.NewReader(input), &out, &errOut, p, func() (whatsapp.Port, error) { return whatsapp.NewFake(), nil })
+	code := contract.Run(strings.NewReader(input), &out, &errOut, p, settings.New(filepath.Join(t.TempDir(), "settings.json")), func() (whatsapp.Port, error) { return whatsapp.NewFake(), nil })
 	p.Close()
 	return code, out.String(), errOut.String()
 }
@@ -367,4 +368,62 @@ func emitJSON[T whatsapp.Event](t *testing.T, f *whatsapp.Fake, raw json.RawMess
 		t.Fatal(err)
 	}
 	f.Emit(ev)
+}
+
+func TestLogoutKeepsProfileSettingsAndDeletesTheProfile(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"settings.set","params":{"notifications":false}}`)
+	r.nextFrame()
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"profile.logout"}`)
+	for _, want := range []string{`"result"`, "unlinked", "ready"} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	if !strings.Contains(r.fake.Calls(), "delete") {
+		t.Errorf("keyring calls = %q, want the store key deleted", r.fake.Calls())
+	}
+	r.send(`{"jsonrpc":"2.0","id":3,"method":"settings.get"}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"notifications":false`) {
+		t.Errorf("frame = %s, want the setting kept", f)
+	}
+	if code, _, _ := r.finish(); code != contract.ExitOK {
+		t.Errorf("exit code = %d, want %d", code, contract.ExitOK)
+	}
+}
+
+func TestFailedLogoutKeepsTheProfile(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetLogoutError(errors.New("offline"))
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"profile.logout"}`)
+	if f := r.nextFrame(); !strings.Contains(f, "-32005") {
+		t.Fatalf("frame = %s, want error -32005", f)
+	}
+	if strings.Contains(r.fake.Calls(), "delete") {
+		t.Error("a failed Log out must not delete the Profile")
+	}
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"chats.list"}`) // still ready and linked
+	if f := r.nextFrame(); !strings.Contains(f, `"chats"`) {
+		t.Errorf("frame = %s, want a Chat list", f)
+	}
+	r.finish()
+}
+
+func TestLogoutNeedsALinkedProfile(t *testing.T) {
+	r := newRunner(t)
+	r.start()
+	r.nextFrame() // ready
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"profile.logout"}`)
+	if f := r.nextFrame(); !strings.Contains(f, "-32601") {
+		t.Errorf("frame = %s, want method not found", f)
+	}
+	r.finish()
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
+	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
@@ -35,6 +36,9 @@ const (
 	methodLinkPairCode = "link.pairCode"
 	methodLinkRetry    = "link.retry"
 	methodChatsList    = "chats.list"
+	methodSettingsGet  = "settings.get"
+	methodSettingsSet  = "settings.set"
+	methodLogout       = "profile.logout"
 )
 
 // Page size of chats.list: the default, and the most a request can ask for.
@@ -49,6 +53,8 @@ const (
 	errInvalidPhone   = -32001
 	errPairCode       = -32002
 	errChatStore      = -32003
+	errSetting        = -32004
+	errLogout         = -32005
 )
 
 // qrScale is the pixel size of one QR module.
@@ -67,8 +73,9 @@ type NewPort func() (whatsapp.Port, error)
 
 // Run opens the Profile, sends `ready`, starts linking or connecting, then serves requests and WhatsApp events until EOF.
 // While the keyring is unavailable it sends `keyringUnavailable` and waits for `keyring.retry`.
+// Profile Settings live in prefs, outside the Profile, so Delete keeps them.
 // It writes frames to out and logs to logOut. It returns the process exit code.
-func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) int {
+func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.Store, newPort NewPort) int {
 	enc := json.NewEncoder(out) // Encode ends each frame with a newline.
 	send := func(frame map[string]any) bool {
 		if err := enc.Encode(frame); err != nil {
@@ -130,6 +137,25 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 		return code
 	}
 
+	// unlink runs the delete-the-Profile routine, then links again as on a fresh Profile.
+	// `by` is "user" for Log out. It is empty when the phone removed the Companion Device.
+	unlink := func(by string) int {
+		port.Disconnect()
+		ready, port, events, chats = false, nil, nil, nil
+		if err := profile.Delete(); err != nil {
+			fmt.Fprintln(logOut, "profile delete failed")
+			return ExitError
+		}
+		params := map[string]any{}
+		if by != "" {
+			params["by"] = by
+		}
+		if !send(notification("unlinked", params)) {
+			return ExitError
+		}
+		return open()
+	}
+
 	lines := make(chan []byte)
 	scanErr := make(chan error, 1)
 	go func() {
@@ -145,19 +171,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 	for {
 		select {
 		case ev := <-events:
-			if code := handleEvent(ev, logOut, send, chats, func() int {
-				// The phone removed the Companion Device: delete the Profile and link again as on a fresh one.
-				port.Disconnect()
-				ready, port, events, chats = false, nil, nil, nil
-				if err := profile.Delete(); err != nil {
-					fmt.Fprintln(logOut, "profile delete failed")
-					return ExitError
-				}
-				if !send(notification("unlinked", nil)) {
-					return ExitError
-				}
-				return open()
-			}); code >= 0 {
+			if code := handleEvent(ev, logOut, send, chats, func() int { return unlink("") }); code >= 0 {
 				return code
 			}
 		case line, ok := <-lines:
@@ -171,10 +185,11 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 					Phone  string `json:"phone"`
 					Offset int    `json:"offset"`
 					Limit  int    `json:"limit"`
+					settings.Update
 				} `json:"params"`
 			}
 			var reply map[string]any
-			retryKeyring, retryLink := false, false
+			retryKeyring, retryLink, logout := false, false, false
 			linking := ready && !port.Linked()
 			if err := json.Unmarshal(line, &req); err != nil {
 				reply = errorReply(nil, errParse, "parse error")
@@ -190,6 +205,18 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 				reply = pairCodeReply(port, req.ID, req.Params.Phone, logOut)
 			} else if req.Method == methodChatsList && ready {
 				reply = chatsListReply(chats, req.ID, req.Params.Offset, req.Params.Limit, logOut)
+			} else if req.Method == methodSettingsGet && ready {
+				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Get() })
+			} else if req.Method == methodSettingsSet && ready {
+				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Set(req.Params.Update) })
+			} else if req.Method == methodLogout && ready && port.Linked() {
+				if err := port.Logout(); err != nil {
+					fmt.Fprintln(logOut, "logout failed") // the error text could name hosts
+					reply = errorReply(req.ID, errLogout, "log out failed")
+				} else {
+					reply = resultReply(req.ID, map[string]any{})
+					logout = true
+				}
 			} else {
 				reply = errorReply(req.ID, errMethodNotFound, "method not found")
 			}
@@ -203,6 +230,11 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) 
 			}
 			if retryLink && !connect() {
 				return ExitError
+			}
+			if logout {
+				if code := unlink("user"); code >= 0 {
+					return code
+				}
 			}
 		}
 	}
@@ -264,6 +296,18 @@ func chatsListReply(chats *chatstore.Store, id json.RawMessage, offset, limit in
 		return errorReply(id, errChatStore, "chat store failed")
 	}
 	return resultReply(id, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset})
+}
+
+func settingsReply(id json.RawMessage, logOut io.Writer, apply func() (settings.Settings, error)) map[string]any {
+	cur, err := apply()
+	switch {
+	case errors.Is(err, settings.ErrInvalid):
+		return errorReply(id, errSetting, "invalid setting")
+	case err != nil:
+		fmt.Fprintln(logOut, "settings failed") // the error text could name paths
+		return errorReply(id, errSetting, "settings failed")
+	}
+	return resultReply(id, map[string]any{"readReceipts": cur.ReadReceipts, "sendOnline": cur.SendOnline, "sendTyping": cur.SendTyping, "notifications": cur.Notifications})
 }
 
 // qrDataURI renders a WhatsApp QR code string as a PNG data: URI.

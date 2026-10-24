@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "WhiskerState.js" as State
 
 // The bar widget entry point: a bar icon and its pop-out. It reads the Daemon state from the Service.
 Panel {
@@ -12,6 +13,10 @@ Panel {
   readonly property var view: whiskerService ? whiskerService.view : ({ screen: "starting", message: "" })
   // Which linking method the pop-out shows. The user picks it, so it is view state only.
   property bool pairMode: false
+  // Settings view and Log out confirmation: the user picks them, so they are view state only.
+  property bool showSettings: false
+  property bool confirmLogout: false
+  readonly property var settings: root.view.settings || null
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
@@ -106,9 +111,81 @@ Panel {
           onClicked: root.pairMode = !root.pairMode
         }
 
+        Button {
+          visible: root.view.screen === "linked" && !!root.settings
+          text: root.showSettings ? "Back to Chats" : "Settings"
+          bordered: true
+          onClicked: {
+            root.showSettings = !root.showSettings
+            root.confirmLogout = false
+          }
+        }
+
+        // Profile Settings. The Daemon owns the values: each button sends one change.
+        Column {
+          visible: root.view.screen === "linked" && root.showSettings && !!root.settings
+          width: parent.width
+          spacing: Style.space(8)
+
+          Repeater {
+            model: State.READ_RECEIPT_MODES
+            Button {
+              text: "Read Receipts: " + modelData.label + (root.settings && root.settings.readReceipts === modelData.value ? " (selected)" : "")
+              bordered: true
+              onClicked: root.whiskerService.changeSettings({ readReceipts: modelData.value })
+            }
+          }
+          Button {
+            text: "Send online: " + (root.settings && root.settings.sendOnline ? "On" : "Off")
+            bordered: true
+            onClicked: root.whiskerService.changeSettings({ sendOnline: !root.settings.sendOnline })
+          }
+          Button {
+            text: "Send typing: " + (root.settings && root.settings.sendTyping ? "On" : "Off")
+            bordered: true
+            onClicked: root.whiskerService.changeSettings({ sendTyping: !root.settings.sendTyping })
+          }
+          Button {
+            text: "Notifications: " + (root.settings && root.settings.notifications ? "On" : "Off")
+            bordered: true
+            onClicked: root.whiskerService.changeSettings({ notifications: !root.settings.notifications })
+          }
+          Button {
+            visible: !root.confirmLogout
+            text: "Log out"
+            bordered: true
+            onClicked: root.confirmLogout = true
+          }
+          Text {
+            visible: root.confirmLogout
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: "Log out removes this device from your phone and deletes your local chats."
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.body
+          }
+          Button {
+            visible: root.confirmLogout
+            text: "Confirm Log out"
+            bordered: true
+            onClicked: {
+              root.confirmLogout = false
+              root.showSettings = false
+              root.whiskerService.logout()
+            }
+          }
+          Button {
+            visible: root.confirmLogout
+            text: "Cancel"
+            bordered: true
+            onClicked: root.confirmLogout = false
+          }
+        }
+
         // The Chat list: the Daemon sends the Chats in order, with the name and the marks.
         ListView {
-          visible: root.view.screen === "linked"
+          visible: root.view.screen === "linked" && !root.showSettings
           width: parent.width
           height: visible ? Style.space(320) : 0
           clip: true
