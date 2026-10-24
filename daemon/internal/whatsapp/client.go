@@ -3,6 +3,7 @@ package whatsapp
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"time"
 
@@ -14,12 +15,16 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 )
 
 // pairTimeout bounds the PairPhone network call. sendTimeout bounds one Send.
 const (
 	pairTimeout = 30 * time.Second
 	sendTimeout = 90 * time.Second
+	// shortcut: one fixed limit for every download, upgrade to a size based limit if a large video times out.
+	downloadTimeout = 10 * time.Minute
 )
 
 // Client is the whatsmeow adapter: the only place whatsmeow types appear.
@@ -126,14 +131,14 @@ func (c *Client) handle(evt any) {
 	case *events.Disconnected:
 		c.events <- Disconnected{}
 	case *events.Message:
-		// Edits, revokes and Reactions have no text yet, and nor has Media: they are skipped until their tickets.
-		text := messageText(evt.Message)
-		if text == "" || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
+		// Edits, revokes and Reactions have no text: they are skipped until their tickets.
+		text, media := messageText(evt.Message), mediaOf(evt.Message)
+		if (text == "" && media == nil) || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
 			return
 		}
 		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: Message{
 			ID: evt.Info.ID, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe,
-			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName,
+			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName, Media: media,
 		}}
 	case *events.Receipt:
 		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
@@ -227,6 +232,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 				Time:     parsed.Info.Timestamp.Unix(),
 				Text:     messageText(parsed.Message),
 				PushName: parsed.Info.PushName,
+				Media:    mediaOf(parsed.Message),
 			})
 		}
 		batch.Chats = append(batch.Chats, chat)
@@ -244,10 +250,51 @@ func (c *Client) kindOf(jid types.JID) string {
 	return KindDirect
 }
 
-// messageText is the text of a Message. Media and system Messages have none yet.
+// messageText is the text of a Message, or the caption of its Media. System Messages have none yet.
 func messageText(m *waE2E.Message) string {
 	if text := m.GetConversation(); text != "" {
 		return text
 	}
-	return m.GetExtendedTextMessage().GetText()
+	if text := m.GetExtendedTextMessage().GetText(); text != "" {
+		return text
+	}
+	switch {
+	case m.GetImageMessage() != nil:
+		return m.GetImageMessage().GetCaption()
+	case m.GetVideoMessage() != nil:
+		return m.GetVideoMessage().GetCaption()
+	}
+	return m.GetDocumentMessage().GetCaption()
+}
+
+// mediaOf maps the Media of a Message to the port type, or nil when the Message has none.
+func mediaOf(m *waE2E.Message) *Media {
+	switch {
+	case m.GetImageMessage() != nil:
+		im := m.GetImageMessage()
+		return &Media{Kind: media.Image, Mime: im.GetMimetype(), Size: int64(im.GetFileLength()), Key: im.GetMediaKey(), DirectPath: im.GetDirectPath(), FileSHA256: im.GetFileSHA256(), FileEncSHA256: im.GetFileEncSHA256()}
+	case m.GetStickerMessage() != nil:
+		sm := m.GetStickerMessage()
+		return &Media{Kind: media.Sticker, Mime: sm.GetMimetype(), Size: int64(sm.GetFileLength()), Key: sm.GetMediaKey(), DirectPath: sm.GetDirectPath(), FileSHA256: sm.GetFileSHA256(), FileEncSHA256: sm.GetFileEncSHA256()}
+	case m.GetAudioMessage() != nil:
+		am := m.GetAudioMessage()
+		kind := media.Audio
+		if am.GetPTT() {
+			kind = media.Voice
+		}
+		return &Media{Kind: kind, Mime: am.GetMimetype(), Size: int64(am.GetFileLength()), Key: am.GetMediaKey(), DirectPath: am.GetDirectPath(), FileSHA256: am.GetFileSHA256(), FileEncSHA256: am.GetFileEncSHA256()}
+	case m.GetVideoMessage() != nil:
+		vm := m.GetVideoMessage()
+		return &Media{Kind: media.Video, Mime: vm.GetMimetype(), Size: int64(vm.GetFileLength()), Key: vm.GetMediaKey(), DirectPath: vm.GetDirectPath(), FileSHA256: vm.GetFileSHA256(), FileEncSHA256: vm.GetFileEncSHA256()}
+	case m.GetDocumentMessage() != nil:
+		dm := m.GetDocumentMessage()
+		return &Media{Kind: media.Document, Mime: dm.GetMimetype(), Name: dm.GetFileName(), Size: int64(dm.GetFileLength()), Key: dm.GetMediaKey(), DirectPath: dm.GetDirectPath(), FileSHA256: dm.GetFileSHA256(), FileEncSHA256: dm.GetFileEncSHA256()}
+	}
+	return nil
+}
+
+func (c *Client) Download(ref Media, dst *os.File) error {
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+	return c.cli.DownloadMediaWithPathToFile(ctx, ref.DirectPath, ref.FileEncSHA256, ref.FileSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false, dst)
 }

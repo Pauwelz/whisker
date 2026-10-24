@@ -217,7 +217,7 @@ func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 		return err
 	}
 	for _, m := range c.Messages {
-		if err := putMessage(tx, c.JID, m); err != nil {
+		if err := putMessage(tx, c.JID, m, MediaNone); err != nil {
 			return err
 		}
 	}
