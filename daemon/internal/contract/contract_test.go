@@ -41,11 +41,14 @@ type fixtureLine struct {
 	Edits     []string        `json:"edits"`     // dir "edited": "id:text" of each edit the fake port has sent so far
 	Event     json.RawMessage `json:"event"`
 
-	Download      *string `json:"download"`      // dir "whatsapp": the plain Media the next downloads return
-	DownloadError *string `json:"downloadError"` // dir "whatsapp": "" lets downloads work again
-	Path          string  `json:"path"`          // dir "file"
-	Content       string  `json:"content"`       // dir "file": the content the file must hold
-	Missing       bool    `json:"missing"`       // dir "file": the file must not exist
+	Download      *string  `json:"download"`      // dir "whatsapp": the plain Media the next downloads return
+	DownloadError *string  `json:"downloadError"` // dir "whatsapp": "" lets downloads work again
+	Path          string   `json:"path"`          // dir "file"
+	Content       string   `json:"content"`       // dir "file": the content the file must hold
+	Missing       bool     `json:"missing"`       // dir "file": the file must not exist
+	Online        []bool   `json:"online"`        // dir "presence": the availability calls so far
+	Typing        []string `json:"typing"`        // dir "presence": "chat:composing" or "chat:paused" calls so far
+	Subscribed    []string `json:"subscribed"`    // dir "presence": the Presence subscriptions so far
 }
 
 // runner runs the Daemon on pipes, with a fake keyring, a manual clock and a Profile in a temp dir.
@@ -217,6 +220,17 @@ func TestFixtures(t *testing.T) {
 					if got := r.currentPort().Revokes(); !reflect.DeepEqual(got, append([]string{}, line.IDs...)) {
 						t.Errorf("revokes = %v, want %v", got, line.IDs)
 					}
+				case "presence":
+					f := r.currentPort()
+					if got, want := mustJSON(f.OnlineCalls()), mustJSON(append([]bool{}, line.Online...)); got != want {
+						t.Errorf("availability calls = %s, want %s", got, want)
+					}
+					if got, want := mustJSON(f.TypingCalls()), mustJSON(append([]string{}, line.Typing...)); got != want {
+						t.Errorf("typing calls = %s, want %s", got, want)
+					}
+					if got, want := mustJSON(f.Subscribed()), mustJSON(append([]string{}, line.Subscribed...)); got != want {
+						t.Errorf("subscriptions = %s, want %s", got, want)
+					}
 				case "file":
 					r.checkFile(line)
 				case "clock":
@@ -325,6 +339,10 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.MessageEdited](r.t, f, line.Event)
 		case "messageRevoked":
 			emitJSON[whatsapp.MessageRevoked](r.t, f, line.Event)
+		case "presence":
+			emitJSON[whatsapp.Presence](r.t, f, line.Event)
+		case "chatPresence":
+			emitJSON[whatsapp.ChatPresence](r.t, f, line.Event)
 		case "connected":
 			f.Emit(whatsapp.Connected{})
 		case "disconnected":

@@ -179,8 +179,65 @@ func (c *Client) MarkChatRead(chat string) error {
 	return err
 }
 
+func (c *Client) SendPresence(online bool) error {
+	state := types.PresenceUnavailable
+	if online {
+		state = types.PresenceAvailable
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	return offline(c.cli.SendPresence(ctx, state))
+}
+
+func (c *Client) SubscribePresence(jid string) error {
+	parsed, err := types.ParseJID(jid)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	return offline(c.cli.SubscribePresence(ctx, parsed))
+}
+
+func (c *Client) SendTyping(chat string, composing bool) error {
+	parsed, err := types.ParseJID(chat)
+	if err != nil {
+		return err
+	}
+	state := types.ChatPresencePaused
+	if composing {
+		state = types.ChatPresenceComposing
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	return offline(c.cli.SendChatPresence(ctx, parsed, state, types.ChatPresenceMediaText))
+}
+
+// offline maps a missing connection to ErrOffline.
+func offline(err error) error {
+	if errors.Is(err, whatsmeow.ErrNotConnected) {
+		return ErrOffline
+	}
+	return err
+}
+
 func (c *Client) handle(evt any) {
 	switch evt := evt.(type) {
+	case *events.Presence:
+		p := Presence{JID: evt.From.String(), Online: !evt.Unavailable}
+		if !evt.LastSeen.IsZero() {
+			p.LastSeen = evt.LastSeen.Unix()
+		}
+		c.events <- p
+	case *events.ChatPresence:
+		state := ActivityPaused
+		if evt.State == types.ChatPresenceComposing {
+			state = ActivityComposing
+			if evt.Media == types.ChatPresenceMediaAudio {
+				state = ActivityRecording
+			}
+		}
+		c.events <- ChatPresence{Chat: evt.Chat.String(), Sender: evt.Sender.String(), State: state}
 	case *events.Connected:
 		c.events <- Connected{}
 	case *events.Disconnected:
