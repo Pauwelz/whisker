@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
@@ -36,7 +35,7 @@ Panel {
     centerOnBar: true
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(message.implicitHeight + (retry.visible ? retry.implicitHeight : 0))
+    contentHeight: panel.fittedContentHeight(message.implicitHeight + (retryButton.visible ? retryButton.implicitHeight + Style.space(8) : 0))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -56,14 +55,15 @@ Panel {
         font.pixelSize: Style.font.body
       }
 
-      // Unverified: a plain QtQuick.Controls Button has not run in a shell yet.
       Button {
-        id: retry
+        id: retryButton
         anchors.left: parent.left
         anchors.top: message.bottom
+        anchors.topMargin: Style.space(8)
         visible: root.view.canRetry === true
         text: "Retry"
-        onClicked: root.whiskerService.retryKeyring()
+        bordered: true
+        onClicked: root.whiskerService.retry()
       }
     }
   }
