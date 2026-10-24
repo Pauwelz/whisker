@@ -17,11 +17,29 @@ type Port interface {
 	PairCode(phone string) (string, error)
 	// Disconnect closes the connection. It sends no event.
 	Disconnect()
+	// NewMessageID returns an unused Message ID. A send and its retries use one ID, so WhatsApp drops a repeat.
+	NewMessageID() string
+	// Send sends a text Message to a Chat. It returns ErrOffline when there is no connection.
+	// It can block for a long time: call it off the Daemon loop.
+	Send(chat, id, text string) error
 	// Events delivers events in order. The channel stays open until the process ends.
 	Events() <-chan Event
 }
 
 var ErrInvalidPhone = errors.New("invalid phone number")
+
+// ErrOffline means Send found no connection. The Message is not sent.
+var ErrOffline = errors.New("not connected")
+
+// Delivery States. A Message of another Participant has none (empty).
+const (
+	StatePending   = "pending"
+	StateSent      = "sent"
+	StateDelivered = "delivered"
+	StateRead      = "read"
+	StatePlayed    = "played"
+	StateFailed    = "failed"
+)
 
 // Event is a sealed sum type: the kinds below are all of them.
 type Event interface{ isEvent() }
@@ -103,6 +121,30 @@ type ReadMarker struct {
 	Unread bool   `json:"unread"`
 }
 
+// NewMessage is a Message that arrived live, or that another device of the user sent. Time is Unix seconds.
+// Kind is the kind of the Chat, for a Chat that is not stored yet.
+type NewMessage struct {
+	Chat    string  `json:"chat"`
+	Kind    string  `json:"kind"`
+	Message Message `json:"message"`
+}
+
+// Receipt moves the Delivery State of the user's own Messages in a Direct Chat.
+// State is StateDelivered, StateRead or StatePlayed.
+type Receipt struct {
+	Chat  string   `json:"chat"`
+	IDs   []string `json:"ids"`
+	State string   `json:"state"`
+}
+
+// Connected and Disconnected report the connection to WhatsApp.
+type Connected struct{}
+type Disconnected struct{}
+
+func (NewMessage) isEvent()   {}
+func (Receipt) isEvent()      {}
+func (Connected) isEvent()    {}
+func (Disconnected) isEvent() {}
 func (QRCode) isEvent()      {}
 func (PairSuccess) isEvent() {}
 func (LinkFailed) isEvent()  {}

@@ -1,6 +1,9 @@
 package whatsapp
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // Fake is a scripted Port for tests. A test calls Emit to play WhatsApp events.
 type Fake struct {
@@ -12,6 +15,9 @@ type Fake struct {
 	pairErr    error
 	connectErr error
 	connects   int
+	sendErr    error
+	sent       []string
+	ids        int
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -28,6 +34,29 @@ func (f *Fake) SetPairCode(code string, err error) {
 
 // SetConnectError makes Connect fail with err. Pass nil to stop failing.
 func (f *Fake) SetConnectError(err error) { f.mu.Lock(); f.connectErr = err; f.mu.Unlock() }
+
+// SetSendError makes Send fail with err. Pass nil to stop failing.
+func (f *Fake) SetSendError(err error) { f.mu.Lock(); f.sendErr = err; f.mu.Unlock() }
+
+// Sent lists the IDs that Send accepted, in order.
+func (f *Fake) Sent() []string { f.mu.Lock(); defer f.mu.Unlock(); return append([]string{}, f.sent...) }
+
+func (f *Fake) NewMessageID() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ids++
+	return fmt.Sprintf("fake-%d", f.ids)
+}
+
+func (f *Fake) Send(_, id, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.sent = append(f.sent, id)
+	return nil
+}
 
 // Connects counts the Connect calls.
 func (f *Fake) Connects() int { f.mu.Lock(); defer f.mu.Unlock(); return f.connects }

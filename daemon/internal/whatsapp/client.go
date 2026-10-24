@@ -13,10 +13,14 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
-// pairTimeout bounds the PairPhone network call.
-const pairTimeout = 30 * time.Second
+// pairTimeout bounds the PairPhone network call. sendTimeout bounds one Send.
+const (
+	pairTimeout = 30 * time.Second
+	sendTimeout = 90 * time.Second
+)
 
 // Client is the whatsmeow adapter: the only place whatsmeow types appear.
 // Tests never use it: it would reach the WhatsApp servers.
@@ -94,8 +98,47 @@ func (c *Client) PairCode(phone string) (string, error) {
 	return code, err
 }
 
+func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
+
+func (c *Client) Send(chat, id, text string) error {
+	jid, err := types.ParseJID(chat)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+	_, err = c.cli.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(text)}, whatsmeow.SendRequestExtra{ID: id})
+	if errors.Is(err, whatsmeow.ErrNotConnected) {
+		return ErrOffline
+	}
+	return err
+}
+
 func (c *Client) handle(evt any) {
 	switch evt := evt.(type) {
+	case *events.Connected:
+		c.events <- Connected{}
+	case *events.Disconnected:
+		c.events <- Disconnected{}
+	case *events.Message:
+		// Edits, revokes and Reactions have no text yet, and nor has Media: they are skipped until their tickets.
+		text := messageText(evt.Message)
+		if text == "" || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
+			return
+		}
+		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: Message{
+			ID: evt.Info.ID, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe,
+			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName,
+		}}
+	case *events.Receipt:
+		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
+		if state := receiptState(evt.Type); state != "" && !evt.IsGroup {
+			ids := make([]string, len(evt.MessageIDs))
+			for i, id := range evt.MessageIDs {
+				ids[i] = id
+			}
+			c.events <- Receipt{Chat: evt.Chat.String(), IDs: ids, State: state}
+		}
 	case *events.PairSuccess:
 		c.events <- PairSuccess{}
 	case *events.PairError:
@@ -121,6 +164,18 @@ func (c *Client) handle(evt any) {
 	case *events.MarkChatAsRead:
 		c.events <- ReadMarker{JID: evt.JID.String(), Unread: !evt.Action.GetRead()}
 	}
+}
+
+func receiptState(t types.ReceiptType) string {
+	switch t {
+	case types.ReceiptTypeDelivered:
+		return StateDelivered
+	case types.ReceiptTypeRead:
+		return StateRead
+	case types.ReceiptTypePlayed:
+		return StatePlayed
+	}
+	return ""
 }
 
 // muteUntil maps a WhatsApp mute end (Unix seconds, -1 or 0 for ever) to the port value.
