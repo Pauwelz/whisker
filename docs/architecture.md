@@ -11,7 +11,7 @@ whisker is the Omarchy product: a Quickshell/QML Plugin and its own Go Daemon. I
 - `whatsmeow` handles the WhatsApp protocol and its `sqlstore`.
 - `ncruces/go-sqlite3` with the `adiantum` VFS gives encrypted SQLite in pure Go.
 - `zalando/go-keyring` reads and writes the store key in the Secret Service.
-- A pure-Go QR library renders the QR code.
+- `rsc.io/qr` renders the QR code ([research](research/qr-library.md)).
 - The Daemon uses whatsmeow's `util/hkdfutil` and `util/cbcutil` packages for Media.
 - The JSON-RPC 2.0 envelope uses no library on either side.
 - Release tooling: POSIX `sh`, `curl` and `sha256sum` (see section 8).
@@ -21,7 +21,7 @@ whisker is the Omarchy product: a Quickshell/QML Plugin and its own Go Daemon. I
 - Quickshell starts the Daemon as a child process. The Daemon stops with the Plugin.
 - The Plugin talks to the Daemon over the child's stdio. stdin carries commands. stdout carries protocol frames only. stderr carries logs. There is no socket.
 - The Daemon exits on stdin EOF. A hard shell crash leaves no orphan Daemon.
-- Quickshell kills the child when it exits or reloads its config. The Plugin does not use `startDetached()`.
+- The Daemon `Process` lives in a Plugin `service` with `keepLoaded: true`, so a config reload keeps it. Quickshell kills the child when it exits. The Plugin does not use `startDetached()` ([research](research/omarchy-plugin.md)).
 - One Daemon serves one Profile, which is one Companion Device. The initial architecture has no support for several Profiles.
 - The Profile lock in `$XDG_RUNTIME_DIR/whisker/` stops a second Daemon on the same Profile. A new Daemon waits a few seconds for the lock. Then it exits with a "Profile in use" code. This covers the shell restart race.
 - To debug, run `whisker-daemon` in a terminal and type JSON lines.
@@ -67,7 +67,7 @@ The scheme covers the device store, the chat store and the Media. Profile Settin
 
 1. **SQLite stores.** `ncruces/go-sqlite3` with the `adiantum` VFS, in pure Go. The main file, the WAL and the journal are encrypted. Both stores use the same key. SQLCipher is out, because it needs cgo.
 2. **Known limit.** The encryption gives confidentiality only. It does not detect tampering or rollback.
-3. **Key.** The Daemon makes one random 32-byte store key per Profile on first start. It keeps the key in the Secret Service through `go-keyring`. The key never goes on disk.
+3. **Key.** The Daemon makes one random 32-byte store key per Profile on first start. It keeps the key in the Secret Service through `go-keyring`, base64-encoded. whisker never writes the key to disk itself. The Secret Service provider decides how it stores the key ([research](research/go-keyring.md)).
 4. **No keyring or locked keyring.** The Daemon waits at most about 30 s. `go-keyring` has no timeout, so the Daemon sets its own. Then it sends a "keyring unavailable" state to the Plugin, with a Retry action. There is no plain-file or key-file fallback.
 5. **Lost key.** The Daemon deletes the unreadable Profile and starts linking again. There is no recovery code.
 6. **Media at rest.** The Profile keeps Media in WhatsApp's CDN format: AES-256-CBC with a truncated HMAC-SHA256. The HMAC detects tampering. The `mediaKey` of each Media lives in the chat store.
@@ -82,6 +82,8 @@ The scheme covers the device store, the chat store and the Media. Profile Settin
 ### Threat boundary
 
 A `0600` file is readable by every process of the same user. A key in the Secret Service is too. The encryption keeps the stores and Media away from indexers, backup or sync tools and sandboxed apps. It does not keep them from a hostile native process of the same user.
+
+On a default Omarchy install, the login keyring has no password, and gnome-keyring stores it in plain text in `~/.local/share/keyrings/`. A backup of `~/.local/share` then holds the stores and their key. The README tells users to set a password on the login keyring for real protection at rest.
 
 ### Lock
 
@@ -149,10 +151,9 @@ A marketplace listing is the goal. The repo has a root README with install and r
 
 - The package split inside `daemon/internal/...` is not decided.
 - The lock mechanism, the exact wait time and the numeric exit codes (including "Profile in use" and the oversized-line code) are not decided.
-- The pure-Go QR library is not chosen.
 - The storage format of Profile Settings is not decided.
 - The encrypted chat store is not run with a chat schema. FTS5 needs the extra `ncruces` `ext/fts5` package. This is not verified.
-- A locked keyring is not tested with `go-keyring`. The missing prompt timeout comes from reading the source, not from a run.
+- A locked keyring is not tested with `go-keyring` in a run. The research lists what a run must confirm.
 - The marketplace scanner is not checked for how it treats a verified download.
 - The list of stable application error codes in the contract is not written.
 - An `arm64` target is not planned. It needs a new `SHA256SUMS` line and a new asset.
