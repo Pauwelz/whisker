@@ -17,6 +17,8 @@ import (
 // instantClock makes every keyring timeout fire at once.
 type instantClock struct{}
 
+func (instantClock) Now() time.Time { return time.Time{} }
+
 func (instantClock) After(time.Duration) <-chan time.Time {
 	c := make(chan time.Time, 1)
 	c <- time.Time{}

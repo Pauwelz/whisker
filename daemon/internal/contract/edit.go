@@ -26,7 +26,7 @@ func chatEditReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessag
 	m, err := chats.Message(chat, msgID)
 	if err != nil || !m.FromMe || m.Revoked || !sentByWhatsApp(m.State) ||
 		!validText(text) ||
-		Now().Sub(time.Unix(m.Time, 0)) > EditWindow {
+		Clock.Now().Sub(time.Unix(m.Time, 0)) > EditWindow {
 		return storeOrInvalid(id, err, logOut), nil
 	}
 	if err := port.Edit(chat, msgID, text); err != nil {

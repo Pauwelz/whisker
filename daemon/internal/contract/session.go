@@ -8,11 +8,16 @@ import (
 
 	"github.com/Pauwelz/whisker/daemon/internal/attention"
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
+	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
+
+// Clock is the one time seam of the Daemon: the time of the chat store, and the timers of the sweep, the connect retry and the Mute end.
+// Tests replace it with a manual clock.
+var Clock clock.Clock = clock.Real
 
 // keepGoing is what a step returns when the Daemon goes on. Any other value is an exit code.
 const keepGoing = -1
@@ -64,7 +69,7 @@ func (s *session) open() int {
 		}
 		s.events = s.port.Events()
 		s.media = s.profile.Media()
-		s.chats = chatstore.New(s.profile.Chat(), Now)
+		s.chats = chatstore.New(s.profile.Chat(), Clock.Now)
 		s.read = &reader{chats: s.chats, port: s.port, prefs: s.prefs, attn: &s.attn, logOut: s.logOut, played: map[string]bool{}}
 		notices := &notifier{chats: s.chats, prefs: s.prefs, attn: &s.attn, logOut: s.logOut}
 		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, notices.frame)
@@ -72,10 +77,10 @@ func (s *session) open() int {
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut)
 		s.mediaDone = s.loader.results
 		// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
-		if _, err := s.chats.Expire(Now().Unix()); err != nil {
+		if _, err := s.chats.Expire(Clock.Now().Unix()); err != nil {
 			fmt.Fprintln(s.logOut, "chat store write failed")
 		}
-		s.expiryTick = Timers.After(ExpiryInterval)
+		s.expiryTick = Clock.After(ExpiryInterval)
 		s.scheduleMuteEnd()
 		s.pres = newPresenter(s.port, s.prefs, &s.attn, s.logOut)
 		s.ready = true
@@ -109,7 +114,7 @@ func (s *session) connect() bool {
 		if !s.port.Linked() {
 			return s.send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonConnectFailed}))
 		}
-		s.retryConnect = Timers.After(ConnectRetryDelay)
+		s.retryConnect = Clock.After(ConnectRetryDelay)
 		return s.send(notification("disconnected", nil))
 	}
 	return true
@@ -146,11 +151,11 @@ func (s *session) unlink(by string) int {
 
 // sweepExpired deletes the Disappearing Messages whose timer ended and tells the Plugin. It returns false when a frame could not be written.
 func (s *session) sweepExpired() bool {
-	expired, err := s.chats.Expire(Now().Unix())
+	expired, err := s.chats.Expire(Clock.Now().Unix())
 	if err != nil {
 		fmt.Fprintln(s.logOut, "chat store write failed")
 	}
-	s.expiryTick = Timers.After(ExpiryInterval)
+	s.expiryTick = Clock.After(ExpiryInterval)
 	for _, e := range expired {
 		if !s.send(notification("messageExpired", map[string]any{"chat": e.Chat, "id": e.ID})) {
 			return false
@@ -248,6 +253,6 @@ func (s *session) scheduleMuteEnd() {
 	case !ok:
 		s.muteTick, s.muteAt = nil, 0
 	case until != s.muteAt:
-		s.muteTick, s.muteAt = Timers.After(time.Duration(until-Now().Unix())*time.Second), until
+		s.muteTick, s.muteAt = Clock.After(time.Duration(until-Clock.Now().Unix())*time.Second), until
 	}
 }

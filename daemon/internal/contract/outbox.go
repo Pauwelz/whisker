@@ -8,16 +8,9 @@ import (
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
-	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
-
-// Now is the clock of the chat store. Tests replace it to get fixed Message times.
-var Now = time.Now
-
-// Timers makes the timers of the Disappearing Message sweep. Tests replace it with a manual clock.
-var Timers clock.Clock = clock.Real
 
 // ExpiryInterval is how often the Daemon deletes Disappearing Messages whose timer ended.
 // shortcut: an expired Message can show for up to one interval, upgrade to a timer for the next deadline if that matters.

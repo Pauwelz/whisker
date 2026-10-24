@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -69,7 +68,6 @@ type runner struct {
 	fake    *keystore.Fake
 	clock   *clock.Manual
 	expiry  *clock.Manual // the timers of the Disappearing Message sweep
-	now     atomic.Int64  // the Daemon time in Unix seconds
 	dir     string
 	runtime string // $XDG_RUNTIME_DIR of the Daemon
 	in      *io.PipeWriter
@@ -85,15 +83,13 @@ type runner struct {
 
 func newRunner(t *testing.T) *runner {
 	t.Helper()
-	oldNow := contract.Now
-	oldTimers := contract.Timers
+	oldClock := contract.Clock
 	runtime := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtime)
 	r := &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: clock.NewManual(), expiry: clock.NewManual(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
-	r.now.Store(1000) // fixed Message times for the fixtures
-	contract.Now = func() time.Time { return time.Unix(r.now.Load(), 0) }
-	contract.Timers = r.expiry
-	t.Cleanup(func() { contract.Now, contract.Timers = oldNow, oldTimers })
+	r.expiry.SetNow(1000) // fixed Message times for the fixtures
+	contract.Clock = r.expiry
+	t.Cleanup(func() { contract.Clock = oldClock })
 	return r
 }
 
@@ -274,7 +270,7 @@ func TestFixtures(t *testing.T) {
 				case "clock":
 					r.start()
 					if line.Now != nil { // the Disappearing Message sweep
-						r.now.Store(*line.Now)
+						r.expiry.SetNow(*line.Now)
 						r.expiry.Fire()
 					} else {
 						r.clock.Fire()
@@ -304,13 +300,15 @@ func (r *runner) restart(t *testing.T, now *int64) {
 		t.Errorf("before the restart: exit code %d, extra frames %v", code, rest)
 	}
 	r.started = false
+	prev := r.expiry.Now().Unix()
 	r.expiry = clock.NewManual()
-	contract.Timers = r.expiry
+	r.expiry.SetNow(prev)
+	contract.Clock = r.expiry
 	r.portMu.Lock()
 	r.port, r.portUsed = whatsapp.NewFake(), false
 	r.portMu.Unlock()
 	if now != nil {
-		r.now.Store(*now)
+		r.expiry.SetNow(*now)
 	}
 }
 
