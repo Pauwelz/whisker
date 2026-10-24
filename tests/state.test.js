@@ -377,6 +377,8 @@ test("Quotes: the preview names the author and is cut to one line; the composer 
   assert.deepEqual(JSON.parse(State.composerRequest(1, jid, "", "re", "m1")).params, { chat: jid, text: "re", quote: "m1" });
   assert.deepEqual(JSON.parse(State.composerRequest(2, jid, "", "re", "")).params, { chat: jid, text: "re" });
   assert.equal(JSON.parse(State.composerRequest(3, jid, "m1", "fix", "m2")).method, "chat.edit");
+});
+
 test("presenceLabel shows Online and Last Seen in a Direct Chat only", () => {
   const now = Math.floor(new Date(2026, 9, 24, 15, 0).getTime() / 1000);
   const seen = Math.floor(new Date(2026, 9, 24, 14, 5).getTime() / 1000);
