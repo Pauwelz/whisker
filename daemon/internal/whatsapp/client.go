@@ -305,7 +305,7 @@ func offline(err error) error {
 func (c *Client) handle(evt any) {
 	switch evt := evt.(type) {
 	case *events.Presence:
-		p := Presence{JID: evt.From.String(), Online: !evt.Unavailable}
+		p := Presence{JID: c.phone(evt.From).String(), Online: !evt.Unavailable}
 		if !evt.LastSeen.IsZero() {
 			p.LastSeen = evt.LastSeen.Unix()
 		}
@@ -318,7 +318,7 @@ func (c *Client) handle(evt any) {
 				state = ActivityRecording
 			}
 		}
-		c.events <- ChatPresence{Chat: evt.Chat.String(), Sender: evt.Sender.String(), State: state}
+		c.events <- ChatPresence{Chat: c.chatOf(evt.MessageSource).String(), Sender: c.senderOf(evt.MessageSource).String(), State: state}
 	case *events.Connected:
 		c.events <- Connected{}
 	case *events.Disconnected:
@@ -327,15 +327,16 @@ func (c *Client) handle(evt any) {
 		if c.handleProtocol(evt) {
 			return
 		}
+		chat := c.chatOf(evt.Info.MessageSource)
 		if r := evt.Message.GetReactionMessage(); r != nil {
-			c.events <- Reaction{Chat: evt.Info.Chat.String(), ID: r.GetKey().GetID(), Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
+			c.events <- Reaction{Chat: chat.String(), ID: r.GetKey().GetID(), Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
 			return
 		}
 		body, ok := contentOf(evt.Message, evt.IsViewOnce)
-		if !ok || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
+		if !ok || evt.IsEdit || chat.Server == types.BroadcastServer {
 			return
 		}
-		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: c.messageOf(evt.Info, evt.Message, body)}
+		c.events <- NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Message: c.messageOf(evt.Info, evt.Message, body)}
 	case *events.Receipt:
 		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
 		if state := receiptState(evt.Type); state != "" && !evt.IsGroup {
@@ -343,7 +344,7 @@ func (c *Client) handle(evt any) {
 			for i, id := range evt.MessageIDs {
 				ids[i] = id
 			}
-			c.events <- Receipt{Chat: evt.Chat.String(), IDs: ids, State: state}
+			c.events <- Receipt{Chat: c.chatOf(evt.MessageSource).String(), IDs: ids, State: state}
 		}
 	case *events.PairSuccess:
 		c.events <- PairSuccess{}
@@ -356,30 +357,30 @@ func (c *Client) handle(evt any) {
 	case *events.HistorySync:
 		c.events <- c.historySync(evt.Data)
 	case *events.PushName:
-		c.events <- PushName{JID: evt.JID.String(), Name: evt.NewPushName}
+		c.events <- PushName{JID: c.phone(evt.JID).String(), Name: evt.NewPushName}
 	case *events.Contact:
-		c.events <- ContactName{JID: evt.JID.String(), Name: evt.Action.GetFullName()}
+		c.events <- ContactName{JID: c.phone(evt.JID).String(), Name: evt.Action.GetFullName()}
 	case *events.Pin:
-		c.events <- Pin{JID: evt.JID.String(), Pinned: evt.Action.GetPinned()}
+		c.events <- Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}
 	case *events.Mute:
 		until := int64(0)
 		if evt.Action.GetMuted() {
 			until = muteUntil(evt.Action.GetMuteEndTimestamp())
 		}
-		c.events <- Mute{JID: evt.JID.String(), Until: until}
+		c.events <- Mute{JID: c.phone(evt.JID).String(), Until: until}
 	case *events.MarkChatAsRead:
-		c.events <- ReadMarker{JID: evt.JID.String(), Unread: !evt.Action.GetRead()}
+		c.events <- ReadMarker{JID: c.phone(evt.JID).String(), Unread: !evt.Action.GetRead()}
 	}
 }
 
 // handleProtocol turns an edit or a revoke into its event. It reports whether the Message was one of them.
 func (c *Client) handleProtocol(evt *events.Message) bool {
 	pm := evt.Message.GetProtocolMessage()
-	chat, id := evt.Info.Chat.String(), pm.GetKey().GetID()
+	chat, id := c.chatOf(evt.Info.MessageSource).String(), pm.GetKey().GetID()
 	switch {
 	case pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT:
 		if text := messageText(pm.GetEditedMessage()); text != "" {
-			c.events <- MessageEdited{Chat: chat, ID: id, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe, Text: text}
+			c.events <- MessageEdited{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text}
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
 		c.events <- MessageRevoked{Chat: chat, ID: id}
@@ -435,13 +436,14 @@ func muteUntil(end int64) int64 {
 func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 	batch := HistorySync{}
 	for _, p := range data.GetPushnames() {
-		batch.PushNames = append(batch.PushNames, PushName{JID: p.GetID(), Name: p.GetPushname()})
+		batch.PushNames = append(batch.PushNames, PushName{JID: c.phoneString(p.GetID()), Name: p.GetPushname()})
 	}
 	for _, conv := range data.GetConversations() {
 		jid, err := types.ParseJID(conv.GetID())
 		if err != nil {
 			continue
 		}
+		jid = c.phone(jid)
 		chat := HistoryChat{
 			JID:        jid.String(),
 			Kind:       c.kindOf(jid),
@@ -472,9 +474,9 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 
 func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {
 	return Message{
-		ID: info.ID, Sender: info.Sender.String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
+		ID: info.ID, Sender: c.senderOf(info.MessageSource).String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
 		Text: body.Text, PushName: info.PushName, Quote: c.quoteOf(m), Media: body.Media, Timer: timerOf(m),
-		Mentions: body.Mentions, MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+		Mentions: c.phoneStrings(body.Mentions), MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
 	}
 }
 
@@ -494,7 +496,7 @@ func (c *Client) quoteOf(m *waE2E.Message) *Quote {
 	if ctx.GetStanzaID() == "" {
 		return nil
 	}
-	sender := ctx.GetParticipant()
+	sender := c.phoneString(ctx.GetParticipant())
 	if jid, err := types.ParseJID(sender); err == nil && c.cli.Store.ID != nil && jid.User == c.cli.Store.ID.User {
 		sender = ""
 	}
@@ -548,4 +550,69 @@ func (c *Client) Download(ref Media, dst *os.File) error {
 	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 	defer cancel()
 	return c.cli.DownloadMediaWithPathToFile(ctx, ref.DirectPath, ref.FileEncSHA256, ref.FileSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false, dst)
+}
+
+// phone is the phone JID of a user JID that whatsmeow gives out. Any alt that holds the phone JID wins over the LID store.
+func (c *Client) phone(jid types.JID, alts ...types.JID) types.JID {
+	return resolvePhone(jid, c.lookupPhone, alts...)
+}
+
+func (c *Client) lookupPhone(lid types.JID) (types.JID, error) {
+	if own := c.cli.Store.ID; own != nil && lid.User == c.cli.Store.GetLID().User {
+		return own.ToNonAD(), nil
+	}
+	if c.cli.Store.LIDs == nil {
+		return types.EmptyJID, errors.New("no LID store")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	return c.cli.Store.LIDs.GetPNForLID(ctx, lid)
+}
+
+// phoneString is phone for a JID string. A string that does not parse stays as it is.
+func (c *Client) phoneString(s string) string {
+	jid, err := types.ParseJID(s)
+	if err != nil || jid.IsEmpty() {
+		return s
+	}
+	return c.phone(jid).String()
+}
+
+func (c *Client) phoneStrings(in []string) []string {
+	var out []string
+	for _, s := range in {
+		out = append(out, c.phoneString(s))
+	}
+	return out
+}
+
+// chatOf is the phone JID of the Chat of an event. In a Direct Chat the alt of the other user is the sender alt, or the recipient alt for the user's own Messages.
+func (c *Client) chatOf(src types.MessageSource) types.JID {
+	alt := src.SenderAlt
+	if src.IsFromMe {
+		alt = src.RecipientAlt
+	}
+	return c.phone(src.Chat, alt)
+}
+
+func (c *Client) senderOf(src types.MessageSource) types.JID {
+	return c.phone(src.Sender, src.SenderAlt)
+}
+
+// resolvePhone maps a LID to the phone JID: first an alt that is a phone JID, then lookup. Other JIDs lose only their device part.
+// shortcut: an unknown LID stays as it is, so its Messages open a separate Chat.
+func resolvePhone(jid types.JID, lookup func(types.JID) (types.JID, error), alts ...types.JID) types.JID {
+	jid = jid.ToNonAD()
+	if jid.Server != types.HiddenUserServer {
+		return jid
+	}
+	for _, alt := range alts {
+		if alt.Server == types.DefaultUserServer {
+			return alt.ToNonAD()
+		}
+	}
+	if pn, err := lookup(jid); err == nil && !pn.IsEmpty() {
+		return pn.ToNonAD()
+	}
+	return jid
 }

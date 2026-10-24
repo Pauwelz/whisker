@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- A live Message from another person, and a Message that you send from your phone, now show in the open Chat. WhatsApp addresses them by LID, and the Daemon now maps the LID to the phone JID of the Chat.
+
 ## [1.0.0-rc.2] - 2026-10-24
 
 ### Added
