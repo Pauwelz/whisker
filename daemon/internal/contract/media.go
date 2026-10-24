@@ -59,7 +59,7 @@ func (l *mediaLoader) start(chat, id string) {
 
 // autoStart starts the download of a live Message whose Media downloads by itself.
 func (l *mediaLoader) autoStart(ev whatsapp.NewMessage) {
-	if m := ev.Message.Media; m != nil && m.Kind.Auto() {
+	if livePolicy(ev).MediaState == chatstore.MediaDownloading {
 		l.start(ev.Chat, ev.Message.ID)
 	}
 }

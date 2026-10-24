@@ -160,7 +160,7 @@ func (b *outbox) handle(ev whatsapp.Event) bool {
 		b.online = false
 		return b.send(notification("disconnected", nil))
 	case whatsapp.NewMessage:
-		if err := b.chats.Apply(ev); err != nil {
+		if err := b.chats.PutLive(ev, livePolicy(ev)); err != nil {
 			fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
 			return true
 		}

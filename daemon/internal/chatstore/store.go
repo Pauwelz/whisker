@@ -58,8 +58,6 @@ func (s *Store) Apply(ev whatsapp.Event) error {
 			}
 			return nil
 		})
-	case whatsapp.NewMessage:
-		return s.inTx(func(tx *sql.Tx) error { return putLiveMessage(tx, ev) })
 	case whatsapp.PushName:
 		return setName(s.db, "push_name", ev.JID, ev.Name)
 	case whatsapp.ContactName:

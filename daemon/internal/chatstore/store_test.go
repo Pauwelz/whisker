@@ -270,11 +270,41 @@ func TestSearchMatchesChatNameAndParticipantName(t *testing.T) {
 	}
 }
 
+// The store writes the policy it is given: no policy of its own.
+func TestPutLiveWritesTheReadMarkerOnlyWhenTold(t *testing.T) {
+	s, _ := newStore(t)
+	live := func(chat, id string, p chatstore.LivePolicy) {
+		t.Helper()
+		ev := whatsapp.NewMessage{Chat: chat, Message: whatsapp.Message{ID: id, Sender: chat, Time: 5, Text: "hi"}}
+		if err := s.PutLive(ev, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	live("a@s.whatsapp.net", "1", chatstore.LivePolicy{MediaState: chatstore.MediaNone})
+	live("b@s.whatsapp.net", "1", chatstore.LivePolicy{MediaState: chatstore.MediaNone, MarkUnread: true})
+	unread := map[string]bool{}
+	for _, c := range list(t, s, 0, 10).Chats {
+		unread[c.JID] = c.Unread
+	}
+	if unread["a@s.whatsapp.net"] || !unread["b@s.whatsapp.net"] {
+		t.Errorf("unread marks = %v", unread)
+	}
+	if _, err := s.ClearUnread("b@s.whatsapp.net"); err != nil {
+		t.Fatal(err)
+	}
+	live("b@s.whatsapp.net", "1", chatstore.LivePolicy{MediaState: chatstore.MediaNone, MarkUnread: true}) // a repeat
+	if list(t, s, 0, 10).Chats[0].Unread || list(t, s, 0, 10).Chats[1].Unread {
+		t.Error("a repeated Message must not set the Read Marker again")
+	}
+}
+
 func TestMentionsUseTheNameRuleAndRevokeClearsThem(t *testing.T) {
 	s, _ := newStore(t)
-	apply(t, s, whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+	if err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
 		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: "@3 and @4",
-		Mentions: []string{"3@s.whatsapp.net", "4@s.whatsapp.net"}}})
+		Mentions: []string{"3@s.whatsapp.net", "4@s.whatsapp.net"}}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+		t.Fatal(err)
+	}
 	apply(t, s, whatsapp.PushName{JID: "3@s.whatsapp.net", Name: "Zed"})
 	m, err := s.Message("g@g.us", "m1")
 	if err != nil {

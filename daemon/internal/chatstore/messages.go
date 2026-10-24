@@ -463,9 +463,19 @@ func (s *Store) ResetDownloads() error {
 	return err
 }
 
-// putLiveMessage stores a Message that arrived live. It creates the Chat if History Sync has not.
-// A new Message of another Participant sets the Read Marker and waits for its Read Receipt.
-func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage) error {
+// LivePolicy is what the caller decides about a live Message. The store writes it as told.
+type LivePolicy struct {
+	MediaState string // the state of its Media row: MediaNone, or MediaDownloading for Media that downloads by itself
+	MarkUnread bool   // set the Read Marker of the Chat and keep the Message waiting for its Read Receipt
+}
+
+// PutLive stores a Message that arrived live. It creates the Chat if History Sync has not.
+// A Message that is stored already changes nothing, also not the Read Marker.
+func (s *Store) PutLive(ev whatsapp.NewMessage, p LivePolicy) error {
+	return s.inTx(func(tx *sql.Tx) error { return putLiveMessage(tx, ev, p) })
+}
+
+func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
 	if _, err := tx.Exec(`INSERT INTO chats (jid, kind, last_active) VALUES (?, ?, ?)
 		ON CONFLICT(jid) DO UPDATE SET last_active = MAX(last_active, excluded.last_active)`,
 		ev.Chat, kindOrDirect(ev.Kind), ev.Message.Time); err != nil {
@@ -475,14 +485,10 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage) error {
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID).Scan(&known); err != nil {
 		return err
 	}
-	mediaState := MediaNone
-	if ev.Message.Media != nil && ev.Message.Media.Kind.Auto() {
-		mediaState = MediaDownloading
-	}
-	if err := putMessage(tx, ev.Chat, ev.Message, mediaState); err != nil {
+	if err := putMessage(tx, ev.Chat, ev.Message, p.MediaState); err != nil {
 		return err
 	}
-	if known > 0 || ev.Message.FromMe {
+	if known > 0 || !p.MarkUnread {
 		return nil
 	}
 	if _, err := tx.Exec(`UPDATE messages SET read_pending = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
