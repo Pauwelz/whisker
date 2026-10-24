@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- A Quote and a staged file no longer combine, like an Edit and a file. Staging a file drops the Quote. Starting a Quote drops the file. Before, the Quote dropped without notice when the file went out.
 - The Draft text always saves. A file that is gone, or that is not a regular file, no longer blocks the save of the text. The Draft drops such a file when you open the Chat.
 - The Attach button no longer sends the file at once. The file waits in the Draft as "Attached: name" with a remove button (✕). Enter sends it with the text as caption. The Draft keeps the file over a Chat switch, closing the pop-out and a Daemon restart. Starting an Edit drops the file.
 - A contact no longer shows as two Chats, one with the contact name and one with the phone number. WhatsApp sends the LID to phone number mapping after the Chat, and the Daemon now merges the two Chats, with their Messages, Drafts and Media.

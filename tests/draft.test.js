@@ -59,8 +59,16 @@ test("staging a file during an Edit is refused", () => {
   assert.equal(State.changeDraft(state, { attachment: "/a/b.png" }), state);
 });
 
-test("a staged file sends as Media with the text as caption, and without the Quote", () => {
-  const sent = JSON.parse(State.composerRequest(1, chat.jid, "", "look", "in1", "/a/b.png"));
+test("staging a file drops the Quote, and starting a Quote drops the file", () => {
+  let state = State.changeDraft(opened(), { quote: "in1", text: "x" });
+  state = State.changeDraft(state, { attachment: "/a/b.png" });
+  assert.deepEqual(JSON.parse(JSON.stringify(State.draftOf(state))), { text: "x", quote: "", edit: "", attachment: "/a/b.png" });
+  state = State.changeDraft(state, { quote: "in1" });
+  assert.deepEqual(JSON.parse(JSON.stringify(State.draftOf(state))), { text: "x", quote: "in1", edit: "", attachment: "" });
+});
+
+test("a staged file sends as Media with the text as caption", () => {
+  const sent = JSON.parse(State.composerRequest(1, chat.jid, "", "look", "", "/a/b.png"));
   assert.equal(sent.method, "chat.sendMedia");
   assert.deepEqual(sent.params, { chat: chat.jid, path: "/a/b.png", caption: "look" });
   assert.equal(JSON.parse(State.composerRequest(2, chat.jid, "", "hi", "", "")).method, "chat.send");

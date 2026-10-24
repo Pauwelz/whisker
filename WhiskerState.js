@@ -352,14 +352,16 @@ function draftLoaded(state, result) {
 }
 
 // Changes the Draft of the open Chat. Returns the same state when nothing changes.
-// A staged file and an Edit never combine. Starting an Edit drops the file. Staging a file during an Edit is refused.
+// A staged file never combines with an Edit or a Quote. Starting an Edit or a Quote drops the file.
+// Staging a file drops the Quote, and is refused during an Edit.
 function changeDraft(state, changes) {
   if (!state.openChat) return state
   var old = draftOf(state)
   var draft = withChanges(old, changes)
-  if (draft.edit && draft.attachment) {
-    if (changes.edit) draft = withChanges(draft, { attachment: "" })
-    else return state
+  if (draft.attachment && (draft.edit || draft.quote)) {
+    if (!changes.attachment) draft = withChanges(draft, { attachment: "" })
+    else if (draft.edit) return state
+    else draft = withChanges(draft, { quote: "" })
   }
   if (draft.text === old.text && draft.quote === old.quote && draft.edit === old.edit && draft.attachment === old.attachment) return state
   return withChanges(state, { openChat: withChanges(state.openChat, { draft: draft }) })
@@ -530,7 +532,7 @@ function revokeRequest(id, jid, messageId) {
 
 // The request for the composer text: an edit of `editingId`, or a new Message when `editingId` is empty.
 // A new Message quotes `quoteId` when it is set.
-// A staged file (`attachment`, a path) goes as Media with the text as caption, without the Quote. Media has no Quote yet.
+// A staged file (`attachment`, a path) goes as Media with the text as caption. The Draft never holds a Quote with a file.
 function composerRequest(id, jid, editingId, text, quoteId, attachment) {
   if (editingId) return editRequest(id, jid, editingId, text)
   return attachment ? sendMediaRequest(id, jid, attachment, text) : sendRequest(id, jid, text, quoteId)

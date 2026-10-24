@@ -39,3 +39,5 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","id":6,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"","quote":"","edit":"","attachment":""}}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":7,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","edit":"fake-1","attachment":"$RUNTIME/src/photo.png"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":7,"error":{"code":-32006,"message":"invalid message"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":8,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","quote":"fake-1","attachment":"$RUNTIME/src/photo.png"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":8,"error":{"code":-32006,"message":"invalid message"}}}

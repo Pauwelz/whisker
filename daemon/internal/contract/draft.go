@@ -40,7 +40,7 @@ func draftSetReply(chats *chatstore.Store, id json.RawMessage, chat string, d ch
 	if chat == "" || !fitsMessage(d.Text) {
 		return errorReply(id, errMessage, msgInvalidMessage)
 	}
-	if d.Attachment != "" && (d.Edit != "" || d.Quote != "") { // a file never combines with an Edit or a Quote
+	if d.Attachment != "" && (d.Edit != "" || d.Quote != "") { // a file never combines with an Edit or a Quote (the Plugin drops one of them)
 		return errorReply(id, errMessage, msgInvalidMessage)
 	}
 	// Check the file only when it is new: a keystroke that keeps the stored file must save even if the file is gone now.
