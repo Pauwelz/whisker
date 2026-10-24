@@ -4,8 +4,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
@@ -68,5 +71,22 @@ func run() int {
 	p := profile.New(filepath.Join(dataDir, "whisker"), keystore.New(keystore.SecretService{}, keystore.RealClock))
 	defer p.Close()
 	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
-	return contract.Run(os.Stdin, os.Stdout, os.Stderr, p, prefs, newPort)
+	return contract.Run(stdinUntilSignal(), os.Stdout, os.Stderr, p, prefs, newPort)
+}
+
+// stdinUntilSignal reads stdin, and ends like EOF on SIGTERM or SIGINT.
+// Run then returns normally, so it wipes the plain copies of Media.
+func stdinUntilSignal() io.Reader {
+	pr, pw := io.Pipe()
+	go func() {
+		_, _ = io.Copy(pw, os.Stdin)
+		pw.Close()
+	}()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-sig
+		pw.Close()
+	}()
+	return pr
 }

@@ -54,6 +54,7 @@ Item {
 
   // Called when the user picks a Chat of the Chat list. `chat` is a row of the list.
   function openChat(chat) {
+    if (view.openChat) leaveChat() // a notification click can open a Chat while another is open
     view = State.openChat(view, chat)
     syncAttention()
     daemon.write(State.messagesRequest(nextRequestId++, chat.jid, 0))
@@ -73,11 +74,15 @@ Item {
     openChat(State.chatByJid(view, jid))
   }
 
-  function closeChat() {
+  // Ends what belongs to the open Chat. The Daemon deletes the plain Media copies of the Chat.
+  function leaveChat() {
     stopTyping()
-    // The Daemon deletes the plain Media copies of the Chat.
     stopPlayer()
     daemon.write(State.mediaReleaseRequest(nextRequestId++, view.openChat.jid))
+  }
+
+  function closeChat() {
+    leaveChat()
     view = State.closeChat(view)
     syncAttention()
   }

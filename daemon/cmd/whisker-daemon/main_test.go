@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
@@ -88,4 +89,21 @@ func TestRestartRaceDoesNotShowProfileInUse(t *testing.T) {
 		t.Errorf("new exit code = %d, want %d", got, contract.ExitOK)
 	}
 	old.exitCode()
+}
+
+// SIGTERM and SIGINT end the Daemon like stdin EOF, so Run wipes the plain copies of Media.
+func TestSignalStopsTheDaemonCleanly(t *testing.T) {
+	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
+		bin, dir := buildDaemon(t), t.TempDir()
+		c := start(t, bin, dir)
+		if !c.out.Scan() {
+			t.Fatal("Daemon sent no frame")
+		}
+		if err := c.cmd.Process.Signal(sig); err != nil {
+			t.Fatal(err)
+		}
+		if got := c.exitCode(); got != contract.ExitOK {
+			t.Errorf("exit code after %v = %d, want %d", sig, got, contract.ExitOK)
+		}
+	}
 }
