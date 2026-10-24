@@ -1,0 +1,16 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","subject":"","lastActive":10,"messages":[]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"in1","sender":"1@s.whatsapp.net","time":50,"text":"hello","pushName":"Ann"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"hello","state":""}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"hello","state":""}],"moreMessages":false}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"4@s.whatsapp.net","message":{"id":"in2","sender":"4@s.whatsapp.net","time":60,"text":"new here"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in2","chat":"4@s.whatsapp.net","sender":"4@s.whatsapp.net","senderName":"+4","fromMe":false,"time":60,"text":"new here","state":""}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"hello","state":""}],"moreMessages":false}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.messages","params":{"chat":"4@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"4@s.whatsapp.net","messages":[{"id":"in2","chat":"4@s.whatsapp.net","sender":"4@s.whatsapp.net","senderName":"+4","fromMe":false,"time":60,"text":"new here","state":""}],"more":false,"offset":0}}}

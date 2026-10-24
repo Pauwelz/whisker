@@ -1,0 +1,14 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"Team","lastActive":30,"messages":[{"id":"m1","sender":"2@s.whatsapp.net","time":10,"text":"one","pushName":"Bob"},{"id":"m2","sender":"9@s.whatsapp.net","fromMe":true,"time":20,"text":"two"},{"id":"m3","sender":"3@s.whatsapp.net","time":30,"text":"three"}]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"plugin","openChat":{"jid":"g1@g.us","name":"Team","kind":"group"}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.messages","params":{"chat":"g1@g.us","limit":2}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"g1@g.us","messages":[{"id":"m2","chat":"g1@g.us","sender":"9@s.whatsapp.net","senderName":"","fromMe":true,"time":20,"text":"two","state":"sent"},{"id":"m3","chat":"g1@g.us","sender":"3@s.whatsapp.net","senderName":"+3","fromMe":false,"time":30,"text":"three","state":""}],"more":true,"offset":0}}}
+{"dir":"view","expect":{"openChat":{"jid":"g1@g.us","name":"Team","kind":"group","messages":[{"id":"m2","chat":"g1@g.us","sender":"9@s.whatsapp.net","senderName":"","fromMe":true,"time":20,"text":"two","state":"sent"},{"id":"m3","chat":"g1@g.us","sender":"3@s.whatsapp.net","senderName":"+3","fromMe":false,"time":30,"text":"three","state":""}],"moreMessages":true}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.messages","params":{"chat":"g1@g.us","offset":2,"limit":2}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chat":"g1@g.us","messages":[{"id":"m1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Bob","fromMe":false,"time":10,"text":"one","state":""}],"more":false,"offset":2}}}
+{"dir":"view","expect":{"openChat":{"jid":"g1@g.us","name":"Team","kind":"group","messages":[{"id":"m1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Bob","fromMe":false,"time":10,"text":"one","state":""},{"id":"m2","chat":"g1@g.us","sender":"9@s.whatsapp.net","senderName":"","fromMe":true,"time":20,"text":"two","state":"sent"},{"id":"m3","chat":"g1@g.us","sender":"3@s.whatsapp.net","senderName":"+3","fromMe":false,"time":30,"text":"three","state":""}],"moreMessages":false}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.messages","params":{"chat":"nobody@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chat":"nobody@s.whatsapp.net","messages":[],"more":false,"offset":0}}}

@@ -17,6 +17,7 @@ type Fake struct {
 	connects   int
 	sendErr    error
 	sent       []string
+	attempts   int
 	ids        int
 	logoutErr  error
 	logouts    int
@@ -41,7 +42,14 @@ func (f *Fake) SetConnectError(err error) { f.mu.Lock(); f.connectErr = err; f.m
 func (f *Fake) SetSendError(err error) { f.mu.Lock(); f.sendErr = err; f.mu.Unlock() }
 
 // Sent lists the IDs that Send accepted, in order.
-func (f *Fake) Sent() []string { f.mu.Lock(); defer f.mu.Unlock(); return append([]string{}, f.sent...) }
+func (f *Fake) Sent() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.sent...)
+}
+
+// SendAttempts counts the Send calls, failed or not.
+func (f *Fake) SendAttempts() int { f.mu.Lock(); defer f.mu.Unlock(); return f.attempts }
 
 func (f *Fake) NewMessageID() string {
 	f.mu.Lock()
@@ -53,6 +61,7 @@ func (f *Fake) NewMessageID() string {
 func (f *Fake) Send(_, id, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.attempts++
 	if f.sendErr != nil {
 		return f.sendErr
 	}

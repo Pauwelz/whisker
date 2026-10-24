@@ -33,6 +33,8 @@ type fixtureLine struct {
 	Linked    *bool           `json:"linked"`
 	PairCode  string          `json:"pairCode"`
 	PairError string          `json:"pairError"`
+	SendError *string         `json:"sendError"` // "" lets sends work again
+	IDs       []string        `json:"ids"`       // dir "sent": the Message IDs the fake port has sent so far
 	Event     json.RawMessage `json:"event"`
 }
 
@@ -55,6 +57,9 @@ type runner struct {
 
 func newRunner(t *testing.T) *runner {
 	t.Helper()
+	oldNow := contract.Now
+	contract.Now = func() time.Time { return time.Unix(1000, 0) } // fixed Message times for the fixtures
+	t.Cleanup(func() { contract.Now = oldNow })
 	return &runner{t: t, fake: keystore.NewFake(), clock: keystore.NewManualClock(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
 }
 
@@ -178,6 +183,10 @@ func TestFixtures(t *testing.T) {
 					r.setProfile(line.State)
 				case "whatsapp":
 					r.playWhatsApp(line)
+				case "sent":
+					if got := r.currentPort().Sent(); !reflect.DeepEqual(got, append([]string{}, line.IDs...)) {
+						t.Errorf("sent IDs = %v, want %v", got, line.IDs)
+					}
 				case "clock":
 					r.start()
 					r.clock.Fire()
@@ -218,6 +227,14 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 		f.SetLinked(*line.Linked)
 	case line.PairCode != "":
 		f.SetPairCode(line.PairCode, nil)
+	case line.SendError != nil:
+		if *line.SendError == "" {
+			f.SetSendError(nil)
+		} else if *line.SendError == "offline" {
+			f.SetSendError(whatsapp.ErrOffline)
+		} else {
+			f.SetSendError(errors.New(*line.SendError))
+		}
 	case line.PairError == "invalid-phone":
 		f.SetPairCode("", whatsapp.ErrInvalidPhone)
 	case line.PairError != "":
@@ -242,6 +259,14 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.Mute](r.t, f, line.Event)
 		case "readMarker":
 			emitJSON[whatsapp.ReadMarker](r.t, f, line.Event)
+		case "newMessage":
+			emitJSON[whatsapp.NewMessage](r.t, f, line.Event)
+		case "receipt":
+			emitJSON[whatsapp.Receipt](r.t, f, line.Event)
+		case "connected":
+			f.Emit(whatsapp.Connected{})
+		case "disconnected":
+			f.Emit(whatsapp.Disconnected{})
 		case "qr":
 			f.Emit(whatsapp.QRCode{Code: e.Code})
 		case "pairSuccess":
@@ -268,6 +293,68 @@ func (r *runner) setProfile(state string) {
 	}
 	if err := os.WriteFile(filepath.Join(r.dir, "device.db"), []byte("unreadable"), 0o600); err != nil {
 		r.t.Fatal(err)
+	}
+}
+
+// A failed connect of a linked Profile tells the Plugin, then connects again after ConnectRetryDelay.
+func TestConnectFailureRetries(t *testing.T) {
+	old := contract.ConnectRetryDelay
+	contract.ConnectRetryDelay = 10 * time.Millisecond
+	t.Cleanup(func() { contract.ConnectRetryDelay = old })
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetConnectError(errors.New("no network"))
+	r.start()
+	for _, want := range []string{"ready", "linked", "disconnected"} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	r.port.SetConnectError(nil)
+	deadline := time.Now().Add(5 * time.Second)
+	for r.port.Connects() < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if r.port.Connects() < 2 {
+		t.Errorf("Connect calls = %d, want a retry", r.port.Connects())
+	}
+	if code, _, _ := r.finish(); code != contract.ExitOK {
+		t.Errorf("exit code = %d, want %d", code, contract.ExitOK)
+	}
+}
+
+// A send that finds no connection stays pending, even when a reconnect comes before the send reports back.
+func TestSendOfflineErrorKeepsTheMessagePending(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	for _, want := range []string{"ready", "linked"} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "1@s.whatsapp.net", LastActive: 1}}})
+	r.nextFrame() // chatsChanged
+	r.port.Emit(whatsapp.Connected{})
+	r.nextFrame() // connected
+	r.port.SetSendError(whatsapp.ErrOffline)
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"chat.send","params":{"chat":"1@s.whatsapp.net","text":"hi"}}`)
+	r.nextFrame() // the pending Message
+	for r.port.SendAttempts() < 1 {
+		time.Sleep(time.Millisecond)
+	}
+	r.port.SetSendError(nil)
+	r.port.Emit(whatsapp.Connected{})
+	for _, want := range []string{"connected", `"state":"sent"`} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	if got := r.port.Sent(); len(got) != 1 {
+		t.Errorf("sent = %v, want one send", got)
+	}
+	if code, _, _ := r.finish(); code != contract.ExitOK {
+		t.Errorf("exit code = %d, want %d", code, contract.ExitOK)
 	}
 }
 

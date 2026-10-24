@@ -128,7 +128,7 @@ type ReadMarker struct {
 // Kind is the kind of the Chat, for a Chat that is not stored yet.
 type NewMessage struct {
 	Chat    string  `json:"chat"`
-	Kind    string  `json:"kind"`
+	Kind    string  `json:"chatKind"`
 	Message Message `json:"message"`
 }
 
@@ -148,16 +148,16 @@ func (NewMessage) isEvent()   {}
 func (Receipt) isEvent()      {}
 func (Connected) isEvent()    {}
 func (Disconnected) isEvent() {}
-func (QRCode) isEvent()      {}
-func (PairSuccess) isEvent() {}
-func (LinkFailed) isEvent()  {}
-func (LoggedOut) isEvent()   {}
-func (HistorySync) isEvent() {}
-func (PushName) isEvent()    {}
-func (ContactName) isEvent() {}
-func (Pin) isEvent()         {}
-func (Mute) isEvent()        {}
-func (ReadMarker) isEvent()  {}
+func (QRCode) isEvent()       {}
+func (PairSuccess) isEvent()  {}
+func (LinkFailed) isEvent()   {}
+func (LoggedOut) isEvent()    {}
+func (HistorySync) isEvent()  {}
+func (PushName) isEvent()     {}
+func (ContactName) isEvent()  {}
+func (Pin) isEvent()          {}
+func (Mute) isEvent()         {}
+func (ReadMarker) isEvent()   {}
 
 // Reasons for LinkFailed. docs/contract.md mirrors this list.
 const (

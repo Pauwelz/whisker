@@ -1,0 +1,10 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"view","expect":{"connection":"connecting"}}
+{"dir":"whatsapp","event":{"kind":"connected"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
+{"dir":"view","expect":{"connection":"online"}}
+{"dir":"whatsapp","event":{"kind":"disconnected"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"disconnected","params":{}}}
+{"dir":"view","expect":{"connection":"offline"}}

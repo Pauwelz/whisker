@@ -10,7 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"rsc.io/qr"
 
@@ -36,16 +38,22 @@ const (
 	methodLinkPairCode = "link.pairCode"
 	methodLinkRetry    = "link.retry"
 	methodChatsList    = "chats.list"
+	methodChatMessages = "chat.messages"
+	methodChatSend     = "chat.send"
+	methodChatRetry    = "chat.retry"
 	methodSettingsGet  = "settings.get"
 	methodSettingsSet  = "settings.set"
 	methodLogout       = "profile.logout"
 )
 
-// Page size of chats.list: the default, and the most a request can ask for.
+// Page size of chats.list and chat.messages: the default, and the most a request can ask for.
 const (
 	defaultChatsLimit = 50
 	maxChatsLimit     = 200
 )
+
+// maxTextRunes is the WhatsApp limit for the text of a Message.
+const maxTextRunes = 65536
 
 const (
 	errParse          = -32700
@@ -55,6 +63,7 @@ const (
 	errChatStore      = -32003
 	errSetting        = -32004
 	errLogout         = -32005
+	errMessage        = -32006
 )
 
 // qrScale is the pixel size of one QR module.
@@ -86,8 +95,11 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	}
 	ready := false
 	var port whatsapp.Port
-	var events <-chan whatsapp.Event // nil (never ready) until a port exists
-	var chats *chatstore.Store       // nil until the Profile is open
+	var events <-chan whatsapp.Event  // nil (never ready) until a port exists
+	var chats *chatstore.Store        // nil until the Profile is open
+	var box *outbox                   // nil until the Profile is open
+	var sent <-chan sendResult        // the results of the sends, nil until the Profile is open
+	var retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
 
 	// connect connects the port. An unlinked Profile starts linking, and a failure ends it with `linkFailed`.
 	connect := func() bool {
@@ -96,6 +108,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			if !port.Linked() {
 				return send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonConnectFailed}))
 			}
+			retryConnect = time.After(ConnectRetryDelay)
+			return send(notification("disconnected", nil))
 		}
 		return true
 	}
@@ -117,7 +131,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				return ExitError
 			}
 			events = port.Events()
-			chats = chatstore.New(profile.Chat(), time.Now)
+			chats = chatstore.New(profile.Chat(), Now)
+			box = newOutbox(chats, port, send, logOut)
+			sent = box.results
 			ready = true
 			if !send(notification("ready", nil)) || !startPort() {
 				return ExitError
@@ -141,7 +157,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	// `by` is "user" for Log out. It is empty when the phone removed the Companion Device.
 	unlink := func(by string) int {
 		port.Disconnect()
-		ready, port, events, chats = false, nil, nil, nil
+		ready, port, events, chats, box, sent, retryConnect = false, nil, nil, nil, nil, nil, nil
 		if err := profile.Delete(); err != nil {
 			fmt.Fprintln(logOut, "profile delete failed")
 			return ExitError
@@ -171,8 +187,17 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	for {
 		select {
 		case ev := <-events:
-			if code := handleEvent(ev, logOut, send, chats, func() int { return unlink("") }); code >= 0 {
+			if code := handleEvent(ev, logOut, send, chats, box, func() int { return unlink("") }); code >= 0 {
 				return code
+			}
+		case r := <-sent:
+			if !box.done(r) {
+				return ExitError
+			}
+		case <-retryConnect:
+			retryConnect = nil
+			if !connect() {
+				return ExitError
 			}
 		case line, ok := <-lines:
 			if !ok {
@@ -186,11 +211,15 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					Offset int    `json:"offset"`
 					Limit  int    `json:"limit"`
 					Query  string `json:"query"`
+					Chat   string `json:"chat"`
+					Text   string `json:"text"`
+					ID     string `json:"id"`
 					settings.Update
 				} `json:"params"`
 			}
 			var reply map[string]any
 			retryKeyring, retryLink, logout := false, false, false
+			var submit *chatstore.Message // a pending Message to send after the reply
 			linking := ready && !port.Linked()
 			if err := json.Unmarshal(line, &req); err != nil {
 				reply = errorReply(nil, errParse, "parse error")
@@ -206,6 +235,12 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				reply = pairCodeReply(port, req.ID, req.Params.Phone, logOut)
 			} else if req.Method == methodChatsList && ready {
 				reply = chatsListReply(chats, req.ID, req.Params.Offset, req.Params.Limit, req.Params.Query, logOut)
+			} else if req.Method == methodChatMessages && ready {
+				reply = chatMessagesReply(chats, req.ID, req.Params.Chat, req.Params.Offset, req.Params.Limit, logOut)
+			} else if req.Method == methodChatSend && ready && port.Linked() {
+				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, logOut)
+			} else if req.Method == methodChatRetry && ready && port.Linked() {
+				reply, submit = chatRetryReply(chats, req.ID, req.Params.Chat, req.Params.ID, logOut)
 			} else if req.Method == methodSettingsGet && ready {
 				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Get() })
 			} else if req.Method == methodSettingsSet && ready {
@@ -223,6 +258,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			}
 			if !send(reply) {
 				return ExitError
+			}
+			if submit != nil {
+				box.submit(*submit)
 			}
 			if retryKeyring {
 				if code := open(); code >= 0 {
@@ -243,7 +281,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 
 // handleEvent turns a WhatsApp event into frames. unlink runs the delete-the-Profile routine.
 // It returns an exit code, or -1 to go on.
-func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) bool, chats *chatstore.Store, unlink func() int) int {
+func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) bool, chats *chatstore.Store, box *outbox, unlink func() int) int {
 	ok := true
 	switch ev := ev.(type) {
 	case whatsapp.QRCode:
@@ -260,6 +298,8 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 		ok = send(notification("linkFailed", map[string]any{"reason": ev.Reason}))
 	case whatsapp.LoggedOut:
 		return unlink()
+	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt:
+		ok = box.handle(ev)
 	case whatsapp.HistorySync, whatsapp.PushName, whatsapp.ContactName, whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker:
 		if err := chats.Apply(ev); err != nil {
 			fmt.Fprintln(logOut, "chat store write failed") // the error text could hold names
@@ -297,6 +337,52 @@ func chatsListReply(chats *chatstore.Store, id json.RawMessage, offset, limit in
 		return errorReply(id, errChatStore, "chat store failed")
 	}
 	return resultReply(id, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset})
+}
+
+func chatMessagesReply(chats *chatstore.Store, id json.RawMessage, chat string, offset, limit int, logOut io.Writer) map[string]any {
+	offset = max(offset, 0)
+	if limit <= 0 {
+		limit = defaultChatsLimit
+	}
+	page, err := chats.Messages(chat, offset, min(limit, maxChatsLimit))
+	if err != nil {
+		fmt.Fprintln(logOut, "message list failed")
+		return errorReply(id, errChatStore, "chat store failed")
+	}
+	return resultReply(id, map[string]any{"chat": chat, "messages": page.Messages, "more": page.More, "offset": offset})
+}
+
+// chatSendReply stores the text as a pending Message. The caller sends it after the reply.
+func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, text string, logOut io.Writer) (map[string]any, *chatstore.Message) {
+	if strings.TrimSpace(text) == "" || utf8.RuneCountInString(text) > maxTextRunes {
+		return errorReply(id, errMessage, "invalid message"), nil
+	}
+	m, err := chats.AddPending(chat, port.NewMessageID(), text)
+	return messageReply(id, m, err, logOut)
+}
+
+// chatRetryReply makes a failed Message pending again. The caller sends it after the reply.
+func chatRetryReply(chats *chatstore.Store, id json.RawMessage, chat, msgID string, logOut io.Writer) (map[string]any, *chatstore.Message) {
+	changed, err := chats.Requeue(chat, msgID)
+	if err == nil && !changed {
+		return errorReply(id, errMessage, "invalid message"), nil
+	}
+	if err != nil {
+		return messageReply(id, chatstore.Message{}, err, logOut)
+	}
+	m, err := chats.Message(chat, msgID)
+	return messageReply(id, m, err, logOut)
+}
+
+func messageReply(id json.RawMessage, m chatstore.Message, err error, logOut io.Writer) (map[string]any, *chatstore.Message) {
+	switch {
+	case errors.Is(err, chatstore.ErrNoChat):
+		return errorReply(id, errMessage, "invalid message"), nil
+	case err != nil:
+		fmt.Fprintln(logOut, "message write failed")
+		return errorReply(id, errChatStore, "chat store failed"), nil
+	}
+	return resultReply(id, map[string]any{"message": m}), &m
 }
 
 func settingsReply(id json.RawMessage, logOut io.Writer, apply func() (settings.Settings, error)) map[string]any {
