@@ -15,7 +15,7 @@ import (
 )
 
 // EditWindow is how long after sending the user can edit a Message. WhatsApp enforces the same limit.
-const EditWindow = 20 * time.Minute
+const EditWindow = 15 * time.Minute
 
 // sentByWhatsApp tells that a Message of the user is in one of the Delivery States after WhatsApp accepted it.
 func sentByWhatsApp(state string) bool {

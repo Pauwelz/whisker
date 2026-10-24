@@ -346,13 +346,26 @@ test("a Tombstone shows a fixed text, an edited Message shows Edited", () => {
   assert.equal(State.editedLabel(sentMessage({ edited: true, revoked: true })), "");
 });
 
-test("Edit and Delete show for sent Messages of the user; Edit ends after 20 minutes", () => {
-  assert.equal(State.canEditMessage(sentMessage(), 1000 + 1200), true);
-  assert.equal(State.canEditMessage(sentMessage(), 1000 + 1201), false);
+test("Edit and Delete show for sent Messages of the user; Edit ends after 15 minutes", () => {
+  assert.equal(State.canEditMessage(sentMessage(), 1000 + 900), true);
+  assert.equal(State.canEditMessage(sentMessage(), 1000 + 901), false);
   assert.equal(State.canRevokeMessage(sentMessage(), 1000 + 99999), true);
   for (const state of ["pending", "failed", ""]) assert.equal(State.canRevokeMessage(sentMessage({ state })), false, state);
   assert.equal(State.canRevokeMessage(sentMessage({ fromMe: false })), false);
   assert.equal(State.canRevokeMessage(sentMessage({ revoked: true })), false);
+});
+
+// The constants below have a Go twin. Read the Go source so that a change on one side fails here.
+test("EDIT_WINDOW_SECONDS agrees with EditWindow in Go", () => {
+  const go = fs.readFileSync(path.join(root, "daemon", "internal", "contract", "edit.go"), "utf8");
+  const minutes = Number(/EditWindow = (\d+) \* time\.Minute/.exec(go)[1]);
+  assert.equal(State.EDIT_WINDOW_SECONDS, minutes * 60);
+});
+
+test("REACTION_EMOJI agrees with ReactionEmoji in Go", () => {
+  const go = fs.readFileSync(path.join(root, "daemon", "internal", "contract", "react.go"), "utf8");
+  const list = /ReactionEmoji = \[\]string\{([^}]*)\}/.exec(go)[1];
+  assert.deepEqual(Array.from(State.REACTION_EMOJI), list.split(",").map((e) => JSON.parse(e.trim())));
 });
 
 test("the composer sends an edit when a Message is under edit, otherwise a new Message", () => {

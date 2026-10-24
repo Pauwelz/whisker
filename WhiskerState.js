@@ -406,8 +406,8 @@ function resendsAttention(frame) {
 // The text of a Tombstone, shown at the position of the revoked Message.
 var TOMBSTONE_TEXT = "This message was deleted"
 
-// WhatsApp lets the user edit a Message for 20 minutes. The Daemon enforces it; the Plugin only hides the button.
-var EDIT_WINDOW_SECONDS = 20 * 60
+// WhatsApp lets the user edit a Message for 15 minutes. The Daemon enforces it; the Plugin only hides the button.
+var EDIT_WINDOW_SECONDS = 15 * 60
 
 function messageBody(message) {
   return message.revoked ? TOMBSTONE_TEXT : message.text
