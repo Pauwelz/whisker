@@ -7,6 +7,14 @@
 // Mirror of the exit code table in docs/contract.md and daemon/internal/contract.
 var EXIT_OVERSIZED_LINE = 10
 
+// Mirror of the exit code table in docs/releasing.md and scripts/fetch-daemon.sh.
+var FETCH_EXIT_MESSAGES = {
+  20: "The Plugin manifest has no version.",
+  21: "SHA256SUMS has no entry for this version.",
+  22: "The download failed. Check the network.",
+  23: "The checksum of the download did not match."
+}
+
 function error(reason, message) {
   return { screen: "error", reason: reason, message: message }
 }
@@ -23,6 +31,22 @@ function checkVersion(expected, output) {
   if (actual !== expected)
     return error("version-mismatch", "The Daemon version (" + actual + ") does not match the Plugin version (" + expected + ").")
   return null
+}
+
+// Decides what the Plugin does with the `--version` output. `downloaded` is true after one fetch.
+// action: "start" | "download" | "fail". A wrong binary is replaced once, never run.
+function versionStep(expected, output, downloaded) {
+  var failure = checkVersion(expected, output)
+  if (!failure) return { action: "start", view: initialState() }
+  if (downloaded) return { action: "fail", view: failure }
+  return { action: "download", view: { screen: "starting", reason: "", message: "Downloading the Daemon…" } }
+}
+
+function downloadFailed(exitCode) {
+  var detail = FETCH_EXIT_MESSAGES[exitCode] || "The fetch script stopped (exit code " + exitCode + ")."
+  var state = error("download-failed", "Daemon download failed. " + detail)
+  state.canRetry = true
+  return state
 }
 
 function parseLine(line) {

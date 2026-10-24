@@ -35,7 +35,7 @@ Panel {
     centerOnBar: true
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(message.implicitHeight)
+    contentHeight: panel.fittedContentHeight(message.implicitHeight + (retryButton.visible ? retryButton.implicitHeight + Style.space(8) : 0))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -53,6 +53,17 @@ Panel {
         color: root.view.screen === "error" ? Color.urgent : root.contentForeground
         font.family: root.contentFontFamily
         font.pixelSize: Style.font.body
+      }
+
+      Button {
+        id: retryButton
+        anchors.left: parent.left
+        anchors.top: message.bottom
+        anchors.topMargin: Style.space(8)
+        visible: root.view.canRetry === true
+        text: "Retry"
+        bordered: true
+        onClicked: root.whiskerService.retry()
       }
     }
   }

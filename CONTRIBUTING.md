@@ -33,5 +33,5 @@ GitHub can open a PR against `main`, the default branch.
 
 ## Releases
 
-The maintainer releases by fast-forwarding `main` to `dev`.
+The maintainer releases with the steps in [docs/releasing.md](docs/releasing.md).
 Contributors do not release.

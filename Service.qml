@@ -14,11 +14,39 @@ Item {
   readonly property string daemonPath: pluginDir + "bin/whisker-daemon"
   property string expectedVersion: ""
 
+  property bool downloaded: false
+  property bool replacing: false
+
   // The Plugin never runs a Daemon with another version. It never restarts a Daemon that exited.
+  // A wrong or missing binary is fetched once; a running wrong Daemon is stopped first.
   function startDaemon(versionOutput) {
-    var failure = State.checkVersion(expectedVersion, versionOutput)
-    if (failure) view = failure
-    else daemon.running = true
+    var step = State.versionStep(expectedVersion, versionOutput, downloaded)
+    view = step.view
+    if (step.action === "start") daemon.running = true
+    if (step.action !== "download") return
+    downloaded = true
+    if (daemon.running) {
+      replacing = true
+      daemon.running = false
+    }
+    fetch.running = true
+  }
+
+  // Called by the Retry button.
+  function retry() {
+    downloaded = false
+    view = State.initialState()
+    versionProbe.running = true
+  }
+
+  // Exit codes are in docs/releasing.md. On success, probe again to confirm the new version.
+  Process {
+    id: fetch
+    command: ["sh", root.pluginDir + "scripts/fetch-daemon.sh"]
+    onExited: function(exitCode) {
+      if (exitCode === 0) versionProbe.running = true
+      else root.view = State.downloadFailed(exitCode)
+    }
   }
 
   FileView {
@@ -53,6 +81,9 @@ Item {
     stderr: SplitParser {
       onRead: function(line) { console.warn("whisker-daemon: " + line) }
     }
-    onExited: function(exitCode) { root.view = State.daemonExited(root.view, exitCode) }
+    onExited: function(exitCode) {
+      if (root.replacing) root.replacing = false
+      else root.view = State.daemonExited(root.view, exitCode)
+    }
   }
 }

@@ -58,6 +58,44 @@ test("parseLine ignores a line that is not JSON", () => {
   assert.equal(State.parseLine('{"method":"ready"}').method, "ready");
 });
 
+test("a matching version starts the Daemon", () => {
+  assert.equal(State.versionStep("1.2.3", "1.2.3\n", false).action, "start");
+});
+
+test("a missing or wrong-version binary is downloaded once", () => {
+  for (const output of ["", "1.2.4\n"]) {
+    const step = State.versionStep("1.2.3", output, false);
+    assert.equal(step.action, "download");
+    assert.equal(step.view.screen, "starting");
+  }
+});
+
+test("a binary that is still wrong after the download shows an error screen", () => {
+  const step = State.versionStep("1.2.3", "1.2.4\n", true);
+  assert.equal(step.action, "fail");
+  assert.equal(step.view.reason, "version-mismatch");
+});
+
+test("a failed download shows the Retry error screen", () => {
+  for (const code of [20, 21, 22, 23, 99]) {
+    const state = State.downloadFailed(code);
+    assert.equal(state.screen, "error");
+    assert.equal(state.reason, "download-failed");
+    assert.equal(state.canRetry, true);
+    assert.ok(state.message.startsWith("Daemon download failed"));
+  }
+  assert.ok(State.downloadFailed(23).message.includes("checksum"));
+});
+
+test("other error screens offer no Retry", () => {
+  assert.notEqual(State.checkVersion("1.2.3", "").canRetry, true);
+});
+
+test("docs/releasing.md lists the fetch script exit codes", () => {
+  const doc = fs.readFileSync(path.join(root, "docs", "releasing.md"), "utf8");
+  for (const code of Object.keys(State.FETCH_EXIT_MESSAGES)) assert.ok(doc.includes(`| ${code} |`), code);
+});
+
 test("the contract doc lists the exit code the Plugin maps", () => {
   const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
   assert.ok(doc.includes(`| ${State.EXIT_OVERSIZED_LINE} |`));
