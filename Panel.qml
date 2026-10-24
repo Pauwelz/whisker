@@ -19,6 +19,8 @@ Panel {
   property bool confirmLogout: false
   property string savingId: "" // the Message whose Save as path is being typed, or empty
   property string editingId: "" // the Message under edit in the composer, or empty
+  property var quoting: null // the Message that the next send quotes, or null
+  property string reactingId: "" // the Message whose Reaction picker is open, or empty
   readonly property var settings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
   readonly property var openChat: root.view.openChat || null
@@ -238,6 +240,8 @@ Panel {
             bordered: true
             onClicked: {
               root.editingId = ""
+              root.quoting = null
+              root.reactingId = ""
               root.whiskerService.closeChat()
             }
           }
@@ -268,6 +272,8 @@ Panel {
             verticalLayoutDirection: ListView.BottomToTop
             model: root.openChat ? root.openChat.messages.slice().reverse() : []
             delegate: Column {
+              id: messageItem
+              readonly property var message: modelData
               width: ListView.view.width
               spacing: Style.space(2)
               Text {
@@ -278,6 +284,19 @@ Panel {
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
                 font.bold: true
+              }
+              // The Quote of a reply: the quoted author and a one-line preview.
+              Text {
+                readonly property var quote: State.quoteView(modelData)
+                visible: quote !== null
+                width: parent.width
+                elide: Text.ElideRight
+                textFormat: Text.PlainText
+                text: quote ? quote.sender + ": " + quote.text : ""
+                opacity: 0.6
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
               }
               Text {
                 visible: text !== ""
@@ -350,6 +369,29 @@ Panel {
                   event.accepted = true
                 }
               }
+              Text {
+                visible: text !== ""
+                text: State.reactionChips(modelData).map(function (c) { return c.emoji + " " + c.count }).join("  ")
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+              }
+              // The Reaction picker: the six default emoji. Picking your current Reaction removes it.
+              Row {
+                visible: root.reactingId === modelData.id
+                spacing: Style.space(4)
+                Repeater {
+                  model: State.REACTION_EMOJI
+                  Button {
+                    text: modelData
+                    bordered: State.myReaction(messageItem.message) === modelData
+                    onClicked: {
+                      root.whiskerService.reactToMessage(messageItem.message, modelData)
+                      root.reactingId = ""
+                    }
+                  }
+                }
+              }
               Row {
                 spacing: Style.space(8)
                 Text {
@@ -367,6 +409,21 @@ Panel {
                   opacity: 0.6
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.caption
+                }
+                Button {
+                  visible: State.canReactToMessage(modelData)
+                  text: "React"
+                  bordered: true
+                  onClicked: root.reactingId = root.reactingId === modelData.id ? "" : modelData.id
+                }
+                Button {
+                  visible: State.canQuoteMessage(modelData)
+                  text: "Quote"
+                  bordered: true
+                  onClicked: {
+                    root.quoting = modelData
+                    composer.forceActiveFocus()
+                  }
                 }
                 Button {
                   visible: State.canEditMessage(modelData, Math.floor(Date.now() / 1000))
@@ -420,6 +477,25 @@ Panel {
             onClicked: { picker.active = false; picker.active = true }
           }
 
+          Text {
+            readonly property var quote: root.quoting ? State.quoteView({ quote: { fromMe: root.quoting.fromMe, senderName: root.quoting.senderName, text: State.messageBody(root.quoting) } }) : null
+            visible: quote !== null
+            width: parent.width
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            text: quote ? "Replying to " + quote.sender + ": " + quote.text : ""
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Button {
+            visible: root.quoting !== null
+            text: "Cancel quote"
+            bordered: true
+            onClicked: root.quoting = null
+          }
+
           TextEdit {
             id: composer
             width: parent.width
@@ -433,8 +509,9 @@ Panel {
               if (action === "default") return
               event.accepted = true
               if (action === "send") {
-                root.whiskerService.submitComposer(root.editingId, text)
+                root.whiskerService.submitComposer(root.editingId, text, root.quoting ? root.quoting.id : "")
                 root.editingId = ""
+                root.quoting = null
                 text = ""
               }
             }

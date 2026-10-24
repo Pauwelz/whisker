@@ -52,6 +52,7 @@ const (
 	methodMediaPlayed   = "media.played"
 	methodChatEdit      = "chat.edit"
 	methodChatRevoke    = "chat.revoke"
+	methodChatReact     = "chat.react"
 	methodChatTyping    = "chat.typing"
 	methodSettingsGet   = "settings.get"
 	methodSettingsSet   = "settings.set"
@@ -119,6 +120,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	var attn attention.Attention      // the pop-out state: it outlives the Profile, so a new link keeps it
 	var sent <-chan sendResult        // the results of the sends, nil until the Profile is open
 	var retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
+	var expiryTick <-chan time.Time   // fires when the sweep of Disappearing Messages is due, nil until the Profile is open
 	var loader *mediaLoader           // nil until the Profile is open
 	var mediaDone <-chan mediaResult  // the results of the Media downloads, nil until the Profile is open
 	// The plain copies of Media never outlive the Daemon.
@@ -163,6 +165,11 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			sent = box.results
 			loader = newMediaLoader(chats, port, profile.Media(), box.notify, logOut)
 			mediaDone = loader.results
+			// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
+			if _, err := chats.Expire(Now().Unix()); err != nil {
+				fmt.Fprintln(logOut, "chat store write failed")
+			}
+			expiryTick = Timers.After(ExpiryInterval)
 			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut, played: map[string]bool{}}
 			box.incoming = read.incoming
 			box.store = profile.Media()
@@ -192,7 +199,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	unlink := func(by string) int {
 		port.Disconnect()
 		loader.store.Wipe()
-		ready, port, events, chats, box, read, pres, sent, retryConnect, loader, mediaDone = false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+		ready, port, events, chats, box, read, pres, sent, retryConnect, loader, mediaDone, expiryTick = false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 		attn.Set(attn.Open(), "") // the Chat is gone with the Profile
 		if err := profile.Delete(); err != nil {
 			fmt.Fprintln(logOut, "profile delete failed")
@@ -229,6 +236,17 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			if code := handleEvent(ev, logOut, send, chats, box, loader, func() int { return unlink("") }); code >= 0 {
 				return code
 			}
+		case <-expiryTick:
+			expired, err := chats.Expire(Now().Unix())
+			if err != nil {
+				fmt.Fprintln(logOut, "chat store write failed")
+			}
+			expiryTick = Timers.After(ExpiryInterval)
+			for _, e := range expired {
+				if !send(notification("messageExpired", map[string]any{"chat": e.Chat, "id": e.ID})) {
+					return ExitError
+				}
+			}
 		case r := <-mediaDone:
 			if !loader.done(r) {
 				return ExitError
@@ -260,6 +278,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					Open    bool   `json:"open"`
 					Typing  bool   `json:"typing"`
 					ID      string `json:"id"`
+					Emoji   string `json:"emoji"`
+					Quote   string `json:"quote"`
 					Path    string `json:"path"`
 					settings.Update
 				} `json:"params"`
@@ -287,7 +307,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			} else if req.Method == methodChatMessages && ready {
 				reply = chatMessagesReply(chats, req.ID, req.Params.Chat, req.Params.Offset, req.Params.Limit, logOut)
 			} else if req.Method == methodChatSend && ready && port.Linked() {
-				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, logOut)
+				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, req.Params.Quote, logOut)
 			} else if req.Method == methodChatSendMedia && ready && port.Linked() {
 				reply, submit = chatSendMediaReply(chats, profile.Media(), port.NewMessageID, req.ID, req.Params.Chat, req.Params.Path, req.Params.Caption, logOut)
 			} else if req.Method == methodChatRetry && ready && port.Linked() {
@@ -315,6 +335,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				reply, changed = chatEditReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, req.Params.Text, logOut)
 			} else if req.Method == methodChatRevoke && ready && port.Linked() {
 				reply, changed = chatRevokeReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, logOut)
+			} else if req.Method == methodChatReact && ready && port.Linked() {
+				reply, changed = chatReactReply(chats, port, req.ID, req.Params.Chat, req.Params.ID, req.Params.Emoji, logOut)
 			} else if req.Method == methodChatTyping && ready && port.Linked() {
 				pres.typing(req.Params.Chat, req.Params.Typing)
 				reply = resultReply(req.ID, map[string]any{})
@@ -348,6 +370,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				if req.Method == methodChatSend || req.Method == methodChatSendMedia {
 					read.interaction(submit.Chat) // a sent Message is the interaction
 				}
+			}
+			if changed != nil && req.Method == methodChatReact {
+				read.interaction(changed.Chat) // a Reaction is an interaction, like a sent Message
 			}
 			if download != nil {
 				download()
@@ -391,7 +416,7 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 		ok = send(notification("linkFailed", map[string]any{"reason": ev.Reason}))
 	case whatsapp.LoggedOut:
 		return unlink()
-	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt, whatsapp.MessageEdited, whatsapp.MessageRevoked:
+	case whatsapp.Connected, whatsapp.Disconnected, whatsapp.NewMessage, whatsapp.Receipt, whatsapp.MessageEdited, whatsapp.MessageRevoked, whatsapp.Reaction:
 		ok = box.handle(ev)
 		if nm, isNew := ev.(whatsapp.NewMessage); isNew {
 			loader.autoStart(nm)
@@ -405,7 +430,7 @@ func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) 
 			break
 		}
 		ok = send(notification("activityChanged", map[string]any{"chat": ev.Chat, "participant": ev.Sender, "name": name, "state": ev.State}))
-	case whatsapp.HistorySync, whatsapp.PushName, whatsapp.ContactName, whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker:
+	case whatsapp.HistorySync, whatsapp.PushName, whatsapp.ContactName, whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker, whatsapp.ChatTimer:
 		if err := chats.Apply(ev); err != nil {
 			fmt.Fprintln(logOut, "chat store write failed") // the error text could hold names
 		} else {
@@ -458,11 +483,20 @@ func chatMessagesReply(chats *chatstore.Store, id json.RawMessage, chat string, 
 }
 
 // chatSendReply stores the text as a pending Message. The caller sends it after the reply.
-func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, text string, logOut io.Writer) (map[string]any, *chatstore.Message) {
+// A non-empty quoteID makes it a reply: that Message must exist in the Chat and not be a Tombstone.
+func chatSendReply(chats *chatstore.Store, port whatsapp.Port, id json.RawMessage, chat, text, quoteID string, logOut io.Writer) (map[string]any, *chatstore.Message) {
 	if strings.TrimSpace(text) == "" || utf8.RuneCountInString(text) > maxTextRunes {
 		return errorReply(id, errMessage, "invalid message"), nil
 	}
-	m, err := chats.AddPending(chat, port.NewMessageID(), text)
+	var quote *whatsapp.Quote
+	if quoteID != "" {
+		q, err := chats.Message(chat, quoteID)
+		if err != nil || q.Revoked {
+			return storeOrInvalid(id, err, logOut), nil
+		}
+		quote = &whatsapp.Quote{ID: q.ID, Sender: q.Sender, Text: q.Text}
+	}
+	m, err := chats.AddPending(chat, port.NewMessageID(), text, quote)
 	return messageReply(id, m, err, logOut)
 }
 

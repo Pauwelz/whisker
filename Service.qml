@@ -200,8 +200,14 @@ Item {
 
   // Called by the composer. `editingId` is the Message under edit, or "" for a new Message.
   // A new Message: the Daemon stores it as pending and answers with it.
-  function submitComposer(editingId, text) {
-    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, editingId, text))
+  // `quoteId` is the Message to quote, or "" for none.
+  function submitComposer(editingId, text, quoteId) {
+    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, editingId, text, quoteId))
+  }
+
+  // Called by the Reaction picker. `emoji` is the picked emoji; picking the current Reaction removes it.
+  function reactToMessage(message, emoji) {
+    daemon.write(State.reactRequest(nextRequestId++, view.openChat.jid, message.id, State.reactionChoice(message, emoji)))
   }
 
   // Called by the file picker of the composer. `url` is the picked file, the composer text is its caption.

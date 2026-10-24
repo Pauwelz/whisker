@@ -351,6 +351,38 @@ test("sendMediaRequest turns a file URL into a path", () => {
   assert.deepEqual(JSON.parse(State.sendMediaRequest(7, direct.jid, "file:///home/me/My%20Doc%C3%A9.pdf", "hi")), { jsonrpc: "2.0", id: 7, method: "chat.sendMedia", params: { chat: direct.jid, path: "/home/me/My Docé.pdf", caption: "hi" } });
 });
 
+test("Reactions: the user picks, replaces or removes one; chips count the emoji", () => {
+  const msg = { id: "m1", revoked: false, fromMe: false, reactions: [{ emoji: "👍", fromMe: false }, { emoji: "🙏", fromMe: true }, { emoji: "👍", fromMe: false }] };
+  assert.equal(State.myReaction(msg), "🙏");
+  assert.equal(State.reactionChoice(msg, "🙏"), "");
+  assert.equal(State.reactionChoice(msg, "😂"), "😂");
+  assert.equal(State.reactionChoice({ reactions: [] }, "😂"), "😂");
+  assert.deepEqual(JSON.parse(JSON.stringify(State.reactionChips(msg))), [{ emoji: "👍", count: 2 }, { emoji: "🙏", count: 1 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(State.reactionChips({ id: "m2" }))), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(State.reactionChips({ ...msg, revoked: true }))), []);
+  assert.deepEqual(Array.from(State.REACTION_EMOJI), ["👍", "❤️", "😂", "😮", "😢", "🙏"]);
+  assert.deepEqual(JSON.parse(State.reactRequest(3, "c@s.whatsapp.net", "m1", "")), { jsonrpc: "2.0", id: 3, method: "chat.react", params: { chat: "c@s.whatsapp.net", id: "m1", emoji: "" } });
+  assert.equal(State.canReactToMessage({ fromMe: true, state: "pending" }), false);
+  assert.equal(State.canReactToMessage({ fromMe: true, state: "sent" }), true);
+  assert.equal(State.canReactToMessage({ fromMe: false, state: "" }), true);
+  assert.equal(State.canReactToMessage({ fromMe: false, revoked: true }), false);
+});
+
+test("Quotes: the preview names the author and is cut to one line; the composer sends the Quote", () => {
+  assert.equal(State.quoteView({ text: "no quote" }), null);
+  assert.deepEqual(JSON.parse(JSON.stringify(State.quoteView({ quote: { fromMe: true, senderName: "", text: "a\nb" } }))), { sender: "You", text: "a b" });
+  const long = State.quoteView({ quote: { fromMe: false, senderName: "Ann", text: "x".repeat(200) } });
+  assert.equal(long.sender, "Ann");
+  assert.equal(long.text.length, 80);
+  assert.ok(long.text.endsWith("…"));
+  assert.equal(State.canQuoteMessage({ revoked: true }), false);
+  assert.equal(State.canQuoteMessage({ revoked: false }), true);
+  const jid = "c@s.whatsapp.net";
+  assert.deepEqual(JSON.parse(State.composerRequest(1, jid, "", "re", "m1")).params, { chat: jid, text: "re", quote: "m1" });
+  assert.deepEqual(JSON.parse(State.composerRequest(2, jid, "", "re", "")).params, { chat: jid, text: "re" });
+  assert.equal(JSON.parse(State.composerRequest(3, jid, "m1", "fix", "m2")).method, "chat.edit");
+});
+
 test("presenceLabel shows Online and Last Seen in a Direct Chat only", () => {
   const now = Math.floor(new Date(2026, 9, 24, 15, 0).getTime() / 1000);
   const seen = Math.floor(new Date(2026, 9, 24, 14, 5).getTime() / 1000);

@@ -15,7 +15,7 @@ var ErrNoChat = errors.New("no such chat")
 // Message is one Message of a Chat timeline, as the Plugin sees it.
 // State is the Delivery State of the user's own Messages, and empty for the Messages of others.
 // SenderName follows the name rule and is empty for the user's own Messages.
-// Later tickets add keys here (Quote, Reactions, Media).
+// Quote and Reactions are left out of the JSON when empty. Media is nil for a text Message.
 type Message struct {
 	ID         string `json:"id"`
 	Chat       string `json:"chat"`
@@ -25,10 +25,32 @@ type Message struct {
 	Time       int64  `json:"time"`
 	Text       string `json:"text"`
 	State      string `json:"state"`
+	Edited     bool   `json:"edited"`
+	Revoked    bool   `json:"revoked"` // a Tombstone: the text is empty
 	// Media is nil for a text Message. It never holds a path or bytes: paths come from media.open.
-	Media   *MediaInfo `json:"media,omitempty"`
-	Edited  bool       `json:"edited"`
-	Revoked bool       `json:"revoked"` // a Tombstone: the text is empty
+	Media     *MediaInfo `json:"media,omitempty"`
+	Quote     *Quote     `json:"quote,omitempty"`
+	Reactions []Reaction `json:"reactions,omitempty"` // at most one per Participant, in the order they were first set
+	// ExpiresAt is when a Disappearing Message goes (Unix seconds). It is 0 for a Message that stays.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
+}
+
+// Quote is the Message that a reply quotes: a snapshot taken when the reply was stored.
+// Sender is the JID of its author, empty for the user. SenderName follows the name rule and is empty for the user.
+type Quote struct {
+	ID         string `json:"id"`
+	Sender     string `json:"sender"`
+	SenderName string `json:"senderName"`
+	FromMe     bool   `json:"fromMe"`
+	Text       string `json:"text"`
+}
+
+// Reaction is the emoji of one Participant on a Message. Sender is empty for the user.
+type Reaction struct {
+	Sender     string `json:"sender"`
+	SenderName string `json:"senderName"`
+	FromMe     bool   `json:"fromMe"`
+	Emoji      string `json:"emoji"`
 }
 
 // MediaInfo is the Media of a Message as the Plugin sees it. State is one of the Media states below.
@@ -60,8 +82,9 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 // Timeline order: by time, then by arrival (rowid), so two Messages in one second keep their order.
 const selectMessage = `
 	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
-	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, '')
-	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid
+		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, ''),
+	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.expires_at
+	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN names q ON q.jid = m.quote_sender
 	LEFT JOIN media md ON md.chat_jid = m.chat_jid AND md.id = m.id `
 
 // Messages returns one page of a Chat timeline. Offset 0 is the newest page.
@@ -101,14 +124,23 @@ func (s *Store) Pending() ([]Message, error) {
 	return s.query(selectMessage+`WHERE m.state = ? ORDER BY m.time, m.rowid`, whatsapp.StatePending)
 }
 
-// AddPending stores a new Message of the user in the Chat, in state pending. The Chat must exist.
-func (s *Store) AddPending(chat, id, text string) (Message, error) {
-	return s.AddPendingMedia(chat, id, text, nil)
+// AddPending stores a new Message of the user in the Chat, in state pending, as a reply to quote when it is not nil.
+// The Chat must exist.
+func (s *Store) AddPending(chat, id, text string, quote *whatsapp.Quote) (Message, error) {
+	return s.addPending(chat, id, text, quote, nil)
 }
 
 // AddPendingMedia is AddPending for a Message with Media (text is the caption). The file is in the Media store already,
 // encrypted with m.Key, so the Media is ready at once and a restart or a Retry sends it again.
 func (s *Store) AddPendingMedia(chat, id, text string, m *whatsapp.Media) (Message, error) {
+	return s.addPending(chat, id, text, nil, m)
+}
+
+func (s *Store) addPending(chat, id, text string, quote *whatsapp.Quote, m *whatsapp.Media) (Message, error) {
+	q := whatsapp.Quote{}
+	if quote != nil {
+		q = *quote
+	}
 	now := s.now().Unix()
 	err := s.inTx(func(tx *sql.Tx) error {
 		res, err := tx.Exec(`UPDATE chats SET last_active = MAX(last_active, ?) WHERE jid = ?`, now, chat)
@@ -118,8 +150,13 @@ func (s *Store) AddPendingMedia(chat, id, text string, m *whatsapp.Media) (Messa
 		if n, _ := res.RowsAffected(); n == 0 {
 			return ErrNoChat
 		}
-		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state) VALUES (?, ?, '', 1, ?, ?, ?)`,
-			chat, id, now, text, whatsapp.StatePending)
+		var timer int64
+		if err := tx.QueryRow(`SELECT timer FROM chats WHERE jid = ?`, chat).Scan(&timer); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, expires_at)
+			VALUES (?, ?, '', 1, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, id, now, text, whatsapp.StatePending, q.ID, q.Sender, q.Text, expiry(now, timer))
 		if err != nil || m == nil {
 			return err
 		}
@@ -179,6 +216,51 @@ func (s *Store) Revoke(chat, id string) (bool, error) {
 	return true, nil
 }
 
+// expiry is the end of a Disappearing Message that WhatsApp sent at time, or 0 for a timer of 0.
+func expiry(time, timer int64) int64 {
+	if timer <= 0 {
+		return 0
+	}
+	return time + timer
+}
+
+// Expired names a Message that Expire deleted.
+type Expired struct{ Chat, ID string }
+
+// Expire deletes every Disappearing Message whose timer ended at or before now (Unix seconds), with its Media.
+// A Message that expired while the Daemon was off goes at the next call. It returns the deleted Messages.
+func (s *Store) Expire(now int64) ([]Expired, error) {
+	rows, err := s.db.Query(`SELECT chat_jid, id FROM messages WHERE expires_at > 0 AND expires_at <= ?`, now)
+	if err != nil {
+		return nil, err
+	}
+	var gone []Expired
+	for rows.Next() {
+		var e Expired
+		if err := rows.Scan(&e.Chat, &e.ID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		gone = append(gone, e)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, e := range gone {
+		if _, err := s.DeleteMedia(e.Chat, e.ID); err != nil {
+			return nil, err
+		}
+		if _, err := s.db.Exec(`DELETE FROM reactions WHERE chat_jid = ? AND message_id = ?`, e.Chat, e.ID); err != nil {
+			return nil, err
+		}
+		if _, err := s.db.Exec(`DELETE FROM messages WHERE chat_jid = ? AND id = ?`, e.Chat, e.ID); err != nil {
+			return nil, err
+		}
+	}
+	return gone, nil
+}
+
 // DeleteMedia removes the Media row of a Message and calls RemoveMedia. It reports whether a row existed.
 // Disappearing Messages use it too.
 func (s *Store) DeleteMedia(chat, id string) (bool, error) {
@@ -187,6 +269,21 @@ func (s *Store) DeleteMedia(chat, id string) (bool, error) {
 		s.RemoveMedia(chat, id)
 	}
 	return had, err
+}
+
+// SetReaction sets the Reaction of a Participant on a stored Message, or removes it when emoji is empty.
+// The reactor is the user when fromMe is true. It reports whether anything changed: an unknown Message or the same emoji changes nothing.
+func (s *Store) SetReaction(chat, id, sender string, fromMe bool, emoji string) (bool, error) {
+	if fromMe {
+		sender = ""
+	}
+	if emoji == "" {
+		return s.change(`DELETE FROM reactions WHERE chat_jid = ? AND message_id = ? AND sender_jid = ?`, chat, id, sender)
+	}
+	return s.change(`INSERT INTO reactions (chat_jid, message_id, sender_jid, emoji)
+		SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM messages WHERE chat_jid = ? AND id = ?)
+		ON CONFLICT (chat_jid, message_id, sender_jid) DO UPDATE SET emoji = excluded.emoji WHERE emoji != excluded.emoji`,
+		chat, id, sender, emoji, chat, id)
 }
 
 func (s *Store) move(chat, id, from, to string) (bool, error) {
@@ -203,18 +300,60 @@ func (s *Store) change(query string, args ...any) (bool, error) {
 }
 
 func (s *Store) query(query string, args ...any) ([]Message, error) {
+	msgs, err := s.queryRows(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	// shortcut: one query per Message for its Reactions, upgrade to one query per page if a page gets slow.
+	for i := range msgs {
+		if msgs[i].Reactions, err = s.reactions(msgs[i].Chat, msgs[i].ID); err != nil {
+			return nil, err
+		}
+	}
+	return msgs, nil
+}
+
+// reactions returns the Reactions of a Message in the order they were first set. It is nil for none.
+func (s *Store) reactions(chat, id string) ([]Reaction, error) {
+	rows, err := s.db.Query(`
+		SELECT r.sender_jid, r.emoji, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
+		FROM reactions r LEFT JOIN names n ON n.jid = r.sender_jid
+		WHERE r.chat_jid = ? AND r.message_id = ? ORDER BY r.rowid`, chat, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []Reaction
+	for rows.Next() {
+		var r Reaction
+		var contact, push string
+		if err := rows.Scan(&r.Sender, &r.Emoji, &contact, &push); err != nil {
+			return nil, err
+		}
+		if r.Sender == "" {
+			r.FromMe = true
+		} else {
+			r.SenderName = participantName(contact, push, r.Sender)
+		}
+		list = append(list, r)
+	}
+	return list, rows.Err()
+}
+
+func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var msgs []Message
-	var contact, push string
+	var contact, push, qContact, qPush string
 	for rows.Next() {
 		var m Message
+		var q Quote
 		var mi MediaInfo
 		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push,
-			&mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State); err != nil {
+			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &m.ExpiresAt); err != nil {
 			return nil, err
 		}
 		if mi.Kind != "" {
@@ -222,6 +361,13 @@ func (s *Store) query(query string, args ...any) ([]Message, error) {
 		}
 		if !m.FromMe {
 			m.SenderName = participantName(contact, push, m.Sender)
+		}
+		if q.ID != "" {
+			q.FromMe = q.Sender == ""
+			if !q.FromMe {
+				q.SenderName = participantName(qContact, qPush, q.Sender)
+			}
+			m.Quote = &q
 		}
 		msgs = append(msgs, m)
 	}
@@ -235,8 +381,13 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 	if m.FromMe {
 		state = whatsapp.StateSent
 	}
-	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state); err != nil {
+	q := whatsapp.Quote{}
+	if m.Quote != nil {
+		q = *m.Quote
+	}
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text, expiry(m.Time, m.Timer)); err != nil {
 		return err
 	}
 	if m.Media != nil {

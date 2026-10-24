@@ -27,12 +27,17 @@ type Port interface {
 	Disconnect()
 	// NewMessageID returns an unused Message ID. A send and its retries use one ID, so WhatsApp drops a repeat.
 	NewMessageID() string
-	// Send sends a text Message to a Chat. It returns ErrOffline when there is no connection.
+	// Send sends a text Message to a Chat, as a reply to quote when quote is not nil.
+	// It returns ErrOffline when there is no connection.
+	// timer is the Disappearing timer in seconds: 0 sends a Message that stays.
 	// It can block for a long time: call it off the Daemon loop.
-	Send(chat, id, text string) error
+	Send(chat, id, text string, quote *Quote, timer int64) error
 	// SendMedia uploads the plain Media in plain and sends it with the caption. Call it off the Daemon loop.
 	// It returns ErrOffline when there is no connection.
-	SendMedia(chat, id string, m Media, plain *os.File, caption string) error
+	SendMedia(chat, id string, m Media, plain *os.File, caption string, timer int64) error
+	// React sets the Reaction of the user on a Message. An empty emoji removes it.
+	// sender is the author of the Message ("" for the user). It returns ErrOffline when there is no connection.
+	React(chat, id, sender, emoji string) error
 	// Download downloads the plain Media into dst, and checks it against its hashes.
 	// It can block for a long time: call it off the Daemon loop.
 	Download(ref Media, dst *os.File) error
@@ -116,7 +121,16 @@ type Message struct {
 	Time     int64  `json:"time"`
 	Text     string `json:"text"`
 	PushName string `json:"pushName"` // the author's Push Name as sent with the Message, may be empty
+	Quote    *Quote `json:"quote"`    // the Message that this one replies to, nil for none
 	Media    *Media `json:"media"`
+	Timer    int64  `json:"timer"` // the Disappearing timer in seconds that the Message carries, 0 for none
+}
+
+// Quote is the Message that a reply quotes. Sender is its author, empty for the user. Text is the preview.
+type Quote struct {
+	ID     string `json:"id"`
+	Sender string `json:"sender"`
+	Text   string `json:"text"`
 }
 
 // HistoryChat is one Chat of a History Sync batch, with the App State that came with it.
@@ -129,6 +143,7 @@ type HistoryChat struct {
 	Pinned     bool      `json:"pinned"`
 	MutedUntil int64     `json:"mutedUntil"`
 	Unread     bool      `json:"unread"`
+	Timer      int64     `json:"timer"` // the Disappearing timer of the Chat in seconds, 0 for off
 	Messages   []Message `json:"messages"`
 }
 
@@ -199,6 +214,16 @@ type MessageRevoked struct {
 	ID   string `json:"id"`
 }
 
+// Reaction means a Participant, or another device of the user, set or removed a Reaction on a stored Message.
+// Sender and FromMe name the reactor. An empty Emoji removes it.
+type Reaction struct {
+	Chat   string `json:"chat"`
+	ID     string `json:"id"`
+	Sender string `json:"sender"`
+	FromMe bool   `json:"fromMe"`
+	Emoji  string `json:"emoji"`
+}
+
 // Presence is the availability of a Participant of a Direct Chat. LastSeen is Unix seconds, 0 when WhatsApp hides it.
 type Presence struct {
 	JID      string `json:"jid"`
@@ -220,16 +245,25 @@ type ChatPresence struct {
 	State  string `json:"state"`
 }
 
+// ChatTimer means the Disappearing timer of a Chat changed. Seconds is 0 when the timer is off.
+// It applies to Messages from now on.
+type ChatTimer struct {
+	Chat    string `json:"chat"`
+	Seconds int64  `json:"seconds"`
+}
+
 // Connected and Disconnected report the connection to WhatsApp.
 type Connected struct{}
 type Disconnected struct{}
 
 func (NewMessage) isEvent()     {}
 func (Receipt) isEvent()        {}
+func (ChatTimer) isEvent()      {}
 func (Presence) isEvent()       {}
 func (ChatPresence) isEvent()   {}
 func (MessageEdited) isEvent()  {}
 func (MessageRevoked) isEvent() {}
+func (Reaction) isEvent()       {}
 func (Connected) isEvent()      {}
 func (Disconnected) isEvent()   {}
 func (QRCode) isEvent()         {}

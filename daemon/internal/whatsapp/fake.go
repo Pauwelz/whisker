@@ -21,6 +21,7 @@ type Fake struct {
 	sendErr    error
 	sent       []string
 	uploads    []string
+	timers     []int64
 	attempts   int
 	ids        int
 	logoutErr  error
@@ -34,6 +35,8 @@ type Fake struct {
 	plays      []Read
 	edits      []string
 	revokes    []string
+	quotes     []string
+	reactions  []string
 	online     []bool
 	subscribed []string
 	typing     []string
@@ -74,7 +77,14 @@ func (f *Fake) NewMessageID() string {
 	return fmt.Sprintf("fake-%d", f.ids)
 }
 
-func (f *Fake) Send(_, id, _ string) error {
+// SentTimers lists the Disappearing timers that Send accepted, in order.
+func (f *Fake) SentTimers() []int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int64{}, f.timers...)
+}
+
+func (f *Fake) Send(_, id, _ string, quote *Quote, timer int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++
@@ -82,11 +92,15 @@ func (f *Fake) Send(_, id, _ string) error {
 		return f.sendErr
 	}
 	f.sent = append(f.sent, id)
+	f.timers = append(f.timers, timer)
+	if quote != nil {
+		f.quotes = append(f.quotes, id+":"+quote.ID)
+	}
 	return nil
 }
 
 // SendMedia fails with the send error, like Send. A good call records the Media and its plain content.
-func (f *Fake) SendMedia(_, id string, m Media, plain *os.File, caption string) error {
+func (f *Fake) SendMedia(_, id string, m Media, plain *os.File, caption string, timer int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++
@@ -98,6 +112,7 @@ func (f *Fake) SendMedia(_, id string, m Media, plain *os.File, caption string) 
 		return err
 	}
 	f.sent = append(f.sent, id)
+	f.timers = append(f.timers, timer)
 	f.uploads = append(f.uploads, strings.Join([]string{id, string(m.Kind), m.Mime, m.Name, caption, string(content)}, "|"))
 	return nil
 }
@@ -107,6 +122,30 @@ func (f *Fake) Uploads() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string{}, f.uploads...)
+}
+
+// React fails with the send error, like Send. A good call is recorded as "id:emoji".
+func (f *Fake) React(_, id, _, emoji string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.reactions = append(f.reactions, id+":"+emoji)
+	return nil
+}
+
+// Quotes lists the sent replies as "id:quotedID", in order. Reactions lists the Reactions as "id:emoji".
+func (f *Fake) Quotes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.quotes...)
+}
+
+func (f *Fake) Reactions() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.reactions...)
 }
 
 // SetDownload scripts Download: it writes content to the file, or fails with err (a non-nil err wins).

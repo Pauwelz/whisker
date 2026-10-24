@@ -114,14 +114,48 @@ func (c *Client) PairCode(phone string) (string, error) {
 
 func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
 
-func (c *Client) Send(chat, id, text string) error {
+func (c *Client) Send(chat, id, text string, quote *Quote, timer int64) error {
 	return c.send(chat, sendTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
-		return &waE2E.Message{Conversation: proto.String(text)}, whatsmeow.SendRequestExtra{ID: id}
+		msg := &waE2E.Message{Conversation: proto.String(text)}
+		if quote != nil || timer > 0 { // a quote and the timer ride in the ContextInfo of an extended text Message
+			info := &waE2E.ContextInfo{}
+			if quote != nil {
+				info.StanzaID = proto.String(quote.ID)
+				info.Participant = proto.String(c.quoteSender(quote.Sender))
+				info.QuotedMessage = &waE2E.Message{Conversation: proto.String(quote.Text)}
+			}
+			if timer > 0 {
+				info.Expiration = proto.Uint32(uint32(timer))
+			}
+			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: info}}
+		}
+		return msg, whatsmeow.SendRequestExtra{ID: id}
+	})
+}
+
+// quoteSender is the JID that WhatsApp expects for the author of a quoted Message. The Quote holds none for the user's own Messages.
+func (c *Client) quoteSender(sender string) string {
+	if sender == "" && c.cli.Store.ID != nil {
+		return c.cli.Store.ID.ToNonAD().String()
+	}
+	return sender
+}
+
+func (c *Client) React(chat, id, sender, emoji string) error {
+	senderJID := types.EmptyJID
+	if sender != "" {
+		var err error
+		if senderJID, err = types.ParseJID(sender); err != nil {
+			return err
+		}
+	}
+	return c.send(chat, editTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
+		return c.cli.BuildReaction(jid, senderJID, id, emoji), whatsmeow.SendRequestExtra{}
 	})
 }
 
 // SendMedia uploads plain, then sends the Media Message. A retry uses the same Message ID.
-func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption string) error {
+func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption string, timer int64) error {
 	if !c.cli.IsConnected() {
 		return ErrOffline
 	}
@@ -143,6 +177,14 @@ func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption str
 			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
 			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: proto.Uint64(up.FileLength),
 			Mimetype: proto.String(m.Mime), FileName: proto.String(m.Name), Caption: proto.String(caption),
+		}
+	}
+	if timer > 0 {
+		info := &waE2E.ContextInfo{Expiration: proto.Uint32(uint32(timer))}
+		if msg.ImageMessage != nil {
+			msg.ImageMessage.ContextInfo = info
+		} else {
+			msg.DocumentMessage.ContextInfo = info
 		}
 	}
 	return c.send(chat, sendTimeout, func(types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
@@ -285,14 +327,17 @@ func (c *Client) handle(evt any) {
 		if c.handleProtocol(evt) {
 			return
 		}
-		// Reactions have no text: they are skipped until their ticket.
+		if r := evt.Message.GetReactionMessage(); r != nil {
+			c.events <- Reaction{Chat: evt.Info.Chat.String(), ID: r.GetKey().GetID(), Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
+			return
+		}
 		text, media := messageText(evt.Message), mediaOf(evt.Message)
 		if (text == "" && media == nil) || evt.IsEdit || evt.Info.Chat.Server == types.BroadcastServer {
 			return
 		}
 		c.events <- NewMessage{Chat: evt.Info.Chat.String(), Kind: c.kindOf(evt.Info.Chat), Message: Message{
 			ID: evt.Info.ID, Sender: evt.Info.Sender.String(), FromMe: evt.Info.IsFromMe,
-			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName, Media: media,
+			Time: evt.Info.Timestamp.Unix(), Text: text, PushName: evt.Info.PushName, Quote: c.quoteOf(evt.Message), Media: media, Timer: timerOf(evt.Message),
 		}}
 	case *events.Receipt:
 		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
@@ -341,10 +386,32 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
 		c.events <- MessageRevoked{Chat: chat, ID: id}
+	case pm.GetType() == waE2E.ProtocolMessage_EPHEMERAL_SETTING:
+		c.events <- ChatTimer{Chat: chat, Seconds: int64(pm.GetEphemeralExpiration())}
 	default:
 		return false
 	}
 	return true
+}
+
+// timerOf is the Disappearing timer in seconds that a Message carries in its ContextInfo, or 0.
+func timerOf(m *waE2E.Message) int64 {
+	var info *waE2E.ContextInfo
+	switch {
+	case m.GetExtendedTextMessage() != nil:
+		info = m.GetExtendedTextMessage().GetContextInfo()
+	case m.GetImageMessage() != nil:
+		info = m.GetImageMessage().GetContextInfo()
+	case m.GetVideoMessage() != nil:
+		info = m.GetVideoMessage().GetContextInfo()
+	case m.GetAudioMessage() != nil:
+		info = m.GetAudioMessage().GetContextInfo()
+	case m.GetStickerMessage() != nil:
+		info = m.GetStickerMessage().GetContextInfo()
+	case m.GetDocumentMessage() != nil:
+		info = m.GetDocumentMessage().GetContextInfo()
+	}
+	return int64(info.GetExpiration())
 }
 
 func receiptState(t types.ReceiptType) string {
@@ -384,6 +451,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 			LastActive: int64(max(conv.GetConversationTimestamp(), conv.GetLastMsgTimestamp())),
 			Pinned:     conv.GetPinned() != 0,
 			Unread:     conv.GetUnreadCount() > 0 || conv.GetMarkedAsUnread(),
+			Timer:      int64(conv.GetEphemeralExpiration()),
 		}
 		if chat.Kind == KindGroup {
 			chat.Subject = conv.GetName()
@@ -403,7 +471,9 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 				Time:     parsed.Info.Timestamp.Unix(),
 				Text:     messageText(parsed.Message),
 				PushName: parsed.Info.PushName,
+				Quote:    c.quoteOf(parsed.Message),
 				Media:    mediaOf(parsed.Message),
+				Timer:    timerOf(parsed.Message),
 			})
 		}
 		batch.Chats = append(batch.Chats, chat)
@@ -419,6 +489,19 @@ func (c *Client) kindOf(jid types.JID) string {
 		return KindSelf
 	}
 	return KindDirect
+}
+
+// quoteOf is the Quote that a Message carries, or nil. The user's own JID maps to the empty sender.
+func (c *Client) quoteOf(m *waE2E.Message) *Quote {
+	ctx := m.GetExtendedTextMessage().GetContextInfo()
+	if ctx.GetStanzaID() == "" {
+		return nil
+	}
+	sender := ctx.GetParticipant()
+	if jid, err := types.ParseJID(sender); err == nil && c.cli.Store.ID != nil && jid.User == c.cli.Store.ID.User {
+		sender = ""
+	}
+	return &Quote{ID: ctx.GetStanzaID(), Sender: sender, Text: messageText(ctx.GetQuotedMessage())}
 }
 
 // messageText is the text of a Message, or the caption of its Media. System Messages have none yet.
