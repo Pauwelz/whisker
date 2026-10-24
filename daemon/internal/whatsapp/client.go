@@ -458,7 +458,11 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) HistorySync {
 		if err != nil {
 			continue
 		}
-		jid = c.phone(jid)
+		pn := phoneOfConversation(conv.GetPnJID())
+		if jid.Server == types.HiddenUserServer && !pn.IsEmpty() {
+			c.rememberPhone(jid, pn)
+		}
+		jid = c.phone(jid, pn)
 		chat := HistoryChat{
 			JID:        jid.String(),
 			Kind:       c.kindOf(jid),
@@ -582,6 +586,32 @@ func (c *Client) lookupPhone(lid types.JID) (types.JID, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
 	defer cancel()
 	return c.cli.Store.LIDs.GetPNForLID(ctx, lid)
+}
+
+// phoneOfConversation is the phone JID that a History Sync conversation carries, or the empty JID.
+func phoneOfConversation(s string) types.JID {
+	jid, err := types.ParseJID(s)
+	if err != nil {
+		return types.EmptyJID
+	}
+	if jid.Server == types.LegacyUserServer {
+		jid.Server = types.DefaultUserServer
+	}
+	if jid.Server != types.DefaultUserServer {
+		return types.EmptyJID
+	}
+	return jid.ToNonAD()
+}
+
+// rememberPhone stores a LID and its phone JID, so live events for that LID find the same Chat.
+// A failed write only costs the mapping: the lookup then falls back to the LID.
+func (c *Client) rememberPhone(lid, pn types.JID) {
+	if c.cli.Store.LIDs == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	_ = c.cli.Store.LIDs.PutLIDMapping(ctx, lid.ToNonAD(), pn)
 }
 
 // phoneString is phone for a JID string. A string that does not parse stays as it is.

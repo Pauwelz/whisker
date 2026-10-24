@@ -42,3 +42,21 @@ func TestResolvePhone(t *testing.T) {
 		}
 	}
 }
+
+// A History Sync conversation can carry its phone JID next to a LID id. Without it, the
+// Chat stays keyed by the LID and a second Chat appears for the same person.
+func TestPhoneOfConversation(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"3247@s.whatsapp.net", "3247@s.whatsapp.net"},
+		{"3247@c.us", "3247@s.whatsapp.net"},
+		{"3247:5@s.whatsapp.net", "3247@s.whatsapp.net"},
+		{"", ""},
+		{"111@lid", ""},
+		{"not a jid@@", ""},
+	}
+	for _, tt := range tests {
+		if got := phoneOfConversation(tt.in); got.String() != tt.want && !(tt.want == "" && got.IsEmpty()) {
+			t.Errorf("phoneOfConversation(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

@@ -11,6 +11,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 - Incoming Messages show again. The Daemon took every ordinary Message for a revoke and dropped it.
 - A Message that WhatsApp addresses by LID goes to the Chat of the phone JID, not to a second Chat.
+- History Sync no longer adds a second Chat for a contact that WhatsApp sends by LID. The Daemon uses the phone JID that the conversation carries.
 - The linked device shows as "whisker" (a desktop) on the phone, not as "Other device". The name applies after a new link.
 - "Load more" no longer shows in the settings view.
 
