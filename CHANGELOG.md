@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- A Chat merge no longer deletes Media files when a move fails. The Daemon logs "media move failed" and keeps the files.
 - A Message that you sent while two Chats merged now shows as sent in the merged Chat. Before, it stayed Sending.
 - A merge of two Chats keeps the text of both Drafts. Before, the Draft of the LID Chat was lost. The merge also runs when the LID shows only as a Draft or as a group sender.
 - A Quote and a staged file no longer combine, like an Edit and a file. Staging a file drops the Quote. Starting a Quote drops the file. Before, the Quote dropped without notice when the file went out.

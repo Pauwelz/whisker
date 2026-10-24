@@ -152,6 +152,30 @@ func TestMoveChatKeepsTheFilesOfTheTargetChat(t *testing.T) {
 	}
 }
 
+func TestMoveChatKeepsTheFolderWhenAMoveFails(t *testing.T) {
+	s, enc, _ := newStore(t)
+	for _, c := range []struct{ chat, id string }{{"lid", "a"}, {"phone", "b"}} {
+		if err := s.Put(c.chat, c.id, media.Image, key, strings.NewReader("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := filepath.Join(enc, "phone")
+	if err := os.Chmod(target, 0o500); err != nil { // a read-only folder refuses the rename
+		t.Fatal(err)
+	}
+	defer os.Chmod(target, 0o700)
+	if os.Getuid() == 0 {
+		t.Skip("root ignores folder permissions")
+	}
+	err := s.MoveChat("lid", "phone")
+	if err == nil || strings.Contains(err.Error(), enc) {
+		t.Errorf("MoveChat error = %v; want a failure without a path", err)
+	}
+	if !s.Has("lid", "a") {
+		t.Error("the file was lost after a failed move")
+	}
+}
+
 func TestUnsafeNamesAreRejected(t *testing.T) {
 	s, _, _ := newStore(t)
 	if err := s.Put("../x", "m", media.Image, key, strings.NewReader("a")); err == nil {

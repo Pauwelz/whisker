@@ -223,7 +223,9 @@ func (s *session) merge(a whatsapp.ChatAlias) bool {
 	if !changed {
 		return true
 	}
-	s.media.MoveChat(a.LID, a.Phone)
+	if s.media.MoveChat(a.LID, a.Phone) != nil {
+		fmt.Fprintln(s.logOut, "media move failed")
+	}
 	s.box.merged[a.LID] = a.Phone
 	if s.attn.Attended() == a.LID {
 		s.attn.Set(true, a.Phone)

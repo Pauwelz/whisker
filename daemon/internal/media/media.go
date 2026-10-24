@@ -241,24 +241,34 @@ func (s *Store) Remove(chat, id string) {
 	}
 }
 
+var errMove = errors.New("media move failed")
+
 // MoveChat moves the stored Media of the Chat `from` into the Chat `to`, when the two Chats merge.
 // A file whose Message id `to` already has stays as it is there. The plain copies of `from` go.
-func (s *Store) MoveChat(from, to string) {
+// It keeps the folder of `from` and returns an error when a move failed, so no file is lost. The error holds no path.
+func (s *Store) MoveChat(from, to string) error {
 	if safe(from, to) != nil {
-		return
+		return nil
 	}
 	s.Release(from)
 	entries, err := os.ReadDir(filepath.Join(s.dir, from))
 	if err != nil {
-		return
+		return nil // no Media in the Chat
 	}
-	os.MkdirAll(filepath.Join(s.dir, to), 0o700)
+	if os.MkdirAll(filepath.Join(s.dir, to), 0o700) != nil {
+		return errMove
+	}
+	failed := false
 	for _, e := range entries {
-		if !s.Has(to, e.Name()) {
-			os.Rename(s.file(from, e.Name()), s.file(to, e.Name()))
+		if !s.Has(to, e.Name()) && os.Rename(s.file(from, e.Name()), s.file(to, e.Name())) != nil {
+			failed = true
 		}
 	}
+	if failed {
+		return errMove
+	}
 	os.RemoveAll(filepath.Join(s.dir, from)) // the files that stayed go with the folder
+	return nil
 }
 
 // Wipe deletes every plain copy. Call it at start and exit.
