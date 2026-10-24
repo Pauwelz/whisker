@@ -28,9 +28,17 @@ _Avoid_: Workspace, tenant, user folder
 A conversation thread belonging to a Companion Device, categorized as a **Direct Chat** (one-to-one with another Participant), a **Group Chat** (multi-participant room), or a **Self Chat** ("Message Yourself").
 _Avoid_: Channel, room, thread, dialog, conversation
 
+**Attended Chat**:
+The Chat that the Plugin shows while its pop-out is open. A Message in the Attended Chat does not notify.
+_Avoid_: Focused chat, open chat, active chat
+
 **Participant**:
 A canonical WhatsApp user identity resolved across both phone-number addressing (JID) and privacy-preserving linked identity (LID).
 _Avoid_: User, contact, peer, member, sender
+
+**Push Name**:
+The name that a Participant sets for themselves in WhatsApp. whisker shows it when your phone contacts have no name for that Participant.
+_Avoid_: Nickname, display name, profile name
 
 **Pair Code**:
 An 8-character alphanumeric code linked to a phone number used as a fallback to QR scanning when authorizing a Companion Device.
@@ -44,6 +52,26 @@ _Avoid_: File, blob, upload, asset
 A chronological entry in a Chat timeline sent by a Participant, carrying text, Media, or a system event, and open to subsequent in-place mutations (Edit, Reaction, Revoke, Delivery State).
 _Avoid_: Post, item, event, packet, bubble
 
+**Quote**:
+A reference on a Message to an earlier Message in the same Chat. It shows the original sender and a short preview.
+_Avoid_: Reply-to, parent message, thread reply, citation
+
+**Reaction**:
+One emoji that a Participant attaches to a Message. A Participant has at most one Reaction per Message.
+_Avoid_: Like, upvote, emoji response
+
+**Tombstone**:
+The placeholder that stays in the Chat timeline when a Message is revoked for everyone. It replaces the text and the Media, and it keeps the position of the Message.
+_Avoid_: Soft delete, redacted message, retracted message
+
+**Delivery State**:
+The progress of an outbound Message: `Pending`, `Sent`, `Delivered`, `Read`, `Played` (voice and audio Media), or `Failed`. In a Group Chat, a state applies only when every recipient has reached it.
+_Avoid_: Message State, ack status, tick status, receipt state
+
+**Disappearing Message**:
+A Message in a Chat with a disappearing timer. Every device deletes it when the timer expires.
+_Avoid_: Ephemeral Message, self-destructing message, expiring message
+
 **History Sync**:
 Batches of historical Chats and Messages pushed by the primary phone to a newly linked or reconnecting Companion Device.
 _Avoid_: Backfill, archive dump, initial load
@@ -52,9 +80,25 @@ _Avoid_: Backfill, archive dump, initial load
 Unsent message composition state (text and any pending Quote or Edit target) preserved per Chat when navigating between Chats.
 _Avoid_: Unsent buffer, scratch text, composer cache
 
+**App State**:
+The state that the primary phone syncs to all linked devices, such as `Pinned`, `Muted`, `Archived` and the Read Marker of a Chat. It is not the state of whisker.
+_Avoid_: Chat State, user preferences, settings sync, chat flags
+
 **Profile Settings**:
 The local options of one Profile that control how whisker behaves, such as privacy, Media auto-download, notifications and keybindings. They never sync to the phone or to other devices, unlike App State.
 _Avoid_: Config, preferences, options
+
+**Read Marker**:
+The App State flag that marks a Chat read or unread on all of the user's own devices. Senders never see it.
+_Avoid_: Read flag, seen state, unread flag
+
+**Read Receipt**:
+The notice to the sender of a Message that the user has read it. It moves the Delivery State of that Message to `Read` for the sender.
+_Avoid_: Blue ticks, seen notice, read ack
+
+**Presence**:
+Short-lived activity of a Participant: availability (`Online`, `Last Seen`) and activity in a Chat (`Composing`, `Recording`).
+_Avoid_: Presence State, Chat State, status, activity status, typing state
 
 **whisker-legacy**:
 The .NET WhatsApp client that whisker and catty replace. It is a reference for behaviour only. No code moves over from it.
