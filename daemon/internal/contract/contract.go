@@ -143,6 +143,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			sent = box.results
 			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut}
 			box.incoming = read.incoming
+			box.notice = (&notifier{chats: chats, prefs: prefs, attn: &attn, logOut: logOut}).frame
 			ready = true
 			if !send(notification("ready", nil)) || !startPort() {
 				return ExitError

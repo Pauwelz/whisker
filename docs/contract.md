@@ -116,6 +116,25 @@ Later tickets (Reaction, Quote, Media) add keys to the Message and send `message
 
 Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`, `chat-edit.jsonl`, `chat-revoke.jsonl`.
 
+### `notify`
+
+A new Message raises a desktop notification. The Daemon sends `notify` after `messageChanged` and `chatsChanged` of that Message. `kind` is the Chat kind, `name` follows the name rule, and `senderName` follows the name rule for Participants.
+
+```json
+{"jsonrpc":"2.0","method":"notify","params":{"chat":"g1@g.us","kind":"group","name":"Crew","senderName":"Bob","text":"hello"}}
+```
+
+The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies unless one of these is true:
+
+| Rule | Fixture |
+|---|---|
+| The notifications setting is off. | `notify-off.jsonl` |
+| The Chat is Muted. | `notify-muted.jsonl` |
+| The Chat is the Attended Chat. | `notify-attended.jsonl` |
+| The user sent the Message from another device. | `notify-own-message.jsonl` |
+
+`notify-new.jsonl` shows a Message that notifies. The Plugin shows the notification with `omarchy-notification-send`. An `--exec` action runs the Plugin IPC handler `openChat` with the Chat id (`omarchy-shell pauwelz.whisker openChat <chat>`). A click opens the pop-out on that Chat. Mentions in a Muted Group Chat join later.
+
 ## Methods (Plugin to Daemon)
 
 ### `chats.list`

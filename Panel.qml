@@ -8,6 +8,7 @@ Panel {
   id: root
   moduleName: "pauwelz.whisker"
   ipcTarget: "pauwelz.whisker"
+  manageIpc: false // the handler below adds openChat to the standard methods
 
   readonly property var whiskerService: bar && bar.shell ? bar.shell.serviceFor("pauwelz.whisker") : null
   readonly property var view: whiskerService ? whiskerService.view : ({ screen: "starting", message: "" })
@@ -29,8 +30,23 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
+  ShellIpc {
+    target: root.ipcTarget
+
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
+    function openChat(jid: string): void {
+      if (root.whiskerService) root.whiskerService.openChatByJid(jid)
+      root.open()
+    }
+  }
+
   BarIconButton {
     id: button
+    labelText: State.unreadLabel(root.view)
     anchors.fill: parent
     bar: root.bar
     text: ""

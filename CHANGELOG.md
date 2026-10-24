@@ -26,6 +26,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - When the phone removes the Companion Device, the Daemon deletes the Profile and the pop-out goes back to linking.
 - The Daemon knows when the pop-out is open and which Chat it shows. Opening a Chat clears its unread mark, also on the phone. A new Message marks its Chat unread.
 - Read Receipts follow the setting: Off sends none, On open sends them for the Chat you view, On interaction sends them for the whole Chat after you send a Message there.
+- A new Message raises a desktop notification, except in a Muted Chat, in the Attended Chat, or when notifications are off. A click on it opens the pop-out on that Chat.
+- The bar shows the number of unread Chats, without Muted Chats. It shows only the icon when no Chat is unread.
 
 ## [1.0.0-rc.1] - 2026-10-24
 

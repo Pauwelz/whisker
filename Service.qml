@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "WhiskerState.js" as State
 
@@ -56,6 +57,11 @@ Item {
     view = State.openChat(view, chat)
     syncAttention()
     daemon.write(State.messagesRequest(nextRequestId++, chat.jid, 0))
+  }
+
+  // Called by the IPC handler `openChat`, which a click on a notification runs.
+  function openChatByJid(jid) {
+    openChat(State.chatByJid(view, jid))
   }
 
   function closeChat() {
@@ -165,6 +171,7 @@ Item {
         var frame = State.parseLine(line)
         if (!frame) return
         root.view = State.applyFrame(root.view, frame)
+        if (State.isNotify(frame)) Quickshell.execDetached(State.notifyCommand(frame.params))
         if (State.resendsAttention(frame)) root.syncAttention()
         if (State.requestsSettings(frame)) daemon.write(State.settingsGetRequest(root.nextRequestId++))
         if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0, root.chatQuery))
