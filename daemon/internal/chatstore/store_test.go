@@ -165,6 +165,20 @@ func TestMutedAndReadMarkerFromAppState(t *testing.T) {
 	}
 }
 
+// The bar count covers the whole chat store: unread Chats that are not Muted.
+func TestUnreadChatsCountsUnmutedUnreadChats(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{
+		{JID: "a@s.whatsapp.net", LastActive: 4, Unread: true},
+		{JID: "b@s.whatsapp.net", LastActive: 3, Unread: true, MutedUntil: -1},
+		{JID: "c@s.whatsapp.net", LastActive: 2, Unread: true, MutedUntil: now.Unix() - 60}, // mute ended
+		{JID: "d@s.whatsapp.net", LastActive: 1},
+	}})
+	if n, err := s.UnreadChats(); err != nil || n != 2 {
+		t.Errorf("UnreadChats = %d, %v; want 2", n, err)
+	}
+}
+
 // A late History Sync batch is older than the live App State. It must not undo it.
 func TestHistorySyncKeepsFlagsOfAnExistingChat(t *testing.T) {
 	s, _ := newStore(t)

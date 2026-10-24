@@ -130,6 +130,7 @@ function chatListPage(state, result) {
   for (var key in state) next[key] = state[key]
   next.chats = result.offset > 0 ? (state.chats || []).concat(result.chats) : result.chats
   next.moreChats = result.more === true
+  next.unreadChats = result.unreadChats || 0
   return next
 }
 
@@ -518,10 +519,9 @@ function canReactToMessage(message) {
   return !message.revoked && (!message.fromMe || ["sent", "delivered", "read", "played"].indexOf(message.state) >= 0)
 }
 
-// The number of unread Chats the bar shows: a Chat with a Read Marker counts, a Muted Chat does not.
-// shortcut: it counts the Chats the Plugin has loaded (the first page, or a search result), upgrade to a Daemon count if that shows.
+// The number of unread Chats the bar shows. The Daemon counts them over the whole chat store, without Muted Chats.
 function unreadCount(state) {
-  return (state.chats || []).filter(function(chat) { return chat.unread && !chat.muted }).length
+  return state.unreadChats || 0
 }
 
 // The bar label: the count, or "" so that only the icon shows when no Chat is unread.

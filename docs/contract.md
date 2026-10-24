@@ -165,12 +165,13 @@ The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies u
 Params, all optional: `offset` (default 0), `limit` (default 50, at most 200) and `query`. Valid once the Daemon is `ready`. The result is one page of the Chat list:
 
 ```json
-{"chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":100,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0}
+{"chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":100,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0,"unreadChats":0}
 ```
 
 - Order: Pinned Chats first, then newest `lastActive` first (Unix seconds). A Chat with no activity is not listed.
 - `kind` is `direct`, `group` or `self`.
 - `muted` is true for a Muted Chat whose mute has not ended. `unread` is the Read Marker. `pinned`, `muted` and `unread` come from App State.
+- `unreadChats` is the number of unread Chats that are not Muted, over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
 - `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
 - `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
 - Error -32003 means the chat store failed.

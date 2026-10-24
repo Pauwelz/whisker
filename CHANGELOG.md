@@ -48,6 +48,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - Log out deletes the Profile and its key also when WhatsApp is out of reach. The phone then still lists the device until you remove it there.
 - The Daemon deletes the plain copies of Media also on SIGTERM and SIGINT. Opening a Chat from a notification click releases the Media of the Chat you left, stops its voice note and stops Composing.
 - A late History Sync batch no longer undoes pin, mute or unread marks that the phone changed after the sync began.
+- The bar shows the unread count of all Chats, not only of the Chats that the pop-out has loaded. A search does not change it.
 
 ## [1.0.0-rc.1] - 2026-10-24
 

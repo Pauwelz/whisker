@@ -477,7 +477,12 @@ func chatsListReply(chats *chatstore.Store, id json.RawMessage, offset, limit in
 		fmt.Fprintln(logOut, "chat list failed")
 		return errorReply(id, errChatStore, "chat store failed")
 	}
-	return resultReply(id, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset})
+	unread, err := chats.UnreadChats()
+	if err != nil {
+		fmt.Fprintln(logOut, "chat list failed")
+		return errorReply(id, errChatStore, "chat store failed")
+	}
+	return resultReply(id, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset, "unreadChats": unread})
 }
 
 func chatMessagesReply(chats *chatstore.Store, id json.RawMessage, chat string, offset, limit int, logOut io.Writer) map[string]any {

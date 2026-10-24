@@ -4,8 +4,8 @@
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","lastActive":5},{"jid":"2@s.whatsapp.net","lastActive":4},{"jid":"3@s.whatsapp.net","lastActive":3}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chats.list","params":{"limit":2}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":5,"pinned":false,"muted":false,"unread":false},{"jid":"2@s.whatsapp.net","kind":"direct","name":"+2","lastActive":4,"pinned":false,"muted":false,"unread":false}],"more":true,"offset":0}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":5,"pinned":false,"muted":false,"unread":false},{"jid":"2@s.whatsapp.net","kind":"direct","name":"+2","lastActive":4,"pinned":false,"muted":false,"unread":false}],"more":true,"offset":0,"unreadChats":0}}}
 {"dir":"view","expect":{"moreChats":true}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chats.list","params":{"offset":2,"limit":2}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chats":[{"jid":"3@s.whatsapp.net","kind":"direct","name":"+3","lastActive":3,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":2}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chats":[{"jid":"3@s.whatsapp.net","kind":"direct","name":"+3","lastActive":3,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":2,"unreadChats":0}}}
 {"dir":"view","expect":{"moreChats":false,"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":5,"pinned":false,"muted":false,"unread":false},{"jid":"2@s.whatsapp.net","kind":"direct","name":"+2","lastActive":4,"pinned":false,"muted":false,"unread":false},{"jid":"3@s.whatsapp.net","kind":"direct","name":"+3","lastActive":3,"pinned":false,"muted":false,"unread":false}]}}

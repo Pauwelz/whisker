@@ -119,6 +119,13 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 	return page, nil
 }
 
+// UnreadChats counts the unread Chats that are not Muted, over the whole chat store. The bar shows it.
+func (s *Store) UnreadChats() (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM chats WHERE unread AND NOT (muted_until = -1 OR muted_until > ?)`, s.now().Unix()).Scan(&n)
+	return n, err
+}
+
 const selectChat = `
 	SELECT c.jid, c.kind, c.pinned, c.unread, c.last_active,
 	       c.muted_until = -1 OR c.muted_until > ?, c.timer,

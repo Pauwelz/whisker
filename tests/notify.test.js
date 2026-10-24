@@ -4,25 +4,23 @@ const load = require("./load");
 
 const State = load("WhiskerState.js");
 
-test("the bar counts unread Chats and leaves Muted Chats out", () => {
-  const chats = [
-    { jid: "1", unread: true, muted: false },
-    { jid: "2", unread: true, muted: true },
-    { jid: "3", unread: false, muted: false },
-    { jid: "4", unread: true, muted: false },
-  ];
-  assert.equal(State.unreadCount({ chats }), 2);
-  assert.equal(State.unreadLabel({ chats }), "2");
+const page = (result) => ({ jsonrpc: "2.0", id: 1, result: Object.assign({ chats: [], more: false, offset: 0 }, result) });
+
+test("the bar shows the unread count from the Daemon, not from the loaded Chats", () => {
+  const state = State.applyFrame(State.initialState(), page({ unreadChats: 7, chats: [{ jid: "1", unread: true, muted: false }] }));
+  assert.equal(State.unreadCount(state), 7);
+  assert.equal(State.unreadLabel(state), "7");
+});
+
+test("a search result or a later page does not change the bar count", () => {
+  let state = State.applyFrame(State.initialState(), page({ unreadChats: 3 }));
+  state = State.applyFrame(state, page({ unreadChats: 3, offset: 50, chats: [{ jid: "2", unread: false, muted: false }] }));
+  assert.equal(State.unreadCount(state), 3);
 });
 
 test("the bar shows only the icon when no Chat is unread", () => {
-  assert.equal(State.unreadLabel({ chats: [{ jid: "1", unread: false, muted: false }] }), "");
+  assert.equal(State.unreadLabel(State.applyFrame(State.initialState(), page({ unreadChats: 0 }))), "");
   assert.equal(State.unreadLabel({}), "");
-});
-
-test("a Chat marked unread on the phone counts after chats.list", () => {
-  const state = State.applyFrame(State.initialState(), { jsonrpc: "2.0", id: 1, result: { chats: [{ jid: "1", unread: true, muted: false }], more: false, offset: 0 } });
-  assert.equal(State.unreadLabel(state), "1");
 });
 
 test("a notify frame becomes a notification whose click opens the Chat", () => {
