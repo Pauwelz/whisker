@@ -35,6 +35,16 @@ func draftSetReply(chats *chatstore.Store, id json.RawMessage, chat string, d ch
 	if chat == "" || !fitsMessage(d.Text) {
 		return errorReply(id, errMessage, msgInvalidMessage)
 	}
+	if d.Attachment != "" {
+		if d.Edit != "" { // an Edit and a staged file never combine
+			return errorReply(id, errMessage, msgInvalidMessage)
+		}
+		f, _, err := openSendable(d.Attachment)
+		if err != nil {
+			return errorReply(id, errMessage, msgInvalidMessage)
+		}
+		f.Close()
+	}
 	for _, target := range []string{d.Quote, d.Edit} {
 		if target == "" {
 			continue

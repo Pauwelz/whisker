@@ -3,6 +3,7 @@ package contract
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -35,22 +36,36 @@ func sniffMime(path string, f *os.File) string {
 	return t
 }
 
+// openSendable opens a file that `chat.sendMedia` accepts: an absolute path to a regular file of 1 B to 100 MiB.
+// `draft.set` uses it too, so both agree on what can be sent. The caller closes the file.
+func openSendable(path string) (*os.File, os.FileInfo, error) {
+	if !filepath.IsAbs(path) {
+		return nil, nil, errors.New("not absolute")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() || st.Size() == 0 || st.Size() > maxSendBytes {
+		f.Close()
+		return nil, nil, errors.New("not sendable")
+	}
+	return f, st, nil
+}
+
 // chatSendMediaReply stores the file encrypted in the Profile and adds a pending Message. The caller sends it after the reply.
 // shortcut: the copy into the Profile runs on the Daemon loop, so a very large file blocks other requests for a moment.
 func chatSendMediaReply(chats *chatstore.Store, store *media.Store, newID func() string, id json.RawMessage, chat, path, caption string, logOut io.Writer) (map[string]any, *chatstore.Message) {
 	invalid := errorReply(id, errMessage, msgInvalidMessage)
-	if !filepath.IsAbs(path) || !fitsMessage(caption) {
+	if !fitsMessage(caption) {
 		return invalid, nil
 	}
-	f, err := os.Open(path)
+	f, st, err := openSendable(path)
 	if err != nil {
 		return invalid, nil
 	}
 	defer f.Close()
-	st, err := f.Stat()
-	if err != nil || !st.Mode().IsRegular() || st.Size() == 0 || st.Size() > maxSendBytes {
-		return invalid, nil
-	}
 	m := whatsapp.Media{Kind: media.Document, Mime: sniffMime(path, f), Name: filepath.Base(path), Size: st.Size(), Key: make([]byte, 32)}
 	if sendableImages[m.Mime] {
 		m.Kind, m.Name = media.Image, ""

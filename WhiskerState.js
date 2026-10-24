@@ -336,8 +336,9 @@ function messagesPage(state, result) {
   return withChanges(next, { openChat: withChanges(next.openChat, { moreMessages: result.more === true }) })
 }
 
-// The Draft of the open Chat: { text, quote, edit }. The Daemon stores it; `quote` and `edit` are Message ids or "".
-var EMPTY_DRAFT = { text: "", quote: "", edit: "" }
+// The Draft of the open Chat: { text, quote, edit, attachment }. The Daemon stores it.
+// `quote` and `edit` are Message ids or "". `attachment` is the absolute path of the staged file or "".
+var EMPTY_DRAFT = { text: "", quote: "", edit: "", attachment: "" }
 
 function draftOf(state) {
   return (state.openChat && state.openChat.draft) || EMPTY_DRAFT
@@ -351,11 +352,16 @@ function draftLoaded(state, result) {
 }
 
 // Changes the Draft of the open Chat. Returns the same state when nothing changes.
+// A staged file and an Edit never combine. Starting an Edit drops the file. Staging a file during an Edit is refused.
 function changeDraft(state, changes) {
   if (!state.openChat) return state
-  var draft = withChanges(draftOf(state), changes)
   var old = draftOf(state)
-  if (draft.text === old.text && draft.quote === old.quote && draft.edit === old.edit) return state
+  var draft = withChanges(old, changes)
+  if (draft.edit && draft.attachment) {
+    if (changes.edit) draft = withChanges(draft, { attachment: "" })
+    else return state
+  }
+  if (draft.text === old.text && draft.quote === old.quote && draft.edit === old.edit && draft.attachment === old.attachment) return state
   return withChanges(state, { openChat: withChanges(state.openChat, { draft: draft }) })
 }
 
@@ -375,7 +381,7 @@ function draftGetRequest(id, jid) {
 }
 
 function draftSetRequest(id, jid, draft) {
-  return request(id, "draft.set", { chat: jid, text: draft.text, quote: draft.quote, edit: draft.edit })
+  return request(id, "draft.set", { chat: jid, text: draft.text, quote: draft.quote, edit: draft.edit, attachment: draft.attachment })
 }
 
 // The request for one page of the Chat timeline. The next page starts at the number of Messages shown.
@@ -390,9 +396,18 @@ function sendRequest(id, jid, text, quoteId) {
   return request(id, "chat.send", params)
 }
 
-// The request to send a file as Media. `url` is the file:// URL that FileDialog gives; the Daemon needs a path.
-function sendMediaRequest(id, jid, url, caption) {
-  var path = decodeURIComponent(String(url).replace(/^file:\/\//, ""))
+// The path of a file:// URL that FileDialog gives. The Daemon needs a path.
+function filePath(url) {
+  return decodeURIComponent(String(url).replace(/^file:\/\//, ""))
+}
+
+// The file name of the staged file, shown in the composer.
+function attachmentName(draft) {
+  return draft.attachment.split("/").pop()
+}
+
+// The request to send the file at `path` as Media.
+function sendMediaRequest(id, jid, path, caption) {
   return request(id, "chat.sendMedia", { chat: jid, path: path, caption: caption })
 }
 
@@ -402,10 +417,11 @@ function retryMessageRequest(id, jid, messageId) {
 
 // What the composer does with a key press: "send", "swallow" (Enter with nothing to send) or "default" (the text field handles it).
 // Enter sends and Shift+Enter adds a line. These keybindings are fixed.
-function composerAction(key, shift, text) {
+// A staged file can go without text.
+function composerAction(key, shift, text, hasAttachment) {
   if (key !== KEY_RETURN && key !== KEY_ENTER) return "default"
   if (shift) return "default"
-  return String(text).trim() === "" ? "swallow" : "send"
+  return String(text).trim() === "" && !hasAttachment ? "swallow" : "send"
 }
 
 // The fixed shortcuts of the pop-out. `shortcut` is "Escape" or "Ctrl+F"; `local` is { showSettings } as in panelParts.
@@ -514,8 +530,10 @@ function revokeRequest(id, jid, messageId) {
 
 // The request for the composer text: an edit of `editingId`, or a new Message when `editingId` is empty.
 // A new Message quotes `quoteId` when it is set.
-function composerRequest(id, jid, editingId, text, quoteId) {
-  return editingId ? editRequest(id, jid, editingId, text) : sendRequest(id, jid, text, quoteId)
+// A staged file (`attachment`, a path) goes as Media with the text as caption, without the Quote. Media has no Quote yet.
+function composerRequest(id, jid, editingId, text, quoteId, attachment) {
+  if (editingId) return editRequest(id, jid, editingId, text)
+  return attachment ? sendMediaRequest(id, jid, attachment, text) : sendRequest(id, jid, text, quoteId)
 }
 
 // The Reaction picker: the six default emoji of WhatsApp. Mirror of `ReactionEmoji` in daemon/internal/contract/react.go.

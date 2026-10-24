@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- The Attach button no longer sends the file at once. The file waits in the Draft as "Attached: name" with a remove button (✕). Enter sends it with the text as caption. The Draft keeps the file over a Chat switch, closing the pop-out and a Daemon restart. Starting an Edit drops the file.
 - A contact no longer shows as two Chats, one with the contact name and one with the phone number. WhatsApp sends the LID to phone number mapping after the Chat, and the Daemon now merges the two Chats, with their Messages, Drafts and Media.
 - Incoming Messages show again. The Daemon took every ordinary Message for a revoke and dropped it.
 - A Message that WhatsApp addresses by LID goes to the Chat of the phone JID, not to a second Chat.

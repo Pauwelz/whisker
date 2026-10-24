@@ -39,20 +39,21 @@ type request struct {
 	ID     json.RawMessage `json:"id"`
 	Method string          `json:"method"`
 	Params struct {
-		Phone   string `json:"phone"`
-		Offset  int    `json:"offset"`
-		Limit   int    `json:"limit"`
-		Query   string `json:"query"`
-		Chat    string `json:"chat"`
-		Text    string `json:"text"`
-		Caption string `json:"caption"`
-		Open    bool   `json:"open"`
-		Typing  bool   `json:"typing"`
-		ID      string `json:"id"`
-		Emoji   string `json:"emoji"`
-		Quote   string `json:"quote"`
-		Edit    string `json:"edit"`
-		Path    string `json:"path"`
+		Phone      string `json:"phone"`
+		Offset     int    `json:"offset"`
+		Limit      int    `json:"limit"`
+		Query      string `json:"query"`
+		Chat       string `json:"chat"`
+		Text       string `json:"text"`
+		Caption    string `json:"caption"`
+		Open       bool   `json:"open"`
+		Typing     bool   `json:"typing"`
+		ID         string `json:"id"`
+		Emoji      string `json:"emoji"`
+		Quote      string `json:"quote"`
+		Edit       string `json:"edit"`
+		Path       string `json:"path"`
+		Attachment string `json:"attachment"`
 		settings.Update
 	} `json:"params"`
 }
@@ -195,7 +196,7 @@ func (s *session) draftGet(req *request) outcome {
 
 func (s *session) draftSet(req *request) outcome {
 	p := req.Params
-	return outcome{reply: draftSetReply(s.chats, req.ID, p.Chat, chatstore.Draft{Text: p.Text, Quote: p.Quote, Edit: p.Edit}, s.logOut)}
+	return outcome{reply: draftSetReply(s.chats, req.ID, p.Chat, chatstore.Draft{Text: p.Text, Quote: p.Quote, Edit: p.Edit, Attachment: p.Attachment}, s.logOut)}
 }
 
 // submitted is the follow-up of a request that stored a pending Message: before runs, the send starts, then after runs.
@@ -226,7 +227,7 @@ func (s *session) chatSend(req *request) outcome {
 func (s *session) chatSendMedia(req *request) outcome {
 	p := req.Params
 	reply, submit := chatSendMediaReply(s.chats, s.media, s.port.NewMessageID, req.ID, p.Chat, p.Path, p.Caption, s.logOut)
-	return s.submitted(reply, submit, nil, func() { s.read.interaction(p.Chat) })
+	return s.submitted(reply, submit, func() { s.clearDraft(p.Chat) }, func() { s.read.interaction(p.Chat) })
 }
 
 func (s *session) chatRetry(req *request) outcome {

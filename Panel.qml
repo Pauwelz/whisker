@@ -489,20 +489,36 @@ Panel {
             onClicked: root.whiskerService.changeDraft({ edit: "", text: "" })
           }
 
-          // The picker loads on demand, see MediaPicker.qml. The composer text becomes the caption.
+          // The picker loads on demand, see MediaPicker.qml. The picked file waits in the Draft; the composer text becomes its caption.
           Loader {
             id: picker
             active: false
             source: "MediaPicker.qml"
-            onLoaded: item.picked.connect(function(file) {
-              root.whiskerService.sendMedia(file, composer.text)
-              composer.text = ""
-            })
+            onLoaded: item.picked.connect(function(file) { root.whiskerService.stageAttachment(file) })
           }
           Button {
+            visible: root.editingId === ""
             text: "Attach"
             bordered: true
             onClicked: { picker.active = false; picker.active = true }
+          }
+
+          Text {
+            visible: root.draft.attachment !== ""
+            width: parent.width - Style.space(40)
+            elide: Text.ElideMiddle
+            textFormat: Text.PlainText
+            text: "Attached: " + State.attachmentName(root.draft)
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Button {
+            visible: root.draft.attachment !== ""
+            text: "✕"
+            bordered: true
+            onClicked: root.whiskerService.changeDraft({ attachment: "" })
           }
 
           Text {
@@ -536,7 +552,7 @@ Panel {
             onDraftTextChanged: if (text !== draftText) text = draftText
             Keys.onEscapePressed: root.runShortcut("Escape")
             Keys.onPressed: function(event) {
-              var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text)
+              var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text, root.draft.attachment !== "")
               if (action === "default") return
               event.accepted = true
               if (action === "send") {

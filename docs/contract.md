@@ -327,13 +327,13 @@ A revoke from the phone or from the other Participant arrives as `messageChanged
 
 ### `draft.get`
 
-Params: `chat`. Valid once the Daemon is `ready`. The result is `{"chat": ..., "draft": {"text", "quote", "edit"}}`. A Draft is the unsent composition of one Chat: its text, the ID of the Message it quotes (`quote`) and the ID of the Message under edit (`edit`). An empty string means none. A Chat with no Draft gives three empty strings. The Daemon drops a `quote` or `edit` whose Message is gone or revoked. The Plugin sends it when it opens a Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`.
+Params: `chat`. Valid once the Daemon is `ready`. The result is `{"chat": ..., "draft": {"text", "quote", "edit", "attachment"}}`. A Draft is the unsent composition of one Chat: its text, the ID of the Message it quotes (`quote`), the ID of the Message under edit (`edit`) and the absolute path of a staged file (`attachment`). An empty string means none. A Chat with no Draft gives four empty strings. The Daemon drops a `quote` or `edit` whose Message is gone or revoked. The Plugin sends it when it opens a Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`.
 
 ### `draft.set`
 
-Params: `chat`, `text`, `quote` and `edit`. Valid once the Daemon is `ready`. It replaces the Draft of the Chat and answers with an empty result. An empty Draft removes it. The chat store keeps Drafts, so they survive a Daemon restart. The Plugin sends it on each change of the composer.
+Params: `chat`, `text`, `quote`, `edit` and `attachment`. Valid once the Daemon is `ready`. It replaces the Draft of the Chat and answers with an empty result. An empty Draft removes it. The chat store keeps Drafts, so they survive a Daemon restart. The Plugin sends it on each change of the composer.
 
-Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is not a stored Message of the Chat. A successful `chat.send` or `chat.edit` clears the Draft of its Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`.
+Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is not a stored Message of the Chat. It also means an `attachment` that `chat.sendMedia` would refuse (not absolute, not a regular file, empty or over 100 MiB), or an `attachment` together with an `edit`. A staged file and an Edit never combine: the Plugin drops the file when an Edit starts, and refuses to stage a file during an Edit. A file that is gone at send time gives the error of `chat.sendMedia`. A successful `chat.send`, `chat.sendMedia` or `chat.edit` clears the Draft of its Chat. A Quote does not go with a staged file: `chat.sendMedia` has no Quote. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`, `draft-attachment.jsonl`.
 
 ### Presence
 

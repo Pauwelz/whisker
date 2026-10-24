@@ -219,7 +219,7 @@ Item {
   // The Daemon clears the Draft when it accepts the send or edit; the view clears its copy at once.
   function submitComposer(text) {
     var draft = State.draftOf(view)
-    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, draft.edit, text, draft.quote))
+    daemon.write(State.composerRequest(nextRequestId++, view.openChat.jid, draft.edit, text, draft.quote, draft.attachment))
     view = State.clearDraft(view)
   }
 
@@ -228,9 +228,9 @@ Item {
     daemon.write(State.reactRequest(nextRequestId++, view.openChat.jid, message.id, State.reactionChoice(message, emoji)))
   }
 
-  // Called by the file picker of the composer. `url` is the picked file, the composer text is its caption.
-  function sendMedia(url, caption) {
-    daemon.write(State.sendMediaRequest(nextRequestId++, view.openChat.jid, url, caption))
+  // Called by the file picker of the composer. `url` is the picked file. It waits in the Draft until the user sends.
+  function stageAttachment(url) {
+    changeDraft({ attachment: State.filePath(url) })
   }
 
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.
