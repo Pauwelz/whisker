@@ -468,9 +468,6 @@ func (r *runner) setProfile(state string) {
 
 // A failed connect of a linked Profile tells the Plugin, then connects again after ConnectRetryDelay.
 func TestConnectFailureRetries(t *testing.T) {
-	old := contract.ConnectRetryDelay
-	contract.ConnectRetryDelay = 10 * time.Millisecond
-	t.Cleanup(func() { contract.ConnectRetryDelay = old })
 	r := newRunner(t)
 	r.port.SetLinked(true)
 	r.port.SetConnectError(errors.New("no network"))
@@ -481,6 +478,8 @@ func TestConnectFailureRetries(t *testing.T) {
 		}
 	}
 	r.port.SetConnectError(nil)
+	r.expiry.Fire() // the sweep timer, set first
+	r.expiry.Fire() // the connect retry
 	deadline := time.Now().Add(5 * time.Second)
 	for r.port.Connects() < 2 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)

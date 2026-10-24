@@ -24,7 +24,7 @@ var Timers clock.Clock = clock.Real
 const ExpiryInterval = time.Minute
 
 // ConnectRetryDelay is the wait before the Daemon connects again after a failed connect.
-var ConnectRetryDelay = 5 * time.Second
+const ConnectRetryDelay = 5 * time.Second
 
 // sendPort is what the outbox needs from WhatsApp.
 type sendPort interface {

@@ -109,7 +109,7 @@ func (s *session) connect() bool {
 		if !s.port.Linked() {
 			return s.send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonConnectFailed}))
 		}
-		s.retryConnect = time.After(ConnectRetryDelay)
+		s.retryConnect = Timers.After(ConnectRetryDelay)
 		return s.send(notification("disconnected", nil))
 	}
 	return true
