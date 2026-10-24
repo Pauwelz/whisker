@@ -1,0 +1,32 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","lastActive":10,"messages":[]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
+{"dir":"whatsapp","download":"pixels"}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"m1","sender":"1@s.whatsapp.net","time":50,"text":"look","pushName":"Ann","media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","directPath":"/v/t/x","fileSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","fileEncSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"downloading"}}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"ready"}}}}}
+{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg","missing":true}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"m1"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","id":"m1","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg"}}}
+{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg","content":"pixels"}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"media.release","params":{"chat":"1@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{}}}
+{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg","missing":true}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"media.save","params":{"chat":"1@s.whatsapp.net","id":"m1","path":"$RUNTIME/export.jpg"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{}}}
+{"dir":"file","path":"$RUNTIME/export.jpg","content":"pixels"}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"media.save","params":{"chat":"1@s.whatsapp.net","id":"m1","path":"relative.jpg"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"error":{"code":-32008,"message":"invalid media"}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"v1","sender":"1@s.whatsapp.net","time":60,"text":"","pushName":"Ann","media":{"kind":"video","mime":"video/mp4","name":"","size":9,"key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","directPath":"/v/t/x","fileSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","fileEncSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"v1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":60,"text":"","state":"","edited":false,"revoked":false,"media":{"kind":"video","mime":"video/mp4","name":"","size":9,"state":"none"}}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"v1"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"error":{"code":-32008,"message":"invalid media"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":6,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"nope"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":6,"error":{"code":-32008,"message":"invalid media"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":7,"method":"media.download","params":{"chat":"1@s.whatsapp.net","id":"m1"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":7,"error":{"code":-32008,"message":"invalid media"}}}

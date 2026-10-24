@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"fmt"
+	"os"
 	"sync"
 )
 
@@ -21,6 +22,9 @@ type Fake struct {
 	ids        int
 	logoutErr  error
 	logouts    int
+	content    string
+	dlErr      error
+	downloads  int
 	readErr    error
 	reads      []Read
 	chatReads  []string
@@ -72,6 +76,28 @@ func (f *Fake) Send(_, id, _ string) error {
 	}
 	f.sent = append(f.sent, id)
 	return nil
+}
+
+// SetDownload scripts Download: it writes content to the file, or fails with err (a non-nil err wins).
+func (f *Fake) SetDownload(content string, err error) {
+	f.mu.Lock()
+	f.content, f.dlErr = content, err
+	f.mu.Unlock()
+}
+
+// Downloads counts the Download calls.
+func (f *Fake) Downloads() int { f.mu.Lock(); defer f.mu.Unlock(); return f.downloads }
+
+func (f *Fake) Download(_ Media, dst *os.File) error {
+	f.mu.Lock()
+	f.downloads++
+	content, err := f.content, f.dlErr
+	f.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	_, err = dst.WriteString(content)
+	return err
 }
 
 // Read is one MarkRead call that worked.

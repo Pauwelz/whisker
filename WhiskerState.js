@@ -238,6 +238,7 @@ function foldChatFrame(state, frame) {
   if (frame.method === "connected") return withChanges(state, { connection: "online" })
   if (frame.method === "disconnected") return withChanges(state, { connection: "offline" })
   if (frame.method === "messageChanged") return upsertMessage(state, frame.params.message)
+  if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
   if (frame.result && frame.result.message) return upsertMessage(state, frame.result.message)
   return null
@@ -263,6 +264,7 @@ function openChat(state, chat) {
 function closeChat(state) {
   var next = withChanges(state, {})
   delete next.openChat
+  delete next.mediaPaths
   return next
 }
 
@@ -407,4 +409,97 @@ function isNotify(frame) {
 function chatByJid(state, jid) {
   var found = (state.chats || []).filter(function(chat) { return chat.jid === jid })
   return found.length > 0 ? found[0] : { jid: jid, name: jid, kind: "direct" }
+}
+
+// Media. The Daemon sends paths only on request (media.open). `mediaPaths` holds them by Chat and Message id.
+// An empty path means the request is out. Views show the path only when it is not empty.
+function mediaKey(chat, id) {
+  return chat + "|" + id
+}
+
+function mediaPathEntry(result) {
+  var entry = {}
+  entry[mediaKey(result.chat, result.id)] = result.path
+  return entry
+}
+
+function mediaPath(state, message) {
+  return (state.mediaPaths || {})[mediaKey(message.chat, message.id)] || ""
+}
+
+// Images and stickers show inside the pop-out once the Daemon holds them.
+function showsInline(message) {
+  return !!message.media && message.media.state === "ready" && (message.media.kind === "image" || message.media.kind === "sticker")
+}
+
+// The Messages of the open Chat whose path the Plugin must ask for. markMediaRequested then stops a second request.
+function mediaToLoad(state) {
+  if (!state.openChat) return []
+  var known = state.mediaPaths || {}
+  return state.openChat.messages.filter(function(m) { return showsInline(m) && known[mediaKey(m.chat, m.id)] === undefined })
+}
+
+function markMediaRequested(state, messages) {
+  var entries = {}
+  messages.forEach(function(m) { entries[mediaKey(m.chat, m.id)] = "" })
+  return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, entries) })
+}
+
+var MEDIA_KIND_LABELS = { image: "Image", sticker: "Sticker", voice: "Voice note", video: "Video", audio: "Audio", document: "Document" }
+
+// The one line that stands for Media in the timeline, for example "Document: report.pdf (1.2 MB)".
+function mediaLabel(message) {
+  var media = message.media
+  if (!media) return ""
+  var label = MEDIA_KIND_LABELS[media.kind] || "File"
+  if (media.name) label += ": " + media.name
+  return label + " (" + formatSize(media.size) + ")"
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + " B"
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB"
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB"
+}
+
+// The state text of Media that is not ready: "" when there is nothing to say.
+function mediaStatus(message) {
+  if (!message.media) return ""
+  if (message.media.state === "downloading") return "Downloading…"
+  return message.media.state === "failed" ? "Download failed" : ""
+}
+
+function canDownloadMedia(message) {
+  return !!message.media && (message.media.state === "none" || message.media.state === "failed")
+}
+
+function canOpenMedia(message) {
+  return !!message.media && message.media.state === "ready"
+}
+
+// The command that opens a plain copy: video in mpv, everything else in the default app.
+function openCommand(message, path) {
+  return message.media.kind === "video" ? ["mpv", path] : ["xdg-open", path]
+}
+
+function mediaRequest(id, method, params) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: method, params: params }) + "\n"
+}
+
+function mediaDownloadRequest(id, message) {
+  return mediaRequest(id, "media.download", { chat: message.chat, id: message.id })
+}
+
+function mediaOpenRequest(id, message) {
+  return mediaRequest(id, "media.open", { chat: message.chat, id: message.id })
+}
+
+// `path` is the file the user chose in the Save as dialog.
+function mediaSaveRequest(id, message, path) {
+  return mediaRequest(id, "media.save", { chat: message.chat, id: message.id, path: path })
+}
+
+// The Plugin sends this when a Chat closes, so the Daemon deletes the plain copies.
+function mediaReleaseRequest(id, jid) {
+  return mediaRequest(id, "media.release", { chat: jid })
 }
