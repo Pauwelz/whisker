@@ -337,6 +337,8 @@ function attentionRequest(id, open, jid) {
 // True when the Plugin must send the pop-out state again after this frame: a new Daemon starts with a closed pop-out.
 function resendsAttention(frame) {
   return !!frame && frame.method === "ready"
+}
+
 // The text of a Tombstone, shown at the position of the revoked Message.
 var TOMBSTONE_TEXT = "This message was deleted"
 

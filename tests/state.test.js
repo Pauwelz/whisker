@@ -320,6 +320,8 @@ test("the attention request carries the pop-out state and the shown Chat", () =>
 test("the Plugin sends the pop-out state again when the Daemon is ready", () => {
   assert.equal(State.resendsAttention({ method: "ready" }), true);
   assert.equal(State.resendsAttention({ method: "linked" }), false);
+});
+
 const sentMessage = (extra) => Object.assign({ id: "m1", chat: direct.jid, fromMe: true, time: 1000, text: "hi", state: "sent", edited: false, revoked: false }, extra);
 
 test("a Tombstone shows a fixed text, an edited Message shows Edited", () => {
