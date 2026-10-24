@@ -320,3 +320,52 @@ func TestMentionsUseTheNameRuleAndRevokeClearsThem(t *testing.T) {
 		t.Fatalf("a Tombstone keeps no mentions: %q %v", m.Text, m.Mentions)
 	}
 }
+
+const syncJID = "1111@s.whatsapp.net"
+
+func history(pinned bool, muted int64, unread bool, timer int64) whatsapp.HistorySync {
+	return whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: syncJID, LastActive: 5, Pinned: pinned, MutedUntil: muted, Unread: unread, Timer: timer}}}
+}
+
+func TestHistorySyncFillsFlagsOfAChatThatALiveMessageCreated(t *testing.T) {
+	s, _ := newStore(t)
+	if err := s.PutLive(whatsapp.NewMessage{Chat: syncJID, Message: whatsapp.Message{ID: "m1", Time: 5, Text: "hi"}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+		t.Fatal(err)
+	}
+	apply(t, s, history(true, -1, true, 60))
+	c, err := s.Chat(syncJID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Pinned || !c.Muted || !c.Unread || c.Timer != 60 {
+		t.Errorf("chat = %+v; want pinned, muted, unread, timer 60 from History Sync", c)
+	}
+}
+
+func TestLiveFlagsSurviveALateHistorySync(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, history(false, 0, true, 0))
+	apply(t, s, whatsapp.Pin{JID: syncJID, Pinned: true})
+	apply(t, s, whatsapp.Mute{JID: syncJID, Until: -1})
+	apply(t, s, whatsapp.ReadMarker{JID: syncJID, Unread: false})
+	apply(t, s, whatsapp.ChatTimer{Chat: syncJID, Seconds: 30})
+	apply(t, s, history(false, 0, true, 0))
+	c, err := s.Chat(syncJID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Pinned || !c.Muted || c.Unread || c.Timer != 30 {
+		t.Errorf("chat = %+v; want the live values: pinned, muted, read, timer 30", c)
+	}
+}
+
+func TestLiveMessageUnreadStaysOverALateHistorySync(t *testing.T) {
+	s, _ := newStore(t)
+	if err := s.PutLive(whatsapp.NewMessage{Chat: syncJID, Message: whatsapp.Message{ID: "m1", Time: 5}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone, MarkUnread: true}); err != nil {
+		t.Fatal(err)
+	}
+	apply(t, s, history(false, 0, false, 0))
+	if c, _ := s.Chat(syncJID); !c.Unread {
+		t.Error("a live unread Chat turned read by a late History Sync")
+	}
+}

@@ -494,13 +494,13 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
 	if _, err := tx.Exec(`UPDATE messages SET read_pending = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
 		return err
 	}
-	_, err := tx.Exec(`UPDATE chats SET unread = 1 WHERE jid = ?`, ev.Chat)
+	_, err := tx.Exec(`UPDATE chats SET unread = 1, live_flags = live_flags | ? WHERE jid = ?`, flagUnread, ev.Chat)
 	return err
 }
 
 // ClearUnread clears the Read Marker of a Chat. It reports whether the marker was set.
 func (s *Store) ClearUnread(chat string) (bool, error) {
-	return s.change(`UPDATE chats SET unread = 0 WHERE jid = ? AND unread = 1`, chat)
+	return s.change(`UPDATE chats SET unread = 0, live_flags = live_flags | ? WHERE jid = ? AND unread = 1`, flagUnread, chat)
 }
 
 // Unreceipted is a Message of another Participant that waits for its Read Receipt.

@@ -29,9 +29,10 @@ func (s *Store) MergeChat(lid, phone string) (changed bool, err error) {
 			`UPDATE drafts SET text = CASE WHEN drafts.text = '' THEN l.text WHEN l.text = '' THEN drafts.text ELSE drafts.text || char(10) || l.text END
 				FROM (SELECT text FROM drafts WHERE chat_jid = :lid) AS l WHERE drafts.chat_jid = :phone`,
 			// Copy the LID Chat under the phone JID when the phone Chat is absent, then merge the flags. -1 (muted for ever) beats any end time.
-			`INSERT OR IGNORE INTO chats (jid, kind, subject, last_active, pinned, muted_until, unread, timer)
-				SELECT :phone, kind, subject, last_active, pinned, muted_until, unread, timer FROM chats WHERE jid = :lid`,
+			`INSERT OR IGNORE INTO chats (jid, kind, subject, last_active, pinned, muted_until, unread, timer, live_flags)
+				SELECT :phone, kind, subject, last_active, pinned, muted_until, unread, timer, live_flags FROM chats WHERE jid = :lid`,
 			`UPDATE chats SET
+				live_flags = chats.live_flags | l.live_flags,
 				last_active = MAX(chats.last_active, l.last_active), pinned = chats.pinned OR l.pinned, unread = chats.unread OR l.unread,
 				muted_until = CASE WHEN chats.muted_until = -1 OR l.muted_until = -1 THEN -1 ELSE MAX(chats.muted_until, l.muted_until) END,
 				timer = CASE WHEN chats.timer <> 0 THEN chats.timer ELSE l.timer END

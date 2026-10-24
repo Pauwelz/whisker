@@ -63,13 +63,13 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 	case whatsapp.ContactName:
 		err = setName(s.db, "contact_name", ev.JID, ev.Name)
 	case whatsapp.Pin:
-		err = s.setFlag("pinned", ev.JID, boolInt(ev.Pinned))
+		err = s.setFlag("pinned", flagPin, ev.JID, boolInt(ev.Pinned))
 	case whatsapp.Mute:
-		err = s.setFlag("muted_until", ev.JID, ev.Until)
+		err = s.setFlag("muted_until", flagMute, ev.JID, ev.Until)
 	case whatsapp.ReadMarker:
-		err = s.setFlag("unread", ev.JID, boolInt(ev.Unread))
+		err = s.setFlag("unread", flagUnread, ev.JID, boolInt(ev.Unread))
 	case whatsapp.ChatTimer:
-		err = s.setFlag("timer", ev.Chat, ev.Seconds)
+		err = s.setFlag("timer", flagTimer, ev.Chat, ev.Seconds)
 	default:
 		return false, nil
 	}
@@ -241,9 +241,17 @@ func setName(db execer, column, jid, name string) error {
 	return err
 }
 
-// setFlag sets one App State column of a stored Chat. column is a fixed string from this file.
-func (s *Store) setFlag(column, jid string, value int64) error {
-	_, err := s.db.Exec("UPDATE chats SET "+column+" = ? WHERE jid = ?", value, jid)
+// The bits of chats.live_flags. A bit is set once a live event has set that flag.
+const (
+	flagPin = 1 << iota
+	flagMute
+	flagUnread
+	flagTimer
+)
+
+// setFlag sets one live column of a stored Chat and marks it live. column is a fixed string from this file.
+func (s *Store) setFlag(column string, bit int, jid string, value int64) error {
+	_, err := s.db.Exec("UPDATE chats SET "+column+" = ?, live_flags = live_flags | ? WHERE jid = ?", value, bit, jid)
 	return err
 }
 
@@ -257,8 +265,12 @@ func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 		ON CONFLICT(jid) DO UPDATE SET kind = excluded.kind,
 		  subject = CASE WHEN excluded.subject = '' THEN subject ELSE excluded.subject END,
 		  last_active = MAX(last_active, excluded.last_active),
-		  timer = excluded.timer`, // pinned, muted_until and unread stay: live App State is newer than a History Sync batch
-		c.JID, kindOrDirect(c.Kind), c.Subject, last, boolInt(c.Pinned), c.MutedUntil, boolInt(c.Unread), c.Timer)
+		  pinned = CASE WHEN live_flags & :pin THEN pinned ELSE excluded.pinned END,
+		  muted_until = CASE WHEN live_flags & :mute THEN muted_until ELSE excluded.muted_until END,
+		  unread = CASE WHEN live_flags & :unread THEN unread ELSE excluded.unread END,
+		  timer = CASE WHEN live_flags & :timer THEN timer ELSE excluded.timer END`, // a flag that a live event set stays: live App State is newer than a History Sync batch
+		c.JID, kindOrDirect(c.Kind), c.Subject, last, boolInt(c.Pinned), c.MutedUntil, boolInt(c.Unread), c.Timer,
+		sql.Named("pin", flagPin), sql.Named("mute", flagMute), sql.Named("unread", flagUnread), sql.Named("timer", flagTimer))
 	if err != nil {
 		return err
 	}
