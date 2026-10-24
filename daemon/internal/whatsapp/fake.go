@@ -21,6 +21,9 @@ type Fake struct {
 	ids        int
 	logoutErr  error
 	logouts    int
+	readErr    error
+	reads      []Read
+	chatReads  []string
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -66,6 +69,47 @@ func (f *Fake) Send(_, id, _ string) error {
 		return f.sendErr
 	}
 	f.sent = append(f.sent, id)
+	return nil
+}
+
+// Read is one MarkRead call that worked.
+type Read struct {
+	Chat   string   `json:"chat"`
+	Sender string   `json:"sender"`
+	IDs    []string `json:"ids"`
+}
+
+// SetReadError makes MarkRead fail with err. Pass nil to stop failing.
+func (f *Fake) SetReadError(err error) { f.mu.Lock(); f.readErr = err; f.mu.Unlock() }
+
+// Reads lists the MarkRead calls that worked, in order.
+func (f *Fake) Reads() []Read {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Read{}, f.reads...)
+}
+
+// ChatReads lists the Chats of the MarkChatRead calls, in order.
+func (f *Fake) ChatReads() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.chatReads...)
+}
+
+func (f *Fake) MarkRead(chat, sender string, ids []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.readErr != nil {
+		return f.readErr
+	}
+	f.reads = append(f.reads, Read{chat, sender, append([]string{}, ids...)})
+	return nil
+}
+
+func (f *Fake) MarkChatRead(chat string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.chatReads = append(f.chatReads, chat)
 	return nil
 }
 

@@ -175,11 +175,64 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message) error {
 }
 
 // putLiveMessage stores a Message that arrived live. It creates the Chat if History Sync has not.
+// A new Message of another Participant sets the Read Marker and waits for its Read Receipt.
 func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage) error {
 	if _, err := tx.Exec(`INSERT INTO chats (jid, kind, last_active) VALUES (?, ?, ?)
 		ON CONFLICT(jid) DO UPDATE SET last_active = MAX(last_active, excluded.last_active)`,
 		ev.Chat, kindOrDirect(ev.Kind), ev.Message.Time); err != nil {
 		return err
 	}
-	return putMessage(tx, ev.Chat, ev.Message)
+	var known int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID).Scan(&known); err != nil {
+		return err
+	}
+	if err := putMessage(tx, ev.Chat, ev.Message); err != nil {
+		return err
+	}
+	if known > 0 || ev.Message.FromMe {
+		return nil
+	}
+	if _, err := tx.Exec(`UPDATE messages SET read_pending = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE chats SET unread = 1 WHERE jid = ?`, ev.Chat)
+	return err
+}
+
+// ClearUnread clears the Read Marker of a Chat. It reports whether the marker was set.
+func (s *Store) ClearUnread(chat string) (bool, error) {
+	return s.change(`UPDATE chats SET unread = 0 WHERE jid = ? AND unread = 1`, chat)
+}
+
+// Unreceipted is a Message of another Participant that waits for its Read Receipt.
+type Unreceipted struct{ ID, Sender string }
+
+// Unreceipted returns the Messages of a Chat that wait for a Read Receipt, oldest first.
+func (s *Store) Unreceipted(chat string) ([]Unreceipted, error) {
+	rows, err := s.db.Query(`SELECT id, sender_jid FROM messages WHERE chat_jid = ? AND read_pending = 1 ORDER BY time, rowid`, chat)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []Unreceipted
+	for rows.Next() {
+		var u Unreceipted
+		if err := rows.Scan(&u.ID, &u.Sender); err != nil {
+			return nil, err
+		}
+		list = append(list, u)
+	}
+	return list, rows.Err()
+}
+
+// Receipted records that the Read Receipt of these Messages is sent.
+func (s *Store) Receipted(chat string, ids []string) error {
+	return s.inTx(func(tx *sql.Tx) error {
+		for _, id := range ids {
+			if _, err := tx.Exec(`UPDATE messages SET read_pending = 0 WHERE chat_jid = ? AND id = ?`, chat, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

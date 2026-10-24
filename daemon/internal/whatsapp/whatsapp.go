@@ -25,6 +25,11 @@ type Port interface {
 	// Send sends a text Message to a Chat. It returns ErrOffline when there is no connection.
 	// It can block for a long time: call it off the Daemon loop.
 	Send(chat, id, text string) error
+	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.
+	// It returns ErrOffline when there is no connection.
+	MarkRead(chat, sender string, ids []string) error
+	// MarkChatRead clears the Read Marker of a Chat on the user's devices (App State). It needs a connection.
+	MarkChatRead(chat string) error
 	// Events delivers events in order. The channel stays open until the process ends.
 	Events() <-chan Event
 }

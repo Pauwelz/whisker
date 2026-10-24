@@ -16,6 +16,7 @@ import (
 
 	"rsc.io/qr"
 
+	"github.com/Pauwelz/whisker/daemon/internal/attention"
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
@@ -41,6 +42,7 @@ const (
 	methodChatMessages = "chat.messages"
 	methodChatSend     = "chat.send"
 	methodChatRetry    = "chat.retry"
+	methodAttentionSet = "attention.set"
 	methodSettingsGet  = "settings.get"
 	methodSettingsSet  = "settings.set"
 	methodLogout       = "profile.logout"
@@ -98,6 +100,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	var events <-chan whatsapp.Event  // nil (never ready) until a port exists
 	var chats *chatstore.Store        // nil until the Profile is open
 	var box *outbox                   // nil until the Profile is open
+	var read *reader                  // clears Read Markers and sends Read Receipts, nil until the Profile is open
+	var attn attention.Attention      // the pop-out state: it outlives the Profile, so a new link keeps it
 	var sent <-chan sendResult        // the results of the sends, nil until the Profile is open
 	var retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
 
@@ -134,6 +138,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			chats = chatstore.New(profile.Chat(), Now)
 			box = newOutbox(chats, port, send, logOut)
 			sent = box.results
+			read = &reader{chats: chats, port: port, prefs: prefs, attn: &attn, logOut: logOut}
+			box.incoming = read.incoming
 			ready = true
 			if !send(notification("ready", nil)) || !startPort() {
 				return ExitError
@@ -157,7 +163,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	// `by` is "user" for Log out. It is empty when the phone removed the Companion Device.
 	unlink := func(by string) int {
 		port.Disconnect()
-		ready, port, events, chats, box, sent, retryConnect = false, nil, nil, nil, nil, nil, nil
+		ready, port, events, chats, box, read, sent, retryConnect = false, nil, nil, nil, nil, nil, nil, nil
+		attn.Set(attn.Open(), "") // the Chat is gone with the Profile
 		if err := profile.Delete(); err != nil {
 			fmt.Fprintln(logOut, "profile delete failed")
 			return ExitError
@@ -213,12 +220,13 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 					Query  string `json:"query"`
 					Chat   string `json:"chat"`
 					Text   string `json:"text"`
+					Open   bool   `json:"open"`
 					ID     string `json:"id"`
 					settings.Update
 				} `json:"params"`
 			}
 			var reply map[string]any
-			retryKeyring, retryLink, logout := false, false, false
+			retryKeyring, retryLink, logout, listChanged := false, false, false, false
 			var submit *chatstore.Message // a pending Message to send after the reply
 			linking := ready && !port.Linked()
 			if err := json.Unmarshal(line, &req); err != nil {
@@ -241,6 +249,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 				reply, submit = chatSendReply(chats, port, req.ID, req.Params.Chat, req.Params.Text, logOut)
 			} else if req.Method == methodChatRetry && ready && port.Linked() {
 				reply, submit = chatRetryReply(chats, req.ID, req.Params.Chat, req.Params.ID, logOut)
+			} else if req.Method == methodAttentionSet && ready {
+				listChanged = read.setAttention(req.Params.Open, req.Params.Chat)
+				reply = resultReply(req.ID, map[string]any{})
 			} else if req.Method == methodSettingsGet && ready {
 				reply = settingsReply(req.ID, logOut, func() (settings.Settings, error) { return prefs.Get() })
 			} else if req.Method == methodSettingsSet && ready {
@@ -259,8 +270,14 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			if !send(reply) {
 				return ExitError
 			}
+			if listChanged && !send(notification("chatsChanged", nil)) {
+				return ExitError
+			}
 			if submit != nil {
 				box.submit(*submit)
+				if req.Method == methodChatSend {
+					read.interaction(submit.Chat) // a sent Message is the interaction
+				}
 			}
 			if retryKeyring {
 				if code := open(); code >= 0 {

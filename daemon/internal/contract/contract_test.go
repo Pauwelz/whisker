@@ -35,6 +35,9 @@ type fixtureLine struct {
 	PairError string          `json:"pairError"`
 	SendError *string         `json:"sendError"` // "" lets sends work again
 	IDs       []string        `json:"ids"`       // dir "sent": the Message IDs the fake port has sent so far
+	ReadError *string         `json:"readError"` // "" lets Read Receipts work again
+	Receipts  []whatsapp.Read `json:"receipts"`  // dir "read": the Read Receipts the fake port has sent so far
+	Markers   []string        `json:"markers"`   // dir "read": the Chats whose Read Marker the fake port has cleared
 	Event     json.RawMessage `json:"event"`
 }
 
@@ -187,6 +190,14 @@ func TestFixtures(t *testing.T) {
 					if got := r.currentPort().Sent(); !reflect.DeepEqual(got, append([]string{}, line.IDs...)) {
 						t.Errorf("sent IDs = %v, want %v", got, line.IDs)
 					}
+				case "read":
+					f := r.currentPort()
+					if got, want := mustJSON(f.Reads()), mustJSON(append([]whatsapp.Read{}, line.Receipts...)); got != want {
+						t.Errorf("Read Receipts = %s, want %s", got, want)
+					}
+					if got, want := mustJSON(f.ChatReads()), mustJSON(append([]string{}, line.Markers...)); got != want {
+						t.Errorf("Read Markers cleared = %s, want %s", got, want)
+					}
 				case "clock":
 					r.start()
 					r.clock.Fire()
@@ -234,6 +245,12 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			f.SetSendError(whatsapp.ErrOffline)
 		} else {
 			f.SetSendError(errors.New(*line.SendError))
+		}
+	case line.ReadError != nil:
+		if *line.ReadError == "" {
+			f.SetReadError(nil)
+		} else {
+			f.SetReadError(whatsapp.ErrOffline)
 		}
 	case line.PairError == "invalid-phone":
 		f.SetPairCode("", whatsapp.ErrInvalidPhone)
@@ -513,4 +530,12 @@ func TestLogoutNeedsALinkedProfile(t *testing.T) {
 		t.Errorf("frame = %s, want method not found", f)
 	}
 	r.finish()
+}
+
+func mustJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
 }

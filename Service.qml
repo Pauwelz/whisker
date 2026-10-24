@@ -54,11 +54,27 @@ Item {
   // Called when the user picks a Chat of the Chat list. `chat` is a row of the list.
   function openChat(chat) {
     view = State.openChat(view, chat)
+    syncAttention()
     daemon.write(State.messagesRequest(nextRequestId++, chat.jid, 0))
   }
 
   function closeChat() {
     view = State.closeChat(view)
+    syncAttention()
+  }
+
+  // Called by the pop-out when it opens or closes. The Daemon derives the Attended Chat from this and the shown Chat.
+  // shortcut: with several monitors the last pop-out to report wins, upgrade if two pop-outs can be open at once.
+  property bool popoutOpen: false
+
+  function setPopoutOpen(open) {
+    popoutOpen = open
+    syncAttention()
+  }
+
+  function syncAttention() {
+    if (!daemon.running) return
+    daemon.write(State.attentionRequest(nextRequestId++, popoutOpen, view.openChat ? view.openChat.jid : ""))
   }
 
   // Called by the "Load older" button of the open Chat.
@@ -143,6 +159,7 @@ Item {
         var frame = State.parseLine(line)
         if (!frame) return
         root.view = State.applyFrame(root.view, frame)
+        if (State.resendsAttention(frame)) root.syncAttention()
         if (State.requestsSettings(frame)) daemon.write(State.settingsGetRequest(root.nextRequestId++))
         if (State.refreshesChats(frame)) daemon.write(State.chatListRequest(root.nextRequestId++, 0, root.chatQuery))
       }

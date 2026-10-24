@@ -23,6 +23,8 @@ Panel {
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
+  onOpenedChanged: if (whiskerService) whiskerService.setPopoutOpen(opened)
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
