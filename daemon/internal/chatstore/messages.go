@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
@@ -14,20 +15,22 @@ var ErrNoChat = errors.New("no such chat")
 // Message is one Message of a Chat timeline, as the Plugin sees it.
 // State is the Delivery State of the user's own Messages, and empty for the Messages of others.
 // SenderName follows the name rule and is empty for the user's own Messages.
-// Quote and Reactions are left out of the JSON when empty. Later tickets add keys here (Media).
+// Quote and Reactions are left out of the JSON when empty. Media is nil for a text Message.
 type Message struct {
-	ID         string     `json:"id"`
-	Chat       string     `json:"chat"`
-	Sender     string     `json:"sender"`
-	SenderName string     `json:"senderName"`
-	FromMe     bool       `json:"fromMe"`
-	Time       int64      `json:"time"`
-	Text       string     `json:"text"`
-	State      string     `json:"state"`
-	Edited     bool       `json:"edited"`
-	Revoked    bool       `json:"revoked"` // a Tombstone: the text is empty
-	Quote      *Quote     `json:"quote,omitempty"`
-	Reactions  []Reaction `json:"reactions,omitempty"` // at most one per Participant, in the order they were first set
+	ID         string `json:"id"`
+	Chat       string `json:"chat"`
+	Sender     string `json:"sender"`
+	SenderName string `json:"senderName"`
+	FromMe     bool   `json:"fromMe"`
+	Time       int64  `json:"time"`
+	Text       string `json:"text"`
+	State      string `json:"state"`
+	Edited     bool   `json:"edited"`
+	Revoked    bool   `json:"revoked"` // a Tombstone: the text is empty
+	// Media is nil for a text Message. It never holds a path or bytes: paths come from media.open.
+	Media     *MediaInfo `json:"media,omitempty"`
+	Quote     *Quote     `json:"quote,omitempty"`
+	Reactions []Reaction `json:"reactions,omitempty"` // at most one per Participant, in the order they were first set
 }
 
 // Quote is the Message that a reply quotes: a snapshot taken when the reply was stored.
@@ -48,6 +51,23 @@ type Reaction struct {
 	Emoji      string `json:"emoji"`
 }
 
+// MediaInfo is the Media of a Message as the Plugin sees it. State is one of the Media states below.
+type MediaInfo struct {
+	Kind  media.Kind `json:"kind"`
+	Mime  string     `json:"mime"`
+	Name  string     `json:"name"`
+	Size  int64      `json:"size"`
+	State string     `json:"state"`
+}
+
+// Media states.
+const (
+	MediaNone        = "none"
+	MediaDownloading = "downloading"
+	MediaReady       = "ready"
+	MediaFailed      = "failed"
+)
+
 // MessagePage is a page of a Chat timeline, oldest first. More tells whether older Messages exist.
 type MessagePage struct {
 	Messages []Message
@@ -60,8 +80,10 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 // Timeline order: by time, then by arrival (rowid), so two Messages in one second keep their order.
 const selectMessage = `
 	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
-		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, '')
-	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN names q ON q.jid = m.quote_sender `
+		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, ''),
+	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, '')
+	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN names q ON q.jid = m.quote_sender
+	LEFT JOIN media md ON md.chat_jid = m.chat_jid AND md.id = m.id `
 
 // Messages returns one page of a Chat timeline. Offset 0 is the newest page.
 func (s *Store) Messages(chat string, offset, limit int) (MessagePage, error) {
@@ -161,8 +183,26 @@ func (s *Store) Edit(chat, id, sender string, fromMe bool, text string) (bool, e
 }
 
 // Revoke turns a Message into a Tombstone: it empties the text and keeps the position. It reports whether the Message changed.
+// A Tombstone keeps no Media: the Media row goes, and so does the stored file (through RemoveMedia).
 func (s *Store) Revoke(chat, id string) (bool, error) {
-	return s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1 WHERE chat_jid = ? AND id = ? AND revoked = 0`, chat, id)
+	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1 WHERE chat_jid = ? AND id = ? AND revoked = 0`, chat, id)
+	if err != nil || !changed {
+		return changed, err
+	}
+	if _, err := s.DeleteMedia(chat, id); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+// DeleteMedia removes the Media row of a Message and calls RemoveMedia. It reports whether a row existed.
+// Disappearing Messages use it too.
+func (s *Store) DeleteMedia(chat, id string) (bool, error) {
+	had, err := s.change(`DELETE FROM media WHERE chat_jid = ? AND id = ?`, chat, id)
+	if had && s.RemoveMedia != nil {
+		s.RemoveMedia(chat, id)
+	}
+	return had, err
 }
 
 // SetReaction sets the Reaction of a Participant on a stored Message, or removes it when emoji is empty.
@@ -245,9 +285,13 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var q Quote
+		var mi MediaInfo
 		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push,
-			&q.ID, &q.Sender, &q.Text, &qContact, &qPush); err != nil {
+			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State); err != nil {
 			return nil, err
+		}
+		if mi.Kind != "" {
+			m.Media = &mi
 		}
 		if !m.FromMe {
 			m.SenderName = participantName(contact, push, m.Sender)
@@ -265,7 +309,8 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 }
 
 // putMessage stores a Message that arrived live or in History Sync, and the Push Name that came with it.
-func putMessage(tx *sql.Tx, chat string, m whatsapp.Message) error {
+// mediaState is the state of the Media row: a live Message of a kind that downloads by itself starts downloading.
+func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) error {
 	state := ""
 	if m.FromMe {
 		state = whatsapp.StateSent
@@ -279,10 +324,48 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message) error {
 		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text); err != nil {
 		return err
 	}
+	if m.Media != nil {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState); err != nil {
+			return err
+		}
+	}
 	if !m.FromMe && m.PushName != "" {
 		return setName(tx, "push_name", m.Sender, m.PushName)
 	}
 	return nil
+}
+
+// MediaRef is the stored Media of a Message, with what a download or a decrypt needs.
+type MediaRef struct {
+	whatsapp.Media
+	State string
+}
+
+// MediaOf returns the Media of a Message. It returns sql.ErrNoRows when the Message has none.
+func (s *Store) MediaOf(chat, id string) (MediaRef, error) {
+	var r MediaRef
+	err := s.db.QueryRow(`SELECT kind, mime, name, size, media_key, direct_path, COALESCE(file_sha256, x''), COALESCE(file_enc_sha256, x''), state
+		FROM media WHERE chat_jid = ? AND id = ?`, chat, id).
+		Scan(&r.Kind, &r.Mime, &r.Name, &r.Size, &r.Key, &r.DirectPath, &r.FileSHA256, &r.FileEncSHA256, &r.State)
+	return r, err
+}
+
+// BeginDownload moves Media from none or failed to downloading. It reports whether it moved.
+func (s *Store) BeginDownload(chat, id string) (bool, error) {
+	return s.change(`UPDATE media SET state = ? WHERE chat_jid = ? AND id = ? AND state IN (?, ?)`, MediaDownloading, chat, id, MediaNone, MediaFailed)
+}
+
+// EndDownload moves downloading Media to ready or failed. It reports whether it moved.
+func (s *Store) EndDownload(chat, id, state string) (bool, error) {
+	return s.change(`UPDATE media SET state = ? WHERE chat_jid = ? AND id = ? AND state = ?`, state, chat, id, MediaDownloading)
+}
+
+// ResetDownloads sets Media that was downloading when the Daemon stopped back to none, so a click can fetch it again.
+func (s *Store) ResetDownloads() error {
+	_, err := s.db.Exec(`UPDATE media SET state = ? WHERE state = ?`, MediaNone, MediaDownloading)
+	return err
 }
 
 // putLiveMessage stores a Message that arrived live. It creates the Chat if History Sync has not.
@@ -297,7 +380,11 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage) error {
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID).Scan(&known); err != nil {
 		return err
 	}
-	if err := putMessage(tx, ev.Chat, ev.Message); err != nil {
+	mediaState := MediaNone
+	if ev.Message.Media != nil && ev.Message.Media.Kind.Auto() {
+		mediaState = MediaDownloading
+	}
+	if err := putMessage(tx, ev.Chat, ev.Message, mediaState); err != nil {
 		return err
 	}
 	if known > 0 || ev.Message.FromMe {

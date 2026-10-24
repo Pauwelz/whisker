@@ -15,6 +15,7 @@ import (
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 )
 
 type Profile struct {
@@ -29,6 +30,16 @@ func New(dir string, keys *keystore.Store) *Profile { return &Profile{Dir: dir, 
 
 // Chat returns the chat store. It is valid after a successful Open.
 func (p *Profile) Chat() *sql.DB { return p.chat }
+
+// Media returns the Media of the Profile: encrypted files in the Profile, plain copies in $XDG_RUNTIME_DIR/whisker/media.
+// Without XDG_RUNTIME_DIR the store refuses plain copies (the Daemon exits at start without it).
+func (p *Profile) Media() *media.Store {
+	plain := ""
+	if rt := os.Getenv("XDG_RUNTIME_DIR"); rt != "" {
+		plain = filepath.Join(rt, "whisker", "media")
+	}
+	return media.New(filepath.Join(p.Dir, "media"), plain)
+}
 
 // Device returns the whatsmeow device store. It is valid after a successful Open.
 func (p *Profile) Device() *sqlstore.Container { return p.device }
