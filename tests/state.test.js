@@ -132,3 +132,37 @@ test("Retry asks the Daemon for a keyring problem and fetches otherwise", () => 
   assert.equal(State.retryKind({ screen: "keyring-unavailable" }), "keyring");
   assert.equal(State.retryKind(State.downloadFailed(22)), "download");
 });
+
+test("a QR refresh replaces the code and keeps the Pair Code", () => {
+  let state = State.applyFrame(State.initialState(), { method: "linkQr", params: { qr: "data:a" } });
+  state = State.applyFrame(state, { id: 1, result: { code: "ABCD-1234" } });
+  state = State.applyFrame(state, { method: "linkQr", params: { qr: "data:b" } });
+  assert.equal(state.qr, "data:b");
+  assert.equal(state.pairCode, "ABCD-1234");
+});
+
+test("every link failure reason has its own message and a Retry", () => {
+  for (const reason of Object.keys(State.LINK_FAILURES)) {
+    const state = State.applyFrame(State.initialState(), { method: "linkFailed", params: { reason } });
+    assert.equal(state.message, State.LINK_FAILURES[reason]);
+    assert.equal(state.canRetry, true);
+  }
+  assert.equal(State.applyFrame(State.initialState(), { method: "linkFailed", params: { reason: "new" } }).message, State.LINK_FAILURES.unexpected);
+});
+
+test("the contract doc lists every link failure reason", () => {
+  const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
+  for (const reason of Object.keys(State.LINK_FAILURES)) assert.ok(doc.includes(`| \`${reason}\` |`), reason);
+});
+
+test("the Pair Code request keeps only the digits of the phone number", () => {
+  const line = State.pairCodeRequest(3, "+31 6 1234-5678");
+  assert.ok(line.endsWith("\n"));
+  assert.deepEqual(JSON.parse(line), { jsonrpc: "2.0", id: 3, method: "link.pairCode", params: { phone: "31612345678" } });
+});
+
+test("Retry on the linking screen restarts linking", () => {
+  const failed = State.applyFrame(State.initialState(), { method: "linkFailed", params: { reason: "timeout" } });
+  assert.equal(State.retryKind(failed), "link");
+  assert.deepEqual(JSON.parse(State.linkRetryRequest(4)), { jsonrpc: "2.0", id: 4, method: "link.retry" });
+});

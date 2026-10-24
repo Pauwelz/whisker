@@ -32,11 +32,21 @@ Item {
     fetch.running = true
   }
 
+  // Called by the Pair Code form.
+  function requestPairCode(phone) {
+    daemon.write(State.pairCodeRequest(nextRequestId++, phone))
+  }
+
   // Called by the Retry button.
   function retry() {
-    if (State.retryKind(view) === "keyring") {
+    var kind = State.retryKind(view)
+    if (kind === "keyring") {
       view = State.initialState()
       daemon.write(State.keyringRetryRequest(nextRequestId++))
+      return
+    }
+    if (kind === "link") {
+      daemon.write(State.linkRetryRequest(nextRequestId++))
       return
     }
     downloaded = false

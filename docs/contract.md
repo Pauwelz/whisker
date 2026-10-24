@@ -55,7 +55,39 @@ The keyring failed or did not answer in 30 s. The Daemon sends this instead of `
 
 Fixtures: `contract/fixtures/keyring-missing.jsonl`, `contract/fixtures/keyring-locked.jsonl`.
 
+### Linking
+
+After `ready`, a Profile that is not linked starts linking. A linked Profile connects at once.
+
+| Notification | Params | Meaning |
+|---|---|---|
+| `linkQr` | `qr` | A QR code as a `data:image/png;base64,...` URI. A new `linkQr` replaces the old one while the user waits. |
+| `linked` | none | The Profile is a Companion Device: sent after the phone authorizes it, and at start-up for a linked Profile. The Plugin leaves the linking screen. |
+| `linkFailed` | `reason` | Linking stopped. The Plugin shows the reason with Retry (`link.retry`). |
+| `unlinked` | none | The phone removed the Companion Device. The Daemon has deleted the Profile and its store key. `ready` follows, then linking starts as on a fresh Profile. |
+
+Reasons of `linkFailed`. The Go source of truth is `daemon/internal/whatsapp/whatsapp.go`.
+
+| Reason | Meaning |
+|---|---|
+| `timeout` | The user did not scan the last QR code in time. |
+| `client-outdated` | WhatsApp rejects this whatsmeow version. |
+| `scanned-without-multidevice` | The phone scanned the code but multi-device is off. |
+| `pair-error` | The phone authorized the link, but pairing failed. |
+| `connect-failed` | The Daemon could not connect to WhatsApp. |
+| `unexpected` | Any other linking failure. |
+
+Fixtures: `contract/fixtures/link-qr.jsonl`, `link-failed.jsonl`, `link-unlinked.jsonl`.
+
 ## Methods (Plugin to Daemon)
+
+### `link.pairCode`
+
+Params: `phone` (digits, international, no `+`). Valid only while the Profile is not linked. The result is `{"code": "ABCD-1234"}`: the Pair Code as text. The user types it on the phone. Success then follows as `linked`. Errors: -32001 and -32002 (see Errors). Fixtures: `link-pair-code.jsonl`, `link-pair-code-invalid.jsonl`.
+
+### `link.retry`
+
+Valid only while the Profile is not linked. The Daemon answers with an empty `result`, then connects again. A new `linkQr` follows, or `linkFailed`. Fixture: `link-failed.jsonl`.
 
 ### `keyring.retry`
 
@@ -68,7 +100,9 @@ The Daemon answers a request with an `error` object. Application codes will join
 | Code | Message | When |
 |---|---|---|
 | -32700 | parse error | The line is not a JSON-RPC object. The `id` is `null`. |
-| -32601 | method not found | The method does not exist. |
+| -32601 | method not found | The method does not exist, or is not valid now (for example `link.pairCode` on a linked Profile). |
+| -32001 | invalid phone number | `link.pairCode` got a number that is too short or not international. |
+| -32002 | pair code failed | WhatsApp did not give a Pair Code. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 
@@ -84,10 +118,22 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `keyring` | `state` | The Go test sets the fake keyring: `missing` (calls fail), `ok`, `locked` (calls block) or `unlocked`. |
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
+| `whatsapp` | one of the keys below | The Go test scripts the fake WhatsApp port. |
+
+Keys of a `whatsapp` line. Each line has exactly one:
+
+| Key | Meaning |
+|---|---|
+| `linked` | `true` or `false`: the Profile is linked at start-up. Put the line before the first `out`. |
+| `pairCode` | The code that the next `link.pairCode` returns. |
+| `pairError` | `invalid-phone`, or any text: the next `link.pairCode` fails. |
+| `event` | The fake port plays this event now. `kind` is `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`) or `loggedOut`. |
+
+The events are the event kinds of the WhatsApp port (`daemon/internal/whatsapp`). A new port event kind gets a new `event` kind here. A new port method that a fixture must script gets a new key.
 
 - The Go test (Seam A) runs the lines in order: it sends each `in` line and waits for each `out` frame. At the end it checks that no frame is left. It ignores `view` lines.
 - The `node --test` test (Seam B) folds the `out` frames through `WhiskerState.js` and checks each `view` line. It ignores `in` lines.
-- Later tickets add line kinds (fake WhatsApp events, clock steps) here, in this table.
+- Later tickets add line kinds here, in this table.
 
 ### Add a fixture
 

@@ -4,12 +4,16 @@ package contract
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 
+	"rsc.io/qr"
+
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
+	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
 // Exit codes. docs/contract.md mirrors this table.
@@ -23,21 +27,36 @@ const (
 // MaxLineBytes is the longest accepted input line, without the newline.
 const MaxLineBytes = 1 << 20
 
-const methodKeyringRetry = "keyring.retry"
+const (
+	methodKeyringRetry = "keyring.retry"
+	methodLinkPairCode = "link.pairCode"
+	methodLinkRetry    = "link.retry"
+)
 
 const (
 	errParse          = -32700
 	errMethodNotFound = -32601
+	errInvalidPhone   = -32001
+	errPairCode       = -32002
 )
 
-// Profile is what Run needs from the Profile: open the stores.
-// Open returns keystore.ErrUnavailable when the keyring does not answer.
-type Profile interface{ Open() error }
+// qrScale is the pixel size of one QR module.
+const qrScale = 8
 
-// Run opens the Profile, sends `ready`, then answers requests from in until EOF.
+// Profile is what Run needs from the Profile: open the stores, and delete the Profile.
+// Open returns keystore.ErrUnavailable when the keyring does not answer.
+type Profile interface {
+	Open() error
+	Delete() error
+}
+
+// NewPort makes the WhatsApp port for the Profile that Open just opened.
+type NewPort func() (whatsapp.Port, error)
+
+// Run opens the Profile, sends `ready`, starts linking or connecting, then serves requests and WhatsApp events until EOF.
 // While the keyring is unavailable it sends `keyringUnavailable` and waits for `keyring.retry`.
 // It writes frames to out and logs to logOut. It returns the process exit code.
-func Run(in io.Reader, out, logOut io.Writer, profile Profile) int {
+func Run(in io.Reader, out, logOut io.Writer, profile Profile, newPort NewPort) int {
 	enc := json.NewEncoder(out) // Encode ends each frame with a newline.
 	send := func(frame map[string]any) bool {
 		if err := enc.Encode(frame); err != nil {
@@ -47,17 +66,44 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile) int {
 		return true
 	}
 	ready := false
+	var port whatsapp.Port
+	var events <-chan whatsapp.Event // nil (never ready) until a port exists
+
+	// connect connects the port. An unlinked Profile starts linking, and a failure ends it with `linkFailed`.
+	connect := func() bool {
+		if err := port.Connect(); err != nil {
+			fmt.Fprintln(logOut, "connect failed") // the error text could name hosts
+			if !port.Linked() {
+				return send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonConnectFailed}))
+			}
+		}
+		return true
+	}
+	// startPort runs after `ready`: a linked Profile says so, then the port connects.
+	startPort := func() bool {
+		if port.Linked() && !send(notification("linked", nil)) {
+			return false
+		}
+		return connect()
+	}
 	// open returns an exit code, or -1 to go on.
 	open := func() int {
 		switch err := profile.Open(); {
 		case err == nil:
+			// The port exists before `ready`, so a test or the Plugin can rely on it from then on.
+			var portErr error
+			if port, portErr = newPort(); portErr != nil {
+				fmt.Fprintln(logOut, "whatsapp client failed")
+				return ExitError
+			}
+			events = port.Events()
 			ready = true
-			if !send(notification("ready")) {
+			if !send(notification("ready", nil)) || !startPort() {
 				return ExitError
 			}
 		case errors.Is(err, keystore.ErrUnavailable):
 			fmt.Fprintln(logOut, "keyring unavailable")
-			if !send(notification("keyringUnavailable")) {
+			if !send(notification("keyringUnavailable", nil)) {
 				return ExitError
 			}
 		default:
@@ -70,35 +116,131 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile) int {
 		return code
 	}
 
-	sc := bufio.NewScanner(in)
-	sc.Buffer(nil, MaxLineBytes+1) // +1 leaves room for the newline.
-	for sc.Scan() {
-		var req struct {
-			ID     json.RawMessage `json:"id"`
-			Method string          `json:"method"`
+	lines := make(chan []byte)
+	scanErr := make(chan error, 1)
+	go func() {
+		sc := bufio.NewScanner(in)
+		sc.Buffer(nil, MaxLineBytes+1) // +1 leaves room for the newline.
+		for sc.Scan() {
+			lines <- append([]byte(nil), sc.Bytes()...)
 		}
-		var reply map[string]any
-		retry := false
-		if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
-			reply = errorReply(nil, errParse, "parse error")
-		} else if len(req.ID) == 0 {
-			continue // a notification gets no reply
-		} else if req.Method == methodKeyringRetry && !ready {
-			reply = map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": map[string]any{}}
-			retry = true
-		} else {
-			reply = errorReply(req.ID, errMethodNotFound, "method not found")
-		}
-		if !send(reply) {
-			return ExitError
-		}
-		if retry {
-			if code := open(); code >= 0 {
+		scanErr <- sc.Err()
+		close(lines)
+	}()
+
+	for {
+		select {
+		case ev := <-events:
+			if code := handleEvent(ev, logOut, send, func() int {
+				// The phone removed the Companion Device: delete the Profile and link again as on a fresh one.
+				port.Disconnect()
+				ready, port, events = false, nil, nil
+				if err := profile.Delete(); err != nil {
+					fmt.Fprintln(logOut, "profile delete failed")
+					return ExitError
+				}
+				if !send(notification("unlinked", nil)) {
+					return ExitError
+				}
+				return open()
+			}); code >= 0 {
 				return code
+			}
+		case line, ok := <-lines:
+			if !ok {
+				return exitCode(<-scanErr, logOut)
+			}
+			var req struct {
+				ID     json.RawMessage `json:"id"`
+				Method string          `json:"method"`
+				Params struct {
+					Phone string `json:"phone"`
+				} `json:"params"`
+			}
+			var reply map[string]any
+			retryKeyring, retryLink := false, false
+			linking := ready && !port.Linked()
+			if err := json.Unmarshal(line, &req); err != nil {
+				reply = errorReply(nil, errParse, "parse error")
+			} else if len(req.ID) == 0 {
+				continue // a notification gets no reply
+			} else if req.Method == methodKeyringRetry && !ready {
+				reply = resultReply(req.ID, map[string]any{})
+				retryKeyring = true
+			} else if req.Method == methodLinkRetry && linking {
+				reply = resultReply(req.ID, map[string]any{})
+				retryLink = true
+			} else if req.Method == methodLinkPairCode && linking {
+				reply = pairCodeReply(port, req.ID, req.Params.Phone, logOut)
+			} else {
+				reply = errorReply(req.ID, errMethodNotFound, "method not found")
+			}
+			if !send(reply) {
+				return ExitError
+			}
+			if retryKeyring {
+				if code := open(); code >= 0 {
+					return code
+				}
+			}
+			if retryLink && !connect() {
+				return ExitError
 			}
 		}
 	}
-	switch err := sc.Err(); err {
+}
+
+// handleEvent turns a WhatsApp event into frames. unlink runs the delete-the-Profile routine.
+// It returns an exit code, or -1 to go on.
+func handleEvent(ev whatsapp.Event, logOut io.Writer, send func(map[string]any) bool, unlink func() int) int {
+	ok := true
+	switch ev := ev.(type) {
+	case whatsapp.QRCode:
+		uri, err := qrDataURI(ev.Code)
+		if err != nil {
+			fmt.Fprintln(logOut, "qr encode failed")
+			ok = send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonUnexpected}))
+		} else {
+			ok = send(notification("linkQr", map[string]any{"qr": uri}))
+		}
+	case whatsapp.PairSuccess:
+		ok = send(notification("linked", nil))
+	case whatsapp.LinkFailed:
+		ok = send(notification("linkFailed", map[string]any{"reason": ev.Reason}))
+	case whatsapp.LoggedOut:
+		return unlink()
+	}
+	if !ok {
+		return ExitError
+	}
+	return -1
+}
+
+func pairCodeReply(port whatsapp.Port, id json.RawMessage, phone string, logOut io.Writer) map[string]any {
+	// shortcut: PairCode blocks the Daemon loop (up to 30 s), upgrade when another request must run meanwhile.
+	code, err := port.PairCode(phone)
+	switch {
+	case errors.Is(err, whatsapp.ErrInvalidPhone):
+		return errorReply(id, errInvalidPhone, "invalid phone number")
+	case err != nil:
+		fmt.Fprintln(logOut, "pair code failed") // the error text could hold the phone number
+		return errorReply(id, errPairCode, "pair code failed")
+	}
+	return resultReply(id, map[string]any{"code": code})
+}
+
+// qrDataURI renders a WhatsApp QR code string as a PNG data: URI.
+func qrDataURI(text string) (string, error) {
+	code, err := qr.Encode(text, qr.L)
+	if err != nil {
+		return "", err
+	}
+	code.Scale = qrScale
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG()), nil
+}
+
+func exitCode(err error, logOut io.Writer) int {
+	switch err {
 	case nil:
 		return ExitOK
 	case bufio.ErrTooLong:
@@ -110,8 +252,15 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile) int {
 	}
 }
 
-func notification(method string) map[string]any {
-	return map[string]any{"jsonrpc": "2.0", "method": method, "params": map[string]any{}}
+func resultReply(id json.RawMessage, result map[string]any) map[string]any {
+	return map[string]any{"jsonrpc": "2.0", "id": id, "result": result}
+}
+
+func notification(method string, params map[string]any) map[string]any {
+	if params == nil {
+		params = map[string]any{}
+	}
+	return map[string]any{"jsonrpc": "2.0", "method": method, "params": params}
 }
 
 func errorReply(id json.RawMessage, code int, message string) map[string]any {

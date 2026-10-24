@@ -7,6 +7,14 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- A fresh Profile shows a QR code in the pop-out. The code refreshes while the user waits.
+- A switch in the pop-out links with a Pair Code instead.
+- The pop-out leaves the linking screen when the phone authorizes the Companion Device.
+- Linking errors show in the pop-out with Retry.
+- When the phone removes the Companion Device, the Daemon deletes the Profile and the pop-out goes back to linking.
+
 ## [1.0.0-rc.1] - 2026-10-24
 
 ### Added

@@ -10,6 +10,9 @@ Panel {
 
   readonly property var whiskerService: bar && bar.shell ? bar.shell.serviceFor("pauwelz.whisker") : null
   readonly property var view: whiskerService ? whiskerService.view : ({ screen: "starting", message: "" })
+  // Which linking method the pop-out shows. The user picks it, so it is view state only.
+  property bool pairMode: false
+
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -21,7 +24,7 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: ""
-    dimmed: root.view.screen !== "ready"
+    dimmed: root.view.screen !== "ready" && root.view.screen !== "linked"
     tooltipText: root.view.message
     onPressed: function(b) { root.toggle() }
   }
@@ -35,35 +38,81 @@ Panel {
     centerOnBar: true
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(message.implicitHeight + (retryButton.visible ? retryButton.implicitHeight + Style.space(8) : 0))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       onCloseRequested: root.close()
 
-      Text {
-        id: message
+      Column {
+        id: column
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        wrapMode: Text.Wrap
-        textFormat: Text.PlainText
-        text: root.view.message
-        color: root.view.screen === "error" ? Color.urgent : root.contentForeground
-        font.family: root.contentFontFamily
-        font.pixelSize: Style.font.body
-      }
+        spacing: Style.space(8)
 
-      Button {
-        id: retryButton
-        anchors.left: parent.left
-        anchors.top: message.bottom
-        anchors.topMargin: Style.space(8)
-        visible: root.view.canRetry === true
-        text: "Retry"
-        bordered: true
-        onClicked: root.whiskerService.retry()
+        Text {
+          id: message
+          width: parent.width
+          wrapMode: Text.Wrap
+          textFormat: Text.PlainText
+          text: root.view.message
+          color: root.view.screen === "error" ? Color.urgent : root.contentForeground
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+        }
+
+        // The Daemon sends the QR code as a data: URI.
+        Image {
+          visible: root.view.screen === "linking" && !!root.view.qr && !root.pairMode
+          source: root.view.qr || ""
+          width: Style.space(232)
+          height: width
+          fillMode: Image.PreserveAspectFit
+          smooth: false
+        }
+
+        Text {
+          visible: !!root.view.pairCode
+          text: root.view.pairCode || ""
+          color: root.contentForeground
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body * 2
+        }
+
+        TextInput {
+          id: phoneInput
+          visible: root.view.screen === "linking" && root.pairMode
+          width: parent.width
+          color: root.contentForeground
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+          inputMethodHints: Qt.ImhDialableCharactersOnly
+          onAccepted: root.whiskerService.requestPairCode(text)
+        }
+
+        Button {
+          visible: root.view.screen === "linking" && root.pairMode
+          text: "Get Pair Code"
+          bordered: true
+          onClicked: root.whiskerService.requestPairCode(phoneInput.text)
+        }
+
+        Button {
+          visible: root.view.screen === "linking"
+          text: root.pairMode ? "Use a QR code" : "Use a Pair Code"
+          bordered: true
+          onClicked: root.pairMode = !root.pairMode
+        }
+
+        Button {
+          id: retryButton
+          visible: root.view.canRetry === true
+          text: "Retry"
+          bordered: true
+          onClicked: root.whiskerService.retry()
+        }
       }
     }
   }

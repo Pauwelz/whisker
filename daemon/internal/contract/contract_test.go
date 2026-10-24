@@ -11,12 +11,14 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
+	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
 const fixtureGlob = "../../../contract/fixtures/*.jsonl"
@@ -25,6 +27,12 @@ type fixtureLine struct {
 	Dir   string          `json:"dir"`
 	Frame json.RawMessage `json:"frame"`
 	State string          `json:"state"`
+
+	// Fake WhatsApp lines (dir "whatsapp"): a start-up setting or an event, see docs/contract.md.
+	Linked    *bool           `json:"linked"`
+	PairCode  string          `json:"pairCode"`
+	PairError string          `json:"pairError"`
+	Event     json.RawMessage `json:"event"`
 }
 
 // runner runs the Daemon on pipes, with a fake keyring, a manual clock and a Profile in a temp dir.
@@ -38,11 +46,32 @@ type runner struct {
 	done    chan int
 	errOut  bytes.Buffer
 	started bool
+
+	portMu   sync.Mutex
+	portUsed bool
+	port     *whatsapp.Fake // the port of the current Profile: Profile deletion makes a new one
 }
 
 func newRunner(t *testing.T) *runner {
 	t.Helper()
-	return &runner{t: t, fake: keystore.NewFake(), clock: keystore.NewManualClock(), dir: filepath.Join(t.TempDir(), "whisker")}
+	return &runner{t: t, fake: keystore.NewFake(), clock: keystore.NewManualClock(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
+}
+
+func (r *runner) currentPort() *whatsapp.Fake {
+	r.portMu.Lock()
+	defer r.portMu.Unlock()
+	return r.port
+}
+
+// newPort hands out the first fake, then a new one for each later Profile.
+func (r *runner) newPort() (whatsapp.Port, error) {
+	r.portMu.Lock()
+	defer r.portMu.Unlock()
+	if r.portUsed {
+		r.port = whatsapp.NewFake()
+	}
+	r.portUsed = true
+	return r.port, nil
 }
 
 func (r *runner) start() {
@@ -57,7 +86,7 @@ func (r *runner) start() {
 	r.done = make(chan int, 1)
 	p := profile.New(r.dir, keystore.New(r.fake, r.clock))
 	go func() {
-		r.done <- contract.Run(inR, outW, &r.errOut, p)
+		r.done <- contract.Run(inR, outW, &r.errOut, p, r.newPort)
 		p.Close()
 		outW.Close()
 	}()
@@ -146,6 +175,8 @@ func TestFixtures(t *testing.T) {
 					r.setKeyring(line.State)
 				case "profile":
 					r.setProfile(line.State)
+				case "whatsapp":
+					r.playWhatsApp(line)
 				case "clock":
 					r.start()
 					r.clock.Fire()
@@ -178,6 +209,41 @@ func (r *runner) setKeyring(state string) {
 	}
 }
 
+// playWhatsApp scripts the fake WhatsApp port: start-up settings, then events.
+func (r *runner) playWhatsApp(line fixtureLine) {
+	f := r.currentPort()
+	switch {
+	case line.Linked != nil:
+		f.SetLinked(*line.Linked)
+	case line.PairCode != "":
+		f.SetPairCode(line.PairCode, nil)
+	case line.PairError == "invalid-phone":
+		f.SetPairCode("", whatsapp.ErrInvalidPhone)
+	case line.PairError != "":
+		f.SetPairCode("", errors.New(line.PairError))
+	case line.Event != nil:
+		r.start()
+		var e struct{ Kind, Code, Reason string }
+		if err := json.Unmarshal(line.Event, &e); err != nil {
+			r.t.Fatal(err)
+		}
+		switch e.Kind {
+		case "qr":
+			f.Emit(whatsapp.QRCode{Code: e.Code})
+		case "pairSuccess":
+			f.Emit(whatsapp.PairSuccess{})
+		case "linkFailed":
+			f.Emit(whatsapp.LinkFailed{Reason: e.Reason})
+		case "loggedOut":
+			f.Emit(whatsapp.LoggedOut{})
+		default:
+			r.t.Fatalf("unknown whatsapp event kind %q", e.Kind)
+		}
+	default:
+		r.t.Fatal("empty whatsapp line")
+	}
+}
+
 func (r *runner) setProfile(state string) {
 	if state != "unreadable" || r.started {
 		r.t.Fatalf("profile state %q must be a start-up line, and one of: unreadable", state)
@@ -196,7 +262,7 @@ func run(t *testing.T, input string) (int, string, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
 	p := profile.New(filepath.Join(t.TempDir(), "whisker"), keystore.New(keystore.NewFake(), keystore.NewManualClock()))
-	code := contract.Run(strings.NewReader(input), &out, &errOut, p)
+	code := contract.Run(strings.NewReader(input), &out, &errOut, p, func() (whatsapp.Port, error) { return whatsapp.NewFake(), nil })
 	p.Close()
 	return code, out.String(), errOut.String()
 }
@@ -226,6 +292,56 @@ func TestContractDocListsExitCodes(t *testing.T) {
 	for _, code := range []int{contract.ExitOK, contract.ExitError, contract.ExitOversizedLine, contract.ExitProfileInUse} {
 		if !strings.Contains(string(doc), fmt.Sprintf("| %d |", code)) {
 			t.Errorf("docs/contract.md has no row for exit code %d", code)
+		}
+	}
+}
+
+func TestUnlinkFromThePhoneDeletesTheProfile(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	for _, want := range []string{"ready", "linked"} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	r.currentPort().Emit(whatsapp.LoggedOut{})
+	for _, want := range []string{"unlinked", "ready"} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	if calls := r.fake.Calls(); !strings.Contains(calls, "delete") {
+		t.Errorf("keyring calls = %q, want the store key deleted", calls)
+	}
+	if code, _, _ := r.finish(); code != contract.ExitOK {
+		t.Errorf("exit code = %d, want %d", code, contract.ExitOK)
+	}
+}
+
+func TestLinkRetryConnectsAgain(t *testing.T) {
+	r := newRunner(t)
+	r.start()
+	r.nextFrame() // ready
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"link.retry"}`)
+	r.nextFrame() // result
+	if code, _, _ := r.finish(); code != contract.ExitOK {
+		t.Errorf("exit code = %d, want %d", code, contract.ExitOK)
+	}
+	if got := r.currentPort().Connects(); got != 2 {
+		t.Errorf("Connect calls = %d, want 2 (start and retry)", got)
+	}
+}
+
+func TestContractDocListsLinkFailureReasons(t *testing.T) {
+	doc, err := os.ReadFile("../../../docs/contract.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, reason := range []string{whatsapp.ReasonTimeout, whatsapp.ReasonClientOutdated, whatsapp.ReasonScannedWithoutMultidevice,
+		whatsapp.ReasonPairError, whatsapp.ReasonConnectFailed, whatsapp.ReasonUnexpected} {
+		if !strings.Contains(string(doc), "| `"+reason+"` |") {
+			t.Errorf("docs/contract.md has no row for link failure reason %s", reason)
 		}
 	}
 }

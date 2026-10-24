@@ -12,6 +12,7 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
 	"github.com/Pauwelz/whisker/daemon/internal/profilelock"
+	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
 // version is set at build time from manifest.json (see scripts/build-daemon.sh).
@@ -55,5 +56,6 @@ func run() int {
 	}
 	p := profile.New(filepath.Join(dataDir, "whisker"), keystore.New(keystore.SecretService{}, keystore.RealClock))
 	defer p.Close()
-	return contract.Run(os.Stdin, os.Stdout, os.Stderr, p)
+	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
+	return contract.Run(os.Stdin, os.Stdout, os.Stderr, p, newPort)
 }

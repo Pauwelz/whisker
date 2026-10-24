@@ -17,6 +17,22 @@ var FETCH_EXIT_MESSAGES = {
   23: "The checksum of the download did not match."
 }
 
+// Mirror of the linkFailed reasons in docs/contract.md and daemon/internal/whatsapp.
+var LINK_FAILURES = {
+  "timeout": "The QR code expired. Select Retry for a new one.",
+  "client-outdated": "WhatsApp rejects this version of whisker. Update whisker.",
+  "scanned-without-multidevice": "Your phone scanned the code, but multi-device is off. Turn it on, then select Retry.",
+  "pair-error": "Linking failed on the phone. Select Retry.",
+  "connect-failed": "whisker could not reach WhatsApp. Check the network, then select Retry.",
+  "unexpected": "Linking failed. Select Retry."
+}
+
+// Mirror of the error codes of link.pairCode in docs/contract.md.
+var PAIR_CODE_ERRORS = {
+  "-32001": "Enter the phone number with its country code, digits only.",
+  "-32002": "WhatsApp gave no Pair Code. Try again."
+}
+
 function error(reason, message) {
   return { screen: "error", reason: reason, message: message }
 }
@@ -69,7 +85,28 @@ function applyFrame(state, frame) {
       message: "The keyring is unavailable. Unlock the keyring, then select Retry.",
       canRetry: true
     }
+  if (frame && frame.method === "linkQr")
+    return linking(state, { qr: frame.params.qr, reason: "", message: "Scan this QR code in WhatsApp: Linked devices, Link a device.", canRetry: false })
+  if (frame && frame.method === "linked")
+    return { screen: "linked", reason: "", message: "whisker is linked.", canRetry: false }
+  if (frame && frame.method === "unlinked")
+    return { screen: "linking", reason: "unlinked", message: "Your phone removed this device. Link whisker again.", qr: "", pairCode: "", canRetry: false }
+  if (frame && frame.method === "linkFailed") {
+    var reason = frame.params.reason
+    return linking(state, { qr: "", reason: reason, message: LINK_FAILURES[reason] || LINK_FAILURES.unexpected, canRetry: true })
+  }
+  if (frame && frame.result && frame.result.code)
+    return linking(state, { pairCode: frame.result.code, message: "Enter this code in WhatsApp: Linked devices, Link with phone number." })
+  if (frame && frame.error && PAIR_CODE_ERRORS[frame.error.code])
+    return linking(state, { message: PAIR_CODE_ERRORS[frame.error.code] })
   return state
+}
+
+// The linking screen keeps the QR code and the Pair Code unless a frame changes them.
+function linking(state, changes) {
+  var next = { screen: "linking", reason: "", message: "", qr: state.qr || "", pairCode: state.pairCode || "", canRetry: false }
+  for (var key in changes) next[key] = changes[key]
+  return next
 }
 
 function daemonExited(state, exitCode) {
@@ -85,7 +122,19 @@ function keyringRetryRequest(id) {
   return JSON.stringify({ jsonrpc: "2.0", id: id, method: "keyring.retry" }) + "\n"
 }
 
-// What the Retry button does in this view state: "keyring" asks the Daemon, "download" fetches the Daemon again.
+// The request that links by Pair Code. `phone` is what the user typed: only the digits count.
+function pairCodeRequest(id, phone) {
+  var digits = String(phone).replace(/\D/g, "")
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "link.pairCode", params: { phone: digits } }) + "\n"
+}
+
+// The request that restarts linking after a failure.
+function linkRetryRequest(id) {
+  return JSON.stringify({ jsonrpc: "2.0", id: id, method: "link.retry" }) + "\n"
+}
+
+// What the Retry button does in this view state: "keyring" and "link" ask the Daemon, "download" fetches the Daemon again.
 function retryKind(state) {
-  return state.screen === "keyring-unavailable" ? "keyring" : "download"
+  if (state.screen === "keyring-unavailable") return "keyring"
+  return state.screen === "linking" ? "link" : "download"
 }
