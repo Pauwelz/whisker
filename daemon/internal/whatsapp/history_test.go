@@ -47,3 +47,17 @@ func TestHistorySyncKeepsTheDeliveryStateOfOwnMessages(t *testing.T) {
 		}
 	}
 }
+
+func TestHistorySyncMarksOnDemandBatches(t *testing.T) {
+	own := types.JID{User: "3160", Server: types.DefaultUserServer}
+	c := &Client{cli: whatsmeow.NewClient(&store.Device{ID: &own}, waLog.Noop)}
+	for _, tc := range []struct {
+		kind waHistorySync.HistorySync_HistorySyncType
+		want bool
+	}{{waHistorySync.HistorySync_ON_DEMAND, true}, {waHistorySync.HistorySync_RECENT, false}} {
+		batch, _ := c.historySync(&waHistorySync.HistorySync{SyncType: tc.kind.Enum()})
+		if batch.OnDemand != tc.want {
+			t.Errorf("%v: OnDemand = %v, want %v", tc.kind, batch.OnDemand, tc.want)
+		}
+	}
+}

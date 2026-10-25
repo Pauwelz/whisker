@@ -818,13 +818,13 @@ Panel {
             model: root.timeline.slice().reverse()
             // BottomToTop puts the footer at the top of the timeline: a quiet link that loads the older Messages.
             footer: Item {
-              visible: !!root.openChat && root.openChat.moreMessages === true
+              visible: State.olderLink(root.view) !== ""
               width: ListView.view.width
               height: visible ? olderText.implicitHeight + Style.space(4) : 0
               Text {
                 id: olderText
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "load older"
+                text: State.olderLink(root.view)
                 opacity: 0.5
                 color: root.contentForeground
                 font.family: root.contentFontFamily

@@ -154,6 +154,7 @@ var NOTIFICATIONS = {
   connected: { fold: function (state) { return withChanges(state, { connection: "online" }) } },
   disconnected: { fold: function (state) { return withChanges(state, { connection: "offline", activity: {} }) } },
   messageExpired: { fold: removeMessage },
+  historyReceived: { fold: historyReceived },
   messageChanged: { fold: function (state, params) { return upsertMessage(state, params.message) } },
   chatMerged: { fold: chatMerged },
   presenceChanged: { fold: presenceChanged },
@@ -185,7 +186,7 @@ function foldFrame(state, frame) {
   if (frame && frame.error && PAIR_CODE_ERRORS[frame.error.code])
     return linking(state, { message: PAIR_CODE_ERRORS[frame.error.code] })
   if (frame && frame.error && ERROR_NOTICES[frame.error.code])
-    return withChanges(state, markLookupOffline(state, frame.error.code, { notice: ERROR_NOTICES[frame.error.code] }))
+    return stopWaitingForPhone(withChanges(state, markLookupOffline(state, frame.error.code, { notice: ERROR_NOTICES[frame.error.code] })), frame.error.code)
   return state
 }
 
@@ -386,6 +387,56 @@ function chatMerged(state, merged) {
 // True when the Plugin must load the Messages and the Draft of the open Chat again after this frame. Call it with the state after the frame.
 function reloadsOpenChat(state, frame) {
   return !!frame && frame.method === "chatMerged" && !!state.openChat && state.openChat.jid === frame.params.to
+}
+
+// On-Demand History Sync. The open Chat asks the phone for older Messages when no stored Message is left.
+// openChat.historyLoading is set while the request is open. state.nothingMore (JID to true) lives in Plugin memory only.
+var OLDER_LOAD = "load older"
+var OLDER_LOADING = "loading from phone…"
+var NO_ANSWER = "Your phone did not answer. Open WhatsApp on your phone and try again."
+
+// The text of the older link, or "" while it is hidden. It waits for the first page of the Chat.
+function olderLink(state) {
+  var chat = state.openChat
+  if (!chat || state.loadedChat !== chat.jid || (state.nothingMore || {})[chat.jid]) return ""
+  return chat.historyLoading ? OLDER_LOADING : OLDER_LOAD
+}
+
+// What a tap on the older link does: "messages" (chat.messages), "history" (chat.requestHistory) or "" (nothing).
+function olderAction(state) {
+  if (olderLink(state) !== OLDER_LOAD) return ""
+  return state.openChat.moreMessages ? "messages" : "history"
+}
+
+function historyRequested(state) {
+  return withChanges(state, { openChat: withChanges(state.openChat, { historyLoading: true }) })
+}
+
+function historyRequest(id, jid) {
+  return request(id, "chat.requestHistory", { chat: jid })
+}
+
+function historyReceived(state, params) {
+  var chat = state.openChat
+  if (!chat || chat.jid !== params.chat) return state
+  var next = withChanges(state, { openChat: withChanges(chat, { historyLoading: undefined }) })
+  if (params.timedOut) return withChanges(next, { notice: NO_ANSWER })
+  if (params.count > 0) return next
+  var done = withChanges(state.nothingMore || {}, {})
+  done[chat.jid] = true
+  return withChanges(next, { nothingMore: done })
+}
+
+// True when the Plugin must load the Messages that On-Demand History Sync stored. Call it with the state after the frame.
+function reloadsHistory(state, frame) {
+  return !!frame && frame.method === "historyReceived" && !frame.params.timedOut && frame.params.count > 0 &&
+    !!state.openChat && state.openChat.jid === frame.params.chat
+}
+
+// A request that finds no connection gets no historyReceived, so the wait ends here.
+function stopWaitingForPhone(state, code) {
+  if (String(code) !== "-32007" || !state.openChat) return state
+  return withChanges(state, { openChat: withChanges(state.openChat, { historyLoading: undefined }) })
 }
 
 // Takes an expired Message out of the open Chat.

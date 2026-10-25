@@ -57,6 +57,8 @@ type Fake struct {
 	groupErr       error
 	groupLookups   int
 	groupGate      chan struct{} // while set, GroupParticipants waits
+	historyAnswer  int           // Messages in the answer to RequestHistory; -1 is no answer
+	historyReqs    []string
 }
 
 // SetOwn sets the user parts of the user's own IDs.
@@ -157,7 +159,7 @@ func (f *Fake) PictureRequests() []string {
 	return append([]string{}, f.pictureReq...)
 }
 
-func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
+func NewFake() *Fake { return &Fake{events: make(chan Event, 64), historyAnswer: -1} }
 
 // SetLinked sets the state at start-up.
 func (f *Fake) SetLinked(linked bool) { f.mu.Lock(); f.linked = linked; f.mu.Unlock() }
@@ -209,6 +211,38 @@ func (f *Fake) SetHold(hold bool) {
 		close(f.gate)
 		f.gate = nil
 	}
+}
+
+// SetHistoryAnswer presets the answer to RequestHistory: an On-Demand batch of n Messages older than the anchor.
+// 0 is an empty batch. The default, -1, is no answer.
+func (f *Fake) SetHistoryAnswer(n int) { f.mu.Lock(); f.historyAnswer = n; f.mu.Unlock() }
+
+// HistoryRequests lists the RequestHistory calls as "chat:anchorID:count", in order.
+func (f *Fake) HistoryRequests() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.historyReqs...)
+}
+
+// RequestHistory fails with the send error, records the call, then plays the preset answer.
+func (f *Fake) RequestHistory(chat string, anchor HistoryAnchor, count int) error {
+	f.mu.Lock()
+	if f.sendErr != nil {
+		defer f.mu.Unlock()
+		return f.sendErr
+	}
+	f.historyReqs = append(f.historyReqs, fmt.Sprintf("%s:%s:%d", chat, anchor.ID, count))
+	n, call := f.historyAnswer, len(f.historyReqs)
+	f.mu.Unlock()
+	if n < 0 {
+		return nil
+	}
+	c := HistoryChat{JID: chat, Kind: KindDirect}
+	for i := 1; i <= n; i++ {
+		c.Messages = append(c.Messages, Message{ID: fmt.Sprintf("older-%d-%d", call, i), Sender: chat, Time: anchor.Time - int64(i), Text: "older"})
+	}
+	f.Emit(HistorySync{OnDemand: true, Chats: []HistoryChat{c}})
+	return nil
 }
 
 func (f *Fake) Send(_, id, _ string, quote *Quote, timer int64) error {

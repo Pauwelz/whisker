@@ -17,6 +17,7 @@ for (const name of fs.readdirSync(fixtureDir).filter((f) => f.endsWith(".jsonl")
       const line = JSON.parse(text);
       if (line.dir === "out") state = State.applyFrame(state, line.frame);
       if (line.dir === "plugin" && line.openChat) state = State.openChat(state, line.openChat);
+      if (line.dir === "plugin" && line.requestHistory) state = State.historyRequested(state);
       if (line.dir === "plugin" && line.lookup) state = State.lookupStarted(state, line.lookup);
       if (line.dir === "view") {
         // The JSON round trip drops the prototypes of the vm context, so deep equality works.
@@ -680,4 +681,64 @@ test("pictureChanged of another Chat asks for nothing", () => {
   state = State.applyFrame(state, { jsonrpc: "2.0", id: 1, result: { chat: jid, data: "QUJD" } });
   state = State.applyFrame(state, { jsonrpc: "2.0", method: "pictureChanged", params: { chat: "9@s.whatsapp.net" } });
   assert.equal(State.pictureToRequest(state), "");
+});
+
+// On-Demand History Sync: the link at the end of the stored history.
+const olderChat = (changes = {}) => {
+  const open = State.openChat(State.initialState(), { jid: "1@s.whatsapp.net", name: "Ann", kind: "direct" });
+  const page = State.applyFrame(open, { result: { chat: "1@s.whatsapp.net", messages: [{ id: "m1", chat: "1@s.whatsapp.net", time: 100 }], more: false } });
+  return { ...page, openChat: { ...page.openChat, ...changes } };
+};
+const received = (state, params) => State.applyFrame(state, { jsonrpc: "2.0", method: "historyReceived", params: { chat: "1@s.whatsapp.net", ...params } });
+
+test("the older link asks the Daemon for Messages when no stored Message is left", () => {
+  assert.equal(State.olderAction(olderChat({ moreMessages: true })), "messages");
+  assert.equal(State.olderAction(olderChat()), "history");
+  assert.equal(State.olderLink(olderChat()), "load older");
+});
+
+test("the older link waits while the phone answers, and ignores taps", () => {
+  const state = State.historyRequested(olderChat());
+  assert.equal(State.olderLink(state), "loading from phone…");
+  assert.equal(State.olderAction(state), "");
+});
+
+test("Messages from the phone reload the page after the loaded Messages", () => {
+  const state = received(State.historyRequested(olderChat()), { count: 3 });
+  assert.equal(State.olderLink(state), "load older");
+  assert.equal(State.reloadsHistory(state, { method: "historyReceived", params: { chat: "1@s.whatsapp.net", count: 3 } }), true);
+});
+
+test("a phone with nothing more hides the link for this Chat", () => {
+  const frame = { method: "historyReceived", params: { chat: "1@s.whatsapp.net", count: 0 } };
+  const state = received(State.historyRequested(olderChat()), { count: 0 });
+  assert.equal(State.olderLink(state), "");
+  assert.equal(State.olderAction(state), "");
+  assert.equal(State.reloadsHistory(state, frame), false);
+});
+
+test("a phone that does not answer gives a notice and the link comes back", () => {
+  const state = received(State.historyRequested(olderChat()), { count: 0, timedOut: true });
+  assert.equal(state.notice, "Your phone did not answer. Open WhatsApp on your phone and try again.");
+  assert.equal(State.olderLink(state), "load older");
+});
+
+test("no connection ends the wait with the offline notice", () => {
+  const state = State.applyFrame(State.historyRequested(olderChat()), { jsonrpc: "2.0", id: 4, error: { code: -32007, message: "could not reach WhatsApp" } });
+  assert.equal(state.notice, "Could not reach WhatsApp");
+  assert.equal(State.olderLink(state), "load older");
+});
+
+test("a historyReceived for a Chat that is not open changes nothing", () => {
+  const state = State.historyRequested(olderChat());
+  assert.deepEqual(received(state, { chat: "2@s.whatsapp.net", count: 0 }), state);
+});
+
+test("the older link stays hidden until the first page of the Chat is in", () => {
+  const open = State.openChat(State.initialState(), { jid: "1@s.whatsapp.net", name: "Ann", kind: "direct" });
+  assert.equal(State.olderLink(open), "");
+});
+
+test("the Daemon request for older Messages is chat.requestHistory", () => {
+  assert.deepEqual(JSON.parse(State.historyRequest(5, "1@s.whatsapp.net")), { jsonrpc: "2.0", id: 5, method: "chat.requestHistory", params: { chat: "1@s.whatsapp.net" } });
 });

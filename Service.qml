@@ -262,7 +262,13 @@ Item {
 
   // Called by the "Load older" button of the open Chat.
   function loadOlderMessages() {
-    send(State.messagesRequest, view.openChat.jid, view.openChat.messages.length)
+    var action = State.olderAction(view)
+    if (action === "messages") {
+      send(State.messagesRequest, view.openChat.jid, view.openChat.messages.length)
+    } else if (action === "history") {
+      view = State.historyRequested(view)
+      send(State.historyRequest, view.openChat.jid)
+    }
   }
 
   // Called by the composer. The Draft says whether this is an edit, and what the new Message quotes.
@@ -392,6 +398,7 @@ Item {
           root.send(State.messagesRequest, root.view.openChat.jid, 0)
           root.send(State.draftGetRequest, root.view.openChat.jid)
         }
+        if (State.reloadsHistory(root.view, frame)) root.send(State.messagesRequest, root.view.openChat.jid, root.view.openChat.messages.length)
         // A merge changes the JID of the open Chat, and a changed picture drops its entry. Both need a new request.
         if (State.reloadsOpenChat(root.view, frame) || frame.method === "pictureChanged") root.requestPicture()
         if (State.requestsSettings(frame)) root.send(State.settingsGetRequest)

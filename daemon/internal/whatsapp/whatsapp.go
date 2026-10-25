@@ -32,6 +32,10 @@ type Port interface {
 	ProfilePicture(chat, knownID string) (id string, data []byte, err error)
 	// PhoneOf is the phone JID that the local LID store holds for a LID, or "". It makes no network call.
 	PhoneOf(lid string) string
+	// RequestHistory asks the phone for up to count Messages of a Chat that are older than the anchor (On-Demand History Sync).
+	// The answer comes later as a HistorySync event with OnDemand set. It returns ErrOffline when there is no connection.
+	// It can block for a long time: call it off the Daemon loop.
+	RequestHistory(chat string, anchor HistoryAnchor, count int) error
 	// Logout tells WhatsApp to remove this Companion Device, so the phone no longer lists it.
 	// It needs a connection. On error the device stays linked.
 	Logout() error
@@ -253,6 +257,15 @@ type HistoryChat struct {
 type HistorySync struct {
 	Chats     []HistoryChat `json:"chats"`
 	PushNames []PushName    `json:"pushNames"`
+	// OnDemand is true for the answer to RequestHistory. The answer names no request, only its Chats.
+	OnDemand bool `json:"onDemand"`
+}
+
+// HistoryAnchor is the oldest stored Message of a Chat. An On-Demand History Sync asks for the Messages before it.
+type HistoryAnchor struct {
+	ID     string `json:"id"`
+	FromMe bool   `json:"fromMe"`
+	Time   int64  `json:"time"`
 }
 
 // PushName is the Push Name that a Participant set. An empty Name removes it.

@@ -23,7 +23,8 @@ func (s *Store) PutSystem(ev whatsapp.NewMessage) error {
 				return err
 			}
 		}
-		return putMessage(tx, ev.Chat, ev.Message, MediaNone)
+		_, err := putMessage(tx, ev.Chat, ev.Message, MediaNone)
+		return err
 	})
 }
 

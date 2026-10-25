@@ -89,8 +89,12 @@ A Message in a Chat with a disappearing timer. Every device deletes it when the 
 _Avoid_: Ephemeral Message, self-destructing message, expiring message
 
 **History Sync**:
-Batches of historical Chats and Messages pushed by the primary phone to a newly linked or reconnecting Companion Device.
+Batches of historical Chats and Messages that the primary phone sends to a Companion Device. The phone pushes them to a newly linked or reconnecting device, or sends them on request (On-Demand History Sync).
 _Avoid_: Backfill, archive dump, initial load
+
+**On-Demand History Sync**:
+A History Sync batch that the Daemon asks the phone for: the Messages of one Chat that are older than its oldest stored Message.
+_Avoid_: Backfill, fetch older, load from phone
 
 **Draft**:
 Unsent message composition state (text, and a pending Quote, Edit target or Attachment) preserved per Chat when navigating between Chats.
