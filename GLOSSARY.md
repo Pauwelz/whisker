@@ -72,6 +72,10 @@ _Avoid_: Reply-to, parent message, thread reply, citation
 One emoji that a Participant attaches to a Message. A Participant has at most one Reaction per Message.
 _Avoid_: Like, upvote, emoji response
 
+**Emoji Shortcode**:
+A `:name:` that the user types in the Draft text for one emoji, such as `:thumbsup:` for 👍.
+_Avoid_: Emoji code, alias, emoticon
+
 **Tombstone**:
 The placeholder that stays in the Chat timeline when a Message is revoked for everyone. It replaces the text and the Media, and it keeps the position of the Message.
 _Avoid_: Soft delete, redacted message, retracted message

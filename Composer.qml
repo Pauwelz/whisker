@@ -1,17 +1,46 @@
 import QtQuick
+import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "WhiskerState.js" as State
 
 // The composer of the open Chat: one strip under a line with a prompt, the text and Send.
 // Enter sends, Shift+Enter adds a line. Ctrl+V of a copied file makes it the Attachment. The pop-out (Panel.qml) owns the Draft; this item only draws it.
+// An Emoji Shortcode such as ":smi" shows its emoji in a row above the line, with the code of the selected one; a closing ":" on a full code replaces it at once.
 FocusScope {
   id: composer
   property var panel: null // the pop-out: service, Draft and colours
   readonly property var service: panel ? panel.whiskerService : null
   readonly property var draft: panel ? panel.draft : ({ text: "", attachments: [] })
   readonly property bool hasAttachment: State.hasAttachment(draft)
-  implicitHeight: row.implicitHeight + Style.space(8)
+  implicitHeight: suggestionList.height + row.implicitHeight + Style.space(8)
+
+  // Omarchy's emoji list. Without it, Emoji Shortcodes are off.
+  property var emojis: []
+  FileView {
+    path: Quickshell.env("OMARCHY_PATH") + "/shell/plugins/emojis/emojis.json"
+    printErrors: false
+    onLoaded: composer.emojis = State.parseEmojis(text())
+  }
+
+  readonly property var shortcode: State.shortcodeAt(input.text, input.cursorPosition)
+  property int dismissedStart: -1 // Escape hides the row for the Emoji Shortcode that starts here
+  property int selected: 0
+  readonly property var suggestions: shortcode && shortcode.start !== dismissedStart ? State.shortcodeSuggestions(emojis, shortcode.query) : []
+  onShortcodeChanged: {
+    selected = 0
+    if (!shortcode) dismissedStart = -1
+  }
+
+  function setText(change) {
+    input.text = change.text
+    input.cursorPosition = change.cursor
+  }
+
+  function pick(index) {
+    setText(State.insertEmoji(input.text, shortcode.start, input.cursorPosition, suggestions[index].emoji))
+  }
 
   function send() {
     if (State.canSend(input.text, composer.hasAttachment)) composer.service.submitComposer(input.text)
@@ -26,11 +55,101 @@ FocusScope {
     color: Color.muted
   }
 
+  // ‹ and › show when the row can scroll that way. A click moves the selection.
+  component ScrollArrow: Text {
+    property bool more: false
+    property int step: 0
+    visible: suggestionList.count > 0
+    anchors.verticalCenter: suggestionList.verticalCenter
+    width: 16
+    horizontalAlignment: Text.AlignHCenter
+    text: step < 0 ? "‹" : "›"
+    color: composer.panel ? composer.panel.contentForeground : Color.foreground
+    opacity: more ? 0.6 : 0
+    font.pixelSize: Style.font.body + 4
+    MouseArea {
+      anchors.fill: parent
+      enabled: parent.more
+      onClicked: composer.selected = Math.max(0, Math.min(composer.suggestions.length - 1, composer.selected + parent.step))
+    }
+  }
+
+  ScrollArrow {
+    id: leftArrow
+    anchors.left: parent.left
+    anchors.leftMargin: Style.space(4)
+    step: -1
+    more: !suggestionList.atXBeginning
+  }
+
+  ScrollArrow {
+    id: rightArrow
+    anchors.right: codeLabel.left
+    anchors.rightMargin: Style.space(4)
+    step: 1
+    more: !suggestionList.atXEnd
+  }
+
+  ListView {
+    id: suggestionList
+    anchors.left: leftArrow.right
+    anchors.right: rightArrow.left
+    anchors.top: parent.top
+    anchors.topMargin: count > 0 ? Style.space(4) : 0
+    height: count > 0 ? 28 : 0
+    orientation: ListView.Horizontal
+    clip: true
+    model: composer.suggestions
+    // The row scrolls so that the selected emoji stays in view.
+    currentIndex: composer.selected
+    highlightMoveDuration: 0
+    delegate: Rectangle {
+      required property var modelData
+      required property int index
+      width: 32
+      height: 28
+      radius: 4
+      color: index === composer.selected && composer.panel ? composer.panel.surfaceColor : "transparent"
+      Text {
+        anchors.centerIn: parent
+        textFormat: Text.PlainText
+        text: modelData.emoji
+        font.pixelSize: Style.font.body + 4
+      }
+      MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        onEntered: composer.selected = index
+        onClicked: composer.pick(index)
+      }
+    }
+  }
+
+  // The code of the selected emoji, at the right end of the row. A fixed width keeps the row still while the selection moves.
+  Text {
+    id: codeLabel
+    visible: suggestionList.count > 0
+    anchors.verticalCenter: suggestionList.verticalCenter
+    anchors.right: parent.right
+    anchors.rightMargin: Style.space(8)
+    width: visible ? 160 : 0
+    horizontalAlignment: Text.AlignRight
+    elide: Text.ElideRight
+    textFormat: Text.PlainText
+    readonly property var chosen: composer.suggestions[composer.selected] // undefined for a moment while the list shrinks
+    text: chosen ? ":" + chosen.code + ":" : ""
+    color: composer.panel ? composer.panel.contentForeground : Color.foreground
+    opacity: 0.6
+    font.family: composer.panel ? composer.panel.contentFontFamily : Style.font.family
+    font.pixelSize: Style.font.caption
+  }
+
   Row {
     id: row
     anchors.left: parent.left
     anchors.right: parent.right
-    anchors.verticalCenter: parent.verticalCenter
+    anchors.top: suggestionList.bottom
+    anchors.topMargin: Style.space(4)
     anchors.leftMargin: Style.space(8)
     anchors.rightMargin: Style.space(4)
     spacing: Style.space(8)
@@ -55,8 +174,30 @@ FocusScope {
       onTextChanged: if (composer.service) composer.service.composerChanged(text)
       readonly property string draftText: composer.draft.text
       onDraftTextChanged: if (text !== draftText) text = draftText
-      Keys.onEscapePressed: composer.panel.runShortcut("Escape")
+      // Escape first closes the Emoji Shortcode row, then goes back as everywhere else.
+      Keys.onEscapePressed: {
+        if (composer.suggestions.length > 0) composer.dismissedStart = composer.shortcode.start
+        else composer.panel.runShortcut("Escape")
+      }
       Keys.onPressed: function(event) {
+        if (composer.suggestions.length > 0) {
+          var move = State.shortcodeKeyAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0)
+          if (move !== "default") {
+            event.accepted = true
+            if (move === "previous") composer.selected = Math.max(0, composer.selected - 1)
+            if (move === "next") composer.selected = Math.min(composer.suggestions.length - 1, composer.selected + 1)
+            if (move === "pick") composer.pick(composer.selected)
+            return
+          }
+        }
+        if (event.text === ":") {
+          var closed = State.closeShortcode(text, cursorPosition, composer.emojis)
+          if (closed) {
+            event.accepted = true
+            composer.setText(closed)
+            return
+          }
+        }
         var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text, composer.hasAttachment,
                                           (event.modifiers & Qt.ControlModifier) !== 0, composer.panel ? composer.panel.editingId : "")
         if (action === "default") return
