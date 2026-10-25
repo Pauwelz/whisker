@@ -816,6 +816,11 @@ Panel {
             Layout.fillHeight: true
             clip: true
             verticalLayoutDirection: ListView.BottomToTop
+            // Qt bug: in BottomToTop, a newest row that gets shorter (a removed Reaction) slides below the view. Keep the view on it.
+            // Qt can move contentY before it knows the content height, so check again when the height changes.
+            property bool atNewest: true
+            onContentYChanged: atNewest = atYEnd
+            onContentHeightChanged: if (atNewest) positionViewAtBeginning(); else atNewest = atYEnd
             // A new model array scrolls the list back to the newest row. So the rows live in a ListModel of keys that only gets edits.
             // Rows added above or below the view then leave the rows in view in place.
             model: ListModel { id: timelineKeys }
