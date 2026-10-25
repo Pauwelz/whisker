@@ -542,13 +542,18 @@ test("panelParts: linking shows the QR code or the Pair Code form, and an error 
   assert.equal(State.panelParts({ screen: State.SCREEN.STARTING }, noLocal).pairToggle, false);
 });
 
-test("settings labels show On or Off and mark the Read Receipts mode that is set", () => {
-  assert.equal(State.onOffLabel("Send online", true), "Send online: On");
-  assert.equal(State.onOffLabel("Send typing", false), "Send typing: Off");
-  const mode = State.READ_RECEIPT_MODES[0];
-  assert.equal(State.readReceiptLabel(mode, { readReceipts: mode.value }), "Read Receipts: " + mode.label + " (selected)");
-  assert.equal(State.readReceiptLabel(mode, { readReceipts: "other" }), "Read Receipts: " + mode.label);
-  assert.equal(State.readReceiptLabel(mode, null), "Read Receipts: " + mode.label);
+test("readReceiptDescription follows the Read Receipts mode that is set", () => {
+  const mode = State.READ_RECEIPT_MODES[1];
+  assert.equal(State.readReceiptDescription({ readReceipts: mode.value }), mode.description);
+  assert.equal(State.readReceiptDescription({ readReceipts: "other" }), "");
+  assert.equal(State.readReceiptDescription(null), "");
+});
+
+test("SETTING_TOGGLES names the on/off settings in Go", () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "daemon", "internal", "settings", "settings.go"), "utf8");
+  const body = src.match(/type Settings struct \{([\s\S]*?)\}/)[1];
+  const boolTags = [...body.matchAll(/bool\s+`json:"(\w+)"`/g)].map((m) => m[1]).sort();
+  assert.deepEqual(Object.keys(State.SETTING_TOGGLES).sort(), boolTags);
 });
 
 test("a failed Media download shows Retry download", () => {

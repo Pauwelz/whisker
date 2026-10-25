@@ -24,6 +24,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- The settings view has three sections: Privacy, Notifications and Account. Read Receipts is one row of three choices, with a line that says what the set mode does. Send online, Send typing and Notifications are on/off switches, each with a short description. Before, each setting was a separate button.
 - The pop-out opens under the whisker icon in the bar, not in the middle of the bar.
 - The pop-out follows the prototype (variant C). A run of Messages from one sender has one header line (sender and time) above its Messages, which use the full width; the Delivery State stays at the right end of each own Message, and the hover toolbar floats at its top right. The Chat list has one compact top bar with the unread count, a search row with flat filters, and no "whisker is linked." line. An open Chat has one top bar (back, sign, name, status, pin and mute marks, ⋯), a timeline of fixed height, a quiet "load older" link at its top, and a flat composer strip. The new Chat view has the same bar, search and contact rows.
 - Error code -32007 now means "could not reach WhatsApp" (was "send failed"). New codes: -32010 invalid chat, -32011 pin limit and -32602 invalid params.

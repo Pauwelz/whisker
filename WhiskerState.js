@@ -255,10 +255,17 @@ function retryKind(state) {
 
 // The Read Receipt modes in the order the settings view lists them. Mirror of daemon/internal/settings.
 var READ_RECEIPT_MODES = [
-  { value: "off", label: "Off" },
-  { value: "onOpen", label: "On open" },
-  { value: "onInteraction", label: "On interaction" }
+  { value: "off", label: "Off", description: "Senders never see that you read their Messages." },
+  { value: "onOpen", label: "On open", description: "Senders see it when you open their Chat." },
+  { value: "onInteraction", label: "On interaction", description: "Senders see it only when you reply or react." }
 ]
+
+// The on/off Profile Settings, by wire name, with the texts of their switches. Mirror of daemon/internal/settings.
+var SETTING_TOGGLES = {
+  sendOnline: { label: "Send online", description: "Contacts see when you are online." },
+  sendTyping: { label: "Send typing", description: "The Chat shows \"typing…\" while you write." },
+  notifications: { label: "Notifications", description: "Show new Messages when the pop-out is closed." }
+}
 
 // True when the Plugin must read the Profile Settings after this frame.
 function requestsSettings(frame) {
@@ -1225,14 +1232,12 @@ function panelParts(state, local) {
   }
 }
 
-// The text of a settings button: "Send online: On".
-function onOffLabel(title, on) {
-  return title + ": " + (on ? "On" : "Off")
-}
-
-// The text of a Read Receipts mode button. The mode that is set is marked.
-function readReceiptLabel(mode, settings) {
-  return "Read Receipts: " + mode.label + (settings && settings.readReceipts === mode.value ? " (selected)" : "")
+// The line under the Read Receipts control: what the set mode does. Empty before the settings arrive.
+function readReceiptDescription(settings) {
+  if (!settings) return ""
+  for (var i = 0; i < READ_RECEIPT_MODES.length; i++)
+    if (READ_RECEIPT_MODES[i].value === settings.readReceipts) return READ_RECEIPT_MODES[i].description
+  return ""
 }
 
 // True when the download of the Media of a Message failed.

@@ -44,6 +44,18 @@ Panel {
   readonly property color surfaceColor: Qt.rgba(contentForeground.r, contentForeground.g, contentForeground.b, 0.06)
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
+  // One on/off Profile Setting. `key` is its wire name; State.SETTING_TOGGLES holds its texts.
+  component SettingToggle: Toggle {
+    required property string key
+    width: parent.width
+    label: State.SETTING_TOGGLES[key].label
+    description: State.SETTING_TOGGLES[key].description
+    checked: !!root.settings && root.settings[key]
+    foreground: root.contentForeground
+    fontFamily: root.contentFontFamily
+    onClicked: root.whiskerService.changeSettings({ [key]: !root.settings[key] })
+  }
+
   // Runs a fixed shortcut. The decision is State.shortcutAction.
   function runShortcut(shortcut) {
     var action = State.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat })
@@ -464,41 +476,44 @@ Panel {
           }
         }
 
-        // Profile Settings. The Daemon owns the values: each button sends one change.
+        // Profile Settings in three sections: Privacy, Notifications, Account. The Daemon owns the values: each control sends one change.
         Column {
           visible: root.parts.settings
           width: parent.width
-          spacing: Style.space(8)
+          spacing: Style.space(10)
 
-          Repeater {
-            model: State.READ_RECEIPT_MODES
-            Button {
-              text: State.readReceiptLabel(modelData, root.settings)
-              bordered: true
-              onClicked: root.whiskerService.changeSettings({ readReceipts: modelData.value })
-            }
+          PanelSectionHeader { text: "Privacy"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
+          Text {
+            text: "Read Receipts"
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.subtitle
           }
-          Button {
-            text: State.onOffLabel("Send online", root.settings && root.settings.sendOnline)
-            bordered: true
-            onClicked: root.whiskerService.changeSettings({ sendOnline: !root.settings.sendOnline })
+          ButtonGroup {
+            options: State.READ_RECEIPT_MODES
+            value: root.settings ? root.settings.readReceipts : ""
+            foreground: root.contentForeground
+            fontFamily: root.contentFontFamily
+            onChanged: function(mode) { root.whiskerService.changeSettings({ readReceipts: mode }) }
           }
-          Button {
-            text: State.onOffLabel("Send typing", root.settings && root.settings.sendTyping)
-            bordered: true
-            onClicked: root.whiskerService.changeSettings({ sendTyping: !root.settings.sendTyping })
+          Text {
+            width: parent.width
+            wrapMode: Text.Wrap
+            opacity: 0.6
+            text: State.readReceiptDescription(root.settings)
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
           }
-          Button {
-            text: State.onOffLabel("Notifications", root.settings && root.settings.notifications)
-            bordered: true
-            onClicked: root.whiskerService.changeSettings({ notifications: !root.settings.notifications })
-          }
-          Button {
-            visible: !root.confirmLogout
-            text: "Log out"
-            bordered: true
-            onClicked: root.confirmLogout = true
-          }
+          SettingToggle { key: "sendOnline" }
+          SettingToggle { key: "sendTyping" }
+
+          PanelSeparator { width: parent.width; foreground: root.contentForeground }
+          PanelSectionHeader { text: "Notifications"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
+          SettingToggle { key: "notifications" }
+
+          PanelSeparator { width: parent.width; foreground: root.contentForeground }
+          PanelSectionHeader { text: "Account"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
           Text {
             visible: root.confirmLogout
             width: parent.width
@@ -508,21 +523,30 @@ Panel {
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.body
           }
-          Button {
-            visible: root.confirmLogout
-            text: "Confirm Log out"
-            bordered: true
-            onClicked: {
-              root.confirmLogout = false
-              root.showSettings = false
-              root.whiskerService.logout()
+          Row {
+            spacing: Style.space(8)
+            Button {
+              visible: !root.confirmLogout
+              text: "Log out"
+              bordered: true
+              onClicked: root.confirmLogout = true
             }
-          }
-          Button {
-            visible: root.confirmLogout
-            text: "Cancel"
-            bordered: true
-            onClicked: root.confirmLogout = false
+            Button {
+              visible: root.confirmLogout
+              text: "Cancel"
+              bordered: true
+              onClicked: root.confirmLogout = false
+            }
+            Button {
+              visible: root.confirmLogout
+              text: "Confirm Log out"
+              bordered: true
+              onClicked: {
+                root.confirmLogout = false
+                root.showSettings = false
+                root.whiskerService.logout()
+              }
+            }
           }
         }
 
