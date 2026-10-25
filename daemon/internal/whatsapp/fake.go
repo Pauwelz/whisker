@@ -53,10 +53,10 @@ type Fake struct {
 	pictures       map[string]string // chat -> "id|content"; a missing Chat has no picture
 	pictureReq     []string          // "chat:knownID" of each ProfilePicture call
 	gate           chan struct{}     // while set, Send waits
-	groups         map[string][]Member
+	groups         map[string][]Participant
 	groupErr       error
 	groupLookups   int
-	groupGate      chan struct{} // while set, GroupMembers waits
+	groupGate      chan struct{} // while set, GroupParticipants waits
 }
 
 // SetOwn sets the user parts of the user's own IDs.
@@ -64,34 +64,34 @@ func (f *Fake) SetOwn(users ...string) { f.mu.Lock(); f.own = users; f.mu.Unlock
 
 func (f *Fake) OwnUsers() []string { f.mu.Lock(); defer f.mu.Unlock(); return f.own }
 
-// SetGroup presets the members that GroupMembers returns for a Group Chat.
-func (f *Fake) SetGroup(chat string, members ...Member) {
+// SetGroup presets the Participants that GroupParticipants returns for a Group Chat.
+func (f *Fake) SetGroup(chat string, participants ...Participant) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.groups == nil {
-		f.groups = map[string][]Member{}
+		f.groups = map[string][]Participant{}
 	}
-	f.groups[chat] = members
+	f.groups[chat] = participants
 }
 
-// SetGroupError makes GroupMembers fail with err. Pass nil to stop failing.
+// SetGroupError makes GroupParticipants fail with err. Pass nil to stop failing.
 func (f *Fake) SetGroupError(err error) { f.mu.Lock(); f.groupErr = err; f.mu.Unlock() }
 
-// GroupLookups counts the GroupMembers calls.
+// GroupLookups counts the GroupParticipants calls.
 func (f *Fake) GroupLookups() int { f.mu.Lock(); defer f.mu.Unlock(); return f.groupLookups }
 
-func (f *Fake) GroupMembers(chat string) ([]Member, error) {
+func (f *Fake) GroupParticipants(chat string) ([]Participant, error) {
 	f.mu.Lock()
 	f.groupLookups++
-	gate, members, err := f.groupGate, f.groups[chat], f.groupErr
+	gate, participants, err := f.groupGate, f.groups[chat], f.groupErr
 	f.mu.Unlock()
 	if gate != nil {
 		<-gate
 	}
-	return members, err
+	return participants, err
 }
 
-// HoldGroupLookup makes GroupMembers wait until the test calls it again with false.
+// HoldGroupLookup makes GroupParticipants wait until the test calls it again with false.
 func (f *Fake) HoldGroupLookup(hold bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

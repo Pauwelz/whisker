@@ -40,7 +40,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
-- A Message that you send to a Group Chat now moves past `sent`. Its Delivery State is the lowest state that every Recipient reached (`delivered`, `read`, `played`). The Recipients are the members of the Group Chat when the send succeeds. A Message from before the update, or from History Sync, keeps its state.
+- A Message that you send to a Group Chat now moves past `sent`. Its Delivery State is the lowest state that every Recipient reached (`delivered`, `read`, `played`). The Recipients are the Participants of the Group Chat when the send succeeds. A Message from before the update, or from History Sync, keeps its state.
 - After a link, Pinned Chats match the phone. The first App State sync after a link dropped its Pin events, so only the old pin of History Sync counted. Now a Pin from App State wins over the History Sync pin, also when it arrives first or when a LID Chat merges. Mutes and Read Markers of that first sync now also come through, in one refresh. Re-link to repair the pins of a device that is linked already.
 - Older Messages of the user that come in History Sync keep their Delivery State. Before, they all showed one ✓ (sent), even when the other person had read them. A later History Sync moves a stored Message forward to its state. Re-link to repair Messages that are stored already.
 - Older Messages from History Sync now show their Reactions. Before, the Daemon dropped the Reactions that History Sync carries, so only Reactions that arrived live showed.

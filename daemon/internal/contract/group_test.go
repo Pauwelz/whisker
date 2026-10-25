@@ -13,16 +13,16 @@ import (
 const crew = "g1@g.us"
 
 var (
-	ann = whatsapp.Member{Phone: "1@s.whatsapp.net", LID: "11@lid"}
-	bob = whatsapp.Member{Phone: "2@s.whatsapp.net", LID: "22@lid"}
+	ann = whatsapp.Participant{Phone: "1@s.whatsapp.net", LID: "11@lid"}
+	bob = whatsapp.Participant{Phone: "2@s.whatsapp.net", LID: "22@lid"}
 )
 
 // groupRunner is a connected Daemon with the Group Chat crew, a Direct Chat, and a History Sync Message "h1" of the user in crew.
-func groupRunner(t *testing.T, members ...whatsapp.Member) *runner {
+func groupRunner(t *testing.T, participants ...whatsapp.Participant) *runner {
 	t.Helper()
 	r := newRunner(t)
 	r.port.SetLinked(true)
-	r.port.SetGroup(crew, members...)
+	r.port.SetGroup(crew, participants...)
 	r.start()
 	r.nextFrame() // ready
 	r.nextFrame() // linked
@@ -122,7 +122,7 @@ func TestMessageFromAnotherDeviceMovesOnlyAfterTheLastRecipient(t *testing.T) {
 	r.expectFrame(`"state":"read"`)
 }
 
-func TestReceiptBeforeTheMemberLookupEndsStillCounts(t *testing.T) {
+func TestReceiptBeforeTheParticipantLookupEndsStillCounts(t *testing.T) {
 	r := groupRunner(t, ann)
 	r.port.HoldGroupLookup(true)
 	r.port.Emit(fromThePhone())

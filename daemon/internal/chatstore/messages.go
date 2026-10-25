@@ -3,6 +3,7 @@ package chatstore
 import (
 	"database/sql"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/Pauwelz/whisker/daemon/internal/media"
@@ -196,12 +197,7 @@ func (s *Store) Advance(chat, id, state string) (bool, error) {
 
 // advanceQuery is the UPDATE that moves a Message of the user forward to state. Its arguments are state, chat, id.
 func advanceQuery(state string) (string, error) {
-	at := -1
-	for i, st := range stateOrder {
-		if st == state {
-			at = i
-		}
-	}
+	at := slices.Index(stateOrder, state)
 	if at < 1 {
 		return "", errors.New("not a state to advance to: " + state)
 	}

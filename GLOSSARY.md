@@ -77,7 +77,7 @@ The progress of an outbound Message: `Pending`, `Sent`, `Delivered`, `Read`, `Pl
 _Avoid_: Message State, ack status, tick status, receipt state
 
 **Recipient**:
-A member of a Group Chat at the moment the user sends a Message there. The set of Recipients of a Message never changes after the send. A Recipient is a Participant, not a device: one device that reaches a state is enough. The user's own devices are never Recipients.
+A Participant of a Group Chat at the moment the user sends a Message there. The set of Recipients of a Message never changes after the send. A Recipient is a Participant, not a device: one device that reaches a state is enough. The user's own devices are never Recipients.
 _Avoid_: Receiver, addressee, target, member device
 
 **Disappearing Message**:

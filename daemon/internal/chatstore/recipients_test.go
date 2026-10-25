@@ -10,8 +10,8 @@ import (
 const group = "g1@g.us"
 
 var (
-	ann = chatstore.Recipient{Phone: "1@s.whatsapp.net", LID: "11@lid"}
-	bob = chatstore.Recipient{Phone: "2@s.whatsapp.net", LID: "22@lid"}
+	ann = whatsapp.Participant{Phone: "1@s.whatsapp.net", LID: "11@lid"}
+	bob = whatsapp.Participant{Phone: "2@s.whatsapp.net", LID: "22@lid"}
 )
 
 // groupMessage stores a pending Message of the user in a Group Chat.
@@ -43,7 +43,7 @@ func combined(t *testing.T, s *chatstore.Store) (string, bool) {
 
 func TestCombinedIsTheLowestStateOverAllRecipients(t *testing.T) {
 	s := groupMessage(t)
-	if err := s.SetRecipients(group, "m1", []chatstore.Recipient{ann, bob}); err != nil {
+	if err := s.SetRecipients(group, "m1", []whatsapp.Participant{ann, bob}); err != nil {
 		t.Fatal(err)
 	}
 	if state, known := combined(t, s); state != "" || !known {
@@ -80,7 +80,7 @@ func TestReceiptBeforeTheSetCountsOnceTheSetIsThere(t *testing.T) {
 	if _, known := combined(t, s); known {
 		t.Fatal("known before SetRecipients")
 	}
-	if err := s.SetRecipients(group, "m1", []chatstore.Recipient{ann}); err != nil {
+	if err := s.SetRecipients(group, "m1", []whatsapp.Participant{ann}); err != nil {
 		t.Fatal(err)
 	}
 	if state, _ := combined(t, s); state != whatsapp.StateRead {
@@ -90,7 +90,7 @@ func TestReceiptBeforeTheSetCountsOnceTheSetIsThere(t *testing.T) {
 
 func TestTwoDevicesOfOneRecipientCountOnce(t *testing.T) {
 	s := groupMessage(t)
-	if err := s.SetRecipients(group, "m1", []chatstore.Recipient{ann, bob}); err != nil {
+	if err := s.SetRecipients(group, "m1", []whatsapp.Participant{ann, bob}); err != nil {
 		t.Fatal(err)
 	}
 	receipt(t, s, ann.Phone, whatsapp.StateDelivered) // the phone of Ann
@@ -102,7 +102,7 @@ func TestTwoDevicesOfOneRecipientCountOnce(t *testing.T) {
 
 func TestARecipientKeepsItsHighestState(t *testing.T) {
 	s := groupMessage(t)
-	if err := s.SetRecipients(group, "m1", []chatstore.Recipient{ann}); err != nil {
+	if err := s.SetRecipients(group, "m1", []whatsapp.Participant{ann}); err != nil {
 		t.Fatal(err)
 	}
 	receipt(t, s, ann.Phone, whatsapp.StateRead)
@@ -114,10 +114,10 @@ func TestARecipientKeepsItsHighestState(t *testing.T) {
 
 func TestTheSetIsFrozenOnce(t *testing.T) {
 	s := groupMessage(t)
-	if err := s.SetRecipients(group, "m1", []chatstore.Recipient{ann}); err != nil {
+	if err := s.SetRecipients(group, "m1", []whatsapp.Participant{ann}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetRecipients(group, "m1", []chatstore.Recipient{ann, bob}); err != nil {
+	if err := s.SetRecipients(group, "m1", []whatsapp.Participant{ann, bob}); err != nil {
 		t.Fatal(err)
 	}
 	receipt(t, s, ann.Phone, whatsapp.StateRead)
@@ -130,7 +130,7 @@ func TestAHistorySyncMessageIsNotTracked(t *testing.T) {
 	s, _ := newStore(t)
 	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: group, Kind: whatsapp.KindGroup, LastActive: 1,
 		Messages: []whatsapp.Message{{ID: "m1", FromMe: true, Time: 1, State: whatsapp.StateDelivered}}}}})
-	if err := s.SetRecipients(group, "m1", []chatstore.Recipient{ann}); err != nil {
+	if err := s.SetRecipients(group, "m1", []whatsapp.Participant{ann}); err != nil {
 		t.Fatal(err)
 	}
 	if tracked, err := s.RecordReceipt(group, "m1", ann.Phone, whatsapp.StateRead); err != nil || tracked {

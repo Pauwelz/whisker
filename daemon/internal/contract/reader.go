@@ -102,7 +102,7 @@ func (r *reader) receipts(chat string, t receiptpolicy.Trigger) {
 // playedNote runs when the user starts a voice note of another Participant. It sends Played, and Read for that Message only, as the mode says.
 // shortcut: a repeat play after a Daemon restart sends Played again, which WhatsApp ignores; store the flag if that shows.
 func (r *reader) playedNote(chat, sender, id string) {
-	key := chat + "\x00" + id
+	key := messageKey(chat, id)
 	if r.played[key] {
 		return
 	}

@@ -7,11 +7,8 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
-// Recipient is a member of a Group Chat when a Message was sent there. A receipt matches it by phone JID or by LID.
-type Recipient struct{ Phone, LID string }
-
 // SetRecipients freezes the Recipients of a tracked Message. A Message that has Recipients already keeps them.
-func (s *Store) SetRecipients(chat, id string, rs []Recipient) error {
+func (s *Store) SetRecipients(chat, id string, rs []whatsapp.Participant) error {
 	return s.inTx(func(tx *sql.Tx) error {
 		var open bool // tracked, and no Recipients yet
 		if err := tx.QueryRow(`SELECT track_recipients = 1 AND NOT EXISTS (SELECT 1 FROM recipients WHERE chat_jid = ?1 AND id = ?2)
@@ -50,9 +47,9 @@ func (s *Store) RecordReceipt(chat, id, sender, state string) (bool, error) {
 // Combined is the lowest state that every Recipient reached: delivered, read or played, or "" when one has reached none.
 // known is false while the Message has no Recipients: the set is not stored yet, or it is empty.
 func (s *Store) Combined(chat, id string) (state string, known bool, err error) {
-	var rs []Recipient
+	var rs []whatsapp.Participant
 	if err := s.scan(`SELECT phone, lid FROM recipients WHERE chat_jid = ? AND id = ?`, []any{chat, id}, func(r *sql.Rows) error {
-		var x Recipient
+		var x whatsapp.Participant
 		err := r.Scan(&x.Phone, &x.LID)
 		rs = append(rs, x)
 		return err

@@ -99,7 +99,7 @@ func (c *Client) isOwn(jid types.JID) bool {
 	return jid.User != "" && slices.Contains(c.OwnUsers(), jid.User)
 }
 
-func (c *Client) GroupMembers(chat string) ([]Member, error) {
+func (c *Client) GroupParticipants(chat string) ([]Participant, error) {
 	jid, err := types.ParseJID(chat)
 	if err != nil {
 		return nil, err
@@ -113,9 +113,9 @@ func (c *Client) GroupMembers(chat string) ([]Member, error) {
 	if err != nil {
 		return nil, offline(err)
 	}
-	var members []Member
+	var participants []Participant
 	for _, p := range info.Participants {
-		m := Member{Phone: p.PhoneNumber.ToNonAD().String(), LID: p.LID.ToNonAD().String()}
+		m := Participant{Phone: p.PhoneNumber.ToNonAD().String(), LID: p.LID.ToNonAD().String()}
 		// The primary JID is one of the two IDs: fill the one that the fields leave empty.
 		switch p.JID.Server {
 		case types.DefaultUserServer:
@@ -124,10 +124,10 @@ func (c *Client) GroupMembers(chat string) ([]Member, error) {
 			m.LID = p.JID.ToNonAD().String()
 		}
 		if !c.isOwn(p.JID) && !c.isOwn(p.PhoneNumber) && !c.isOwn(p.LID) {
-			members = append(members, m)
+			participants = append(participants, m)
 		}
 	}
-	return members, nil
+	return participants, nil
 }
 
 func (c *Client) Logout() error {

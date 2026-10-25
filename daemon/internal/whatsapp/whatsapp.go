@@ -84,9 +84,9 @@ type Port interface {
 	SubscribePresence(jid string) error
 	// SendTyping tells a Chat that the user is composing (true) or has paused (false).
 	SendTyping(chat string, composing bool) error
-	// GroupMembers lists the members of a Group Chat, without the user. It returns ErrOffline when there is no connection.
+	// GroupParticipants lists the Participants of a Group Chat, without the user. It returns ErrOffline when there is no connection.
 	// It can block for a long time: call it off the Daemon loop.
-	GroupMembers(chat string) ([]Member, error)
+	GroupParticipants(chat string) ([]Participant, error)
 	// OwnUsers lists the user parts of the user's own IDs (phone number and LID). It is empty while unlinked.
 	OwnUsers() []string
 	// Events delivers events in order. The channel stays open until the process ends.
@@ -289,15 +289,15 @@ type NewMessage struct {
 	Message Message `json:"message"`
 }
 
-// Member is a member of a Group Chat. WhatsApp can give either ID, so a Member holds both. An unknown ID is empty.
-type Member struct {
+// Participant is a Participant of a Group Chat. WhatsApp can give either ID, so a Participant holds both. An unknown ID is empty.
+type Participant struct {
 	Phone string `json:"phone"` // phone JID, no device part
 	LID   string `json:"lid"`   // LID, no device part
 }
 
 // Receipt moves the Delivery State of the user's own Messages.
 // State is StateDelivered, StateRead or StatePlayed.
-// Sender is set in a Group Chat only: the phone JID or LID of the member, without the device part. It is never a device of the user.
+// Sender is set in a Group Chat only: the phone JID or LID of the Participant, without the device part. It is never a device of the user.
 type Receipt struct {
 	Chat   string   `json:"chat"`
 	IDs    []string `json:"ids"`
