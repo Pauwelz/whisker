@@ -201,6 +201,13 @@ Panel {
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.body
             }
+            // The switch between the QR code and the Pair Code, while linking.
+            Button {
+              visible: root.parts.pairToggle
+              text: root.pairMode ? "qr code" : "pair code"
+              tooltipText: root.pairMode ? "Link with a QR code" : "Link with a Pair Code"
+              onClicked: root.pairMode = !root.pairMode
+            }
             Button {
               visible: root.parts.newChatButton
               text: "+ new chat"
@@ -366,16 +373,6 @@ Panel {
           font.letterSpacing: Style.space(4)
         }
 
-        // As wide as the QR code, under it, so the switch is easy to find in both modes.
-        Button {
-          anchors.horizontalCenter: parent.horizontalCenter
-          visible: root.parts.pairToggle
-          width: qrCode.width
-          verticalPadding: Style.spacing.controlPaddingY * 2
-          text: root.pairMode ? "Use a QR code" : "Use a Pair Code"
-          bordered: true
-          onClicked: root.pairMode = !root.pairMode
-        }
 
         // The search row: a glyph, the search field and the filters. A line below it.
         RowLayout {
