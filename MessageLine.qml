@@ -54,9 +54,19 @@ Item {
     }
   }
 
+  // One line of body text. The toolbar is this high, so it does not cover the next line.
+  FontMetrics {
+    id: bodyFont
+    font.family: line.panel.contentFontFamily
+    font.pixelSize: Style.font.body
+  }
+
   // The Message under the pointer, or with its toolbar open: a light tint shows which Message the toolbar acts on.
+  // It covers the body only: not the sender header and not the Reactions row.
   Rectangle {
-    anchors.fill: parent
+    width: parent.width
+    y: bodyArea.y
+    height: reactionsRow.height > 0 ? reactionsRow.y - body.spacing : bodyArea.height
     visible: line.toolsShown
     color: line.panel.contentForeground
     opacity: 0.06
@@ -296,13 +306,14 @@ Item {
     y: bodyArea.y // on the first text line, not on the sender header; content sits at y 0
     visible: line.toolsShown
     width: toolRow.width + 2
-    height: toolRow.height + 2
+    height: bodyFont.height
     color: Color.background
     border.color: Color.muted
     border.width: 1
     Row {
       id: toolRow
       anchors.centerIn: parent
+      height: parent.height - 2
       spacing: 0
       Repeater {
         model: line.pickerOpen ? State.REACTION_EMOJI : []
@@ -312,6 +323,7 @@ Item {
           horizontalPadding: Style.space(4)
           verticalPadding: 0
           fontSize: Style.font.caption
+          height: toolRow.height
           bordered: State.myReaction(line.message) === modelData
           onClicked: {
             line.panel.whiskerService.reactToMessage(line.message, modelData)
@@ -325,6 +337,7 @@ Item {
           required property var modelData
           visible: line.isMessage && (modelData.name === "more" || State.menuActions(line.message, Math.floor(Date.now() / 1000)).indexOf(modelData.name) >= 0)
           text: modelData.icon
+          height: toolRow.height
           horizontalPadding: Style.space(4)
           verticalPadding: 0
           fontSize: Style.font.caption
