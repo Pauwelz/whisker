@@ -90,7 +90,12 @@ test("the contract doc lists the error codes of the Chat options", () => {
   for (const code of Object.keys(State.ERROR_NOTICES)) assert.ok(doc.includes(`| ${code} |`), code);
 });
 
-test("the hover buttons of a Chat line: pin toggles, mute unmutes or opens the menu", () => {
+test("the inline mute choices of a Chat line are short and end at the chosen time", () => {
+  assert.deepEqual(plain(State.chatRowMuteChoices(NOW)),
+    [{ text: "8h", option: { until: NOW + 28800 } }, { text: "1w", option: { until: NOW + 604800 } }, { text: "always", option: { until: -1 } }]);
+});
+
+test("the hover buttons of a Chat line: pin toggles, mute unmutes or shows the mute choices", () => {
   const buttons = (chat) => plain(State.chatRowButtons(chat));
   assert.deepEqual(buttons(ann), { pin: { text: "pin", option: { pinned: true } }, mute: { text: "mute", option: null } });
   assert.deepEqual(buttons({ ...ann, pinned: true, muted: true }),

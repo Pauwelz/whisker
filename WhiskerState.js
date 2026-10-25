@@ -1043,10 +1043,11 @@ function chatTimeLabel(lastActive, nowSeconds) {
 }
 
 // The mute choices of the Chat menu. `seconds` is -1 for ever.
+// `short` is the label of the inline choice on a Chat line.
 var MUTE_CHOICES = [
-  { label: "8 hours", seconds: 8 * 3600 },
-  { label: "1 week", seconds: 7 * 86400 },
-  { label: "always", seconds: -1 }
+  { label: "8 hours", short: "8h", seconds: 8 * 3600 },
+  { label: "1 week", short: "1w", seconds: 7 * 86400 },
+  { label: "always", short: "always", seconds: -1 }
 ]
 
 // The mute end time of a choice, in Unix seconds as `chat.mute` takes it: -1 for ever.
@@ -1080,12 +1081,19 @@ function chatOptions(chat, nowSeconds) {
 }
 
 // The hover buttons of a Chat line. `option` is what a click chooses.
-// Pin toggles. Mute on a Muted Chat unmutes; otherwise `option` is null and the click opens the Chat menu for the choices.
+// Pin toggles. Mute on a Muted Chat unmutes; otherwise `option` is null and the click shows the mute choices in the line.
 function chatRowButtons(chat) {
   return {
     pin: { text: chat.pinned ? "unpin" : "pin", option: { pinned: !chat.pinned } },
     mute: chat.muted ? { text: "unmute", option: UNMUTE } : { text: "mute", option: null }
   }
+}
+
+// The mute choices that replace the hover buttons after a click on mute.
+function chatRowMuteChoices(nowSeconds) {
+  return MUTE_CHOICES.map(function(choice) {
+    return { text: choice.short, option: { until: muteEnd(choice, nowSeconds) } }
+  })
 }
 
 // The request for a Chat menu option.

@@ -15,11 +15,12 @@ Item {
   readonly property alias trailing: trailingSlot
   readonly property real trailingWidth: Style.space(88)
   readonly property bool optionsOpen: panel.optionsFor === chat.jid
+  property bool muting: false // the mute choices show in place of the hover buttons
 
   implicitHeight: line.implicitHeight + (optionsOpen ? menu.height : 0)
   height: implicitHeight
 
-  HoverHandler { id: hover }
+  HoverHandler { id: hover; onHoveredChanged: if (!hovered) row.muting = false }
   // A tap opens the Chat, but not on the trailing slot: its buttons take the tap.
   Item {
     anchors.fill: parent
@@ -89,7 +90,7 @@ Item {
       }
       // Hover buttons, from State.chatRowButtons.
       Row {
-        visible: hover.hovered
+        visible: hover.hovered && !row.muting
         anchors.right: parent.right
         spacing: Style.space(8)
         Mark {
@@ -102,7 +103,26 @@ Item {
             onTapped: {
               var option = State.chatRowButtons(row.chat).mute.option
               if (option) row.panel.whiskerService.chooseChatOption(row.chat, option)
-              else row.panel.optionsFor = row.chat.jid
+              else row.muting = true
+            }
+          }
+        }
+      }
+      // The mute choices, from State.chatRowMuteChoices. Create them on click, so the end times are fresh.
+      Row {
+        visible: hover.hovered && row.muting
+        anchors.right: parent.right
+        spacing: Style.space(8)
+        Repeater {
+          model: row.muting ? State.chatRowMuteChoices(Math.floor(Date.now() / 1000)) : []
+          Mark {
+            required property var modelData
+            text: modelData.text
+            TapHandler {
+              onTapped: {
+                row.muting = false
+                row.panel.whiskerService.chooseChatOption(row.chat, modelData.option)
+              }
             }
           }
         }
