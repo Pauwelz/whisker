@@ -719,7 +719,7 @@ test("a phone with nothing more hides the link for this Chat", () => {
 
 test("a phone that does not answer gives a notice and the link comes back", () => {
   const state = received(State.historyRequested(olderChat()), { count: 0, timedOut: true });
-  assert.equal(state.notice, "Your phone did not answer. Open WhatsApp on your phone and try again.");
+  assert.equal(state.notice, "No older Messages came from your phone.");
   assert.equal(State.olderLink(state), "load older");
 });
 

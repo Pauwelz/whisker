@@ -17,7 +17,7 @@
 {"dir":"historyRequested","requests":["1@s.whatsapp.net:m1:50"]}
 {"dir":"clock","historyTimer":true}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"historyReceived","params":{"chat":"1@s.whatsapp.net","count":0,"timedOut":true}}}
-{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":100,"text":"one","state":"","edited":false,"revoked":false},{"id":"m2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":200,"text":"two","state":"","edited":false,"revoked":false}],"moreMessages":false},"notice":"Your phone did not answer. Open WhatsApp on your phone and try again."}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":100,"text":"one","state":"","edited":false,"revoked":false},{"id":"m2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":200,"text":"two","state":"","edited":false,"revoked":false}],"moreMessages":false},"notice":"No older Messages came from your phone."}}
 {"dir":"whatsapp","historyAnswer":1}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.requestHistory","params":{"chat":"1@s.whatsapp.net"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{}}}

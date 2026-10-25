@@ -395,7 +395,7 @@ function reloadsOpenChat(state, frame) {
 // openChat.historyLoading is set while the request is open. state.nothingMore (JID to true) lives in Plugin memory only.
 var OLDER_LOAD = "load older"
 var OLDER_LOADING = "loading from phone…"
-var NO_ANSWER = "Your phone did not answer. Open WhatsApp on your phone and try again."
+var NO_ANSWER = "No older Messages came from your phone."
 
 // The text of the older link, or "" while it is hidden. It waits for the first page of the Chat.
 function olderLink(state) {
