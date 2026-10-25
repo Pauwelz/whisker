@@ -249,3 +249,18 @@ func TestPasteRefusesAnImageOverTheLimit(t *testing.T) {
 		t.Errorf("frame = %s, want not sendable", f)
 	}
 }
+
+func TestSlowClipboardDoesNotBlockOtherRequests(t *testing.T) {
+	fakeClipboard(t, `/usr/bin/sleep 1; printf 'text/plain\n'`)
+	r := newRunner(t)
+	r.start()
+	r.nextFrame() // ready
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"draft.paste","params":{"chat":"a@s.whatsapp.net"}}`)
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"settings.get"}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"id":2`) {
+		t.Errorf("first frame = %s, want the reply to settings.get", f)
+	}
+	if f := r.nextFrame(); !strings.Contains(f, `"id":1`) || !strings.Contains(f, `"pasted":[]`) {
+		t.Errorf("second frame = %s, want the late reply to draft.paste", f)
+	}
+}

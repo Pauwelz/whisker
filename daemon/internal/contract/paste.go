@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -19,67 +20,108 @@ const pasteTimeout = 2 * time.Second
 // pastedImageTypes are the image types a paste takes, best first, with the extension that sniffMime knows.
 var pastedImageTypes = []struct{ mime, ext string }{{"image/png", ".png"}, {"image/jpeg", ".jpg"}, {"image/webp", ".webp"}}
 
-// draftPaste reads the clipboard for a Ctrl+V in the composer. `pasted` lists the paths of the copied files in clipboard order,
-// or the path of a pasted image that the Daemon wrote. Files win over an image, and an image wins over text.
-// An empty `pasted` tells the Plugin to paste text: no file or image, no wl-paste, or a timeout.
-// Error -32012 means that the stored Attachments plus the new paths would pass maxAttachments.
-// shortcut: the read runs on the Daemon loop for up to 3 × pasteTimeout, move it off the loop when that stall shows.
+// pasteResult is what the clipboard read of a draft.paste found. The goroutine fills it and the Daemon loop answers with it.
+type pasteResult struct {
+	id          json.RawMessage
+	chat        string
+	files       []string // the copied files, in clipboard order
+	image       string   // the path of the image that the read wrote
+	tooLarge    bool     // the clipboard image is over maxSendBytes
+	notFound    bool     // wl-paste is not installed
+	writeFailed bool     // the image could not be written to pastedDir
+}
+
+// draftPaste starts the clipboard read for a Ctrl+V in the composer. It gives no reply: pasteDone answers later,
+// so a slow clipboard owner stalls no other request.
 func (s *session) draftPaste(req *request) outcome {
-	pasted := func(paths ...string) outcome {
-		return outcome{reply: resultReply(req.ID, map[string]any{"chat": req.Params.Chat, "pasted": append([]string{}, paths...)})}
-	}
-	out, err := s.wlPaste("--list-types")
+	id, chat := req.ID, req.Params.Chat
+	go func() { s.pasteDone <- readClipboard(id, chat) }()
+	return outcome{}
+}
+
+// readClipboard runs off the Daemon loop, so it is no session method: it must not touch the session state.
+func readClipboard(id json.RawMessage, chat string) pasteResult {
+	r := pasteResult{id: id, chat: chat}
+	out, err := wlPaste("--list-types")
 	if err != nil {
-		return pasted()
+		r.notFound = errors.Is(err, exec.ErrNotFound)
+		return r
 	}
 	types := strings.Fields(string(out))
-	files := s.copiedFiles(types)
+	r.files = copiedFiles(types)
 	i := slices.IndexFunc(pastedImageTypes, func(t struct{ mime, ext string }) bool { return slices.Contains(types, t.mime) })
-	if len(files) == 0 && i < 0 {
-		return pasted()
+	if len(r.files) == 0 && i >= 0 {
+		var err error
+		r.image, err = pasteImage(pastedImageTypes[i].mime, pastedImageTypes[i].ext)
+		r.tooLarge = errors.Is(err, errTooLarge)
+		r.writeFailed = errors.Is(err, errPasteWrite)
 	}
-	stored, err := s.chats.Draft(req.Params.Chat)
+	return r
+}
+
+// pasted answers a draft.paste with the files or the image that the read found. An empty `pasted` tells the Plugin to paste text:
+// no file or image, no wl-paste, or a timeout. Files win over an image, and an image wins over text.
+// Error -32012 means that the stored Attachments plus the new paths would pass maxAttachments.
+// The check uses the Draft of now, not the Draft of the request.
+func (s *session) pasted(r pasteResult) int {
+	if r.writeFailed {
+		fmt.Fprintln(s.logOut, "paste write failed")
+	}
+	if r.notFound && !s.noWlPaste {
+		s.noWlPaste = true
+		fmt.Fprintln(s.logOut, "wl-paste not found")
+	}
+	reply := func(paths ...string) int {
+		return exitIf(s.send(resultReply(r.id, map[string]any{"chat": r.chat, "pasted": append([]string{}, paths...)})))
+	}
+	fail := func(code int, msg string) int {
+		dropPasted(r.image)
+		return exitIf(s.send(errorReply(r.id, code, msg)))
+	}
+	if !s.ready { // an unlink came while the read ran
+		dropPasted(r.image)
+		return reply()
+	}
+	if len(r.files) == 0 && r.image == "" {
+		if r.tooLarge {
+			return fail(errNotSendable, msgNotSendable)
+		}
+		return reply() // a failed read or write pastes text
+	}
+	stored, err := s.chats.Draft(r.chat)
 	if err != nil {
 		fmt.Fprintln(s.logOut, "draft read failed")
-		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
+		return fail(errChatStore, msgChatStore)
 	}
-	if len(files) > 0 {
+	if len(r.files) > 0 {
 		added := 0
-		for _, f := range files {
+		for _, f := range r.files {
 			if !slices.Contains(stored.Attachments, f) {
 				added++
 			}
 		}
 		if len(stored.Attachments)+added > maxAttachments {
-			return outcome{reply: errorReply(req.ID, errTooManyFiles, msgTooManyFiles)}
+			return fail(errTooManyFiles, msgTooManyFiles)
 		}
-		for _, f := range files {
+		for _, f := range r.files {
 			if _, err := statSendable(f); err != nil {
-				return outcome{reply: errorReply(req.ID, errNotSendable, msgNotSendable)}
+				return fail(errNotSendable, msgNotSendable)
 			}
 		}
-		return pasted(files...)
+		return reply(r.files...)
 	}
 	if len(stored.Attachments) >= maxAttachments {
-		return outcome{reply: errorReply(req.ID, errTooManyFiles, msgTooManyFiles)}
+		return fail(errTooManyFiles, msgTooManyFiles)
 	}
-	t := pastedImageTypes[i]
-	path, err := s.pasteImage(t.mime, t.ext)
-	if errors.Is(err, errTooLarge) {
-		return outcome{reply: errorReply(req.ID, errNotSendable, msgNotSendable)}
-	}
-	if path == "" { // a failed read or write pastes text
-		return pasted()
-	}
-	return pasted(path)
+	return reply(r.image)
 }
 
 // copiedFiles gives the paths of the file:// URIs on the clipboard, as a file manager copies them, without duplicates.
-func (s *session) copiedFiles(types []string) []string {
+func copiedFiles(types []string) []string {
 	if !slices.Contains(types, "text/uri-list") {
 		return nil
 	}
-	list, err := s.wlPaste("--type", "text/uri-list")
+	list, err := wlPaste("--type", "text/uri-list")
 	if err != nil {
 		return nil
 	}
@@ -100,13 +142,16 @@ func (s *session) copiedFiles(types []string) []string {
 	return files
 }
 
-var errTooLarge = errors.New("too large")
+var (
+	errTooLarge   = errors.New("too large")
+	errPasteWrite = errors.New("paste write failed")
+)
 
 // pasteImage writes the clipboard image to its own folder in pastedDir, as "Pasted image" plus the extension.
 // The folder keeps the name unique, and the Plugin shows the file name in the Attachment row.
 // pastedDir is in memory, so the plain image never reaches the disk. A reboot clears it.
-func (s *session) pasteImage(mime, ext string) (string, error) {
-	data, err := s.wlPaste("--type", mime)
+func pasteImage(mime, ext string) (string, error) {
+	data, err := wlPaste("--type", mime)
 	switch {
 	case err != nil:
 		return "", err
@@ -120,19 +165,16 @@ func (s *session) pasteImage(mime, ext string) (string, error) {
 		return "", nil
 	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
-		fmt.Fprintln(s.logOut, "paste write failed")
-		return "", err
+		return "", errPasteWrite
 	}
 	dir, err := os.MkdirTemp(root, "") // mode 0700
 	if err != nil {
-		fmt.Fprintln(s.logOut, "paste write failed")
-		return "", err
+		return "", errPasteWrite
 	}
 	path := filepath.Join(dir, "Pasted image"+ext)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
-		fmt.Fprintln(s.logOut, "paste write failed")
 		os.RemoveAll(dir)
-		return "", err
+		return "", errPasteWrite
 	}
 	return path, nil
 }
@@ -162,15 +204,10 @@ func dropAllPasted() {
 }
 
 // wlPaste runs wl-paste. wl-clipboard is optional: without it, a paste is text only.
-func (s *session) wlPaste(args ...string) ([]byte, error) {
+func wlPaste(args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pasteTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "wl-paste", args...)
 	cmd.WaitDelay = 100 * time.Millisecond // a child that keeps stdout open must not outlast the timeout
-	out, err := cmd.Output()
-	if errors.Is(err, exec.ErrNotFound) && !s.noWlPaste {
-		s.noWlPaste = true
-		fmt.Fprintln(s.logOut, "wl-paste not found")
-	}
-	return out, err
+	return cmd.Output()
 }

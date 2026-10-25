@@ -468,6 +468,8 @@ Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is 
 
 Params: `chat`. Valid once the Daemon is `ready`. The Plugin sends it on Ctrl+V in the composer, except during an Edit. The Daemon reads the clipboard with `wl-paste` and answers `{"chat": ..., "pasted": [...]}`. It does not change the Draft.
 
+The Daemon reads the clipboard off its loop, so other requests do not wait for it. The reply can come after the replies of later requests. The Plugin matches it by its `chat` and `pasted` members, not by its order.
+
 - `pasted` lists the absolute paths of the `file://` URIs in `text/uri-list`, in clipboard order, as a file manager copies files. The Plugin adds them to the end of the Attachments (a path already there stays once) and stores the list with `draft.set`.
 - With no `file://` URI, an image wins over text. For `image/png`, `image/jpeg` or `image/webp` (best first), the Daemon writes the bytes to `$XDG_RUNTIME_DIR/whisker/pasted/<random>/Pasted image.<ext>` (folder 0700, file 0600) and `pasted` is a list of that one path. The folder is in memory, so the plain image never reaches the disk.
 - The Daemon deletes a pasted image, with its folder, when `draft.set` leaves its path out of `attachments`, when `chat.sendMedia` has stored its encrypted copy, and on an unlink. It never deletes an Attachment outside that folder. There is no sweep at start; a reboot clears the folder.

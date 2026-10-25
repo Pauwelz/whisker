@@ -160,7 +160,7 @@ func (s *session) onLine(line []byte) int {
 	} else {
 		out.reply = errorReply(req.ID, errMethodNotFound, msgMethodNotFound)
 	}
-	if !s.send(out.reply) {
+	if out.reply != nil && !s.send(out.reply) { // a nil reply comes later, as for draft.paste
 		return ExitError
 	}
 	if out.then == nil {

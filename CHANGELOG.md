@@ -46,6 +46,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- A slow clipboard no longer blocks whisker while you paste.
 - Removing a Reaction from the newest Message no longer scrolls the timeline up to its sender header. The newest Message stays fully in view.
 - "load older" and a change to a shown Message no longer scroll the timeline back to the newest Message. A reader who scrolled up keeps the Message at the top edge in place.
 - A Message that you send to a Group Chat now moves past `sent`. Its Delivery State is the lowest state that every Recipient reached (`delivered`, `read`, `played`). The Recipients are the Participants of the Group Chat when the send succeeds. A Message from before the update, or from History Sync, keeps its state.

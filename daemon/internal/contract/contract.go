@@ -110,7 +110,7 @@ type NewPort func() (whatsapp.Port, error)
 // It writes frames to out and logs to logOut. It returns the process exit code.
 func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.Store, newPort NewPort) int {
 	enc := json.NewEncoder(out) // Encode ends each frame with a newline.
-	s := &session{profile: profile, prefs: prefs, newPort: newPort, logOut: logOut}
+	s := &session{profile: profile, prefs: prefs, newPort: newPort, logOut: logOut, pasteDone: make(chan pasteResult, 64)}
 	s.send = func(frame map[string]any) bool {
 		if err := enc.Encode(frame); err != nil {
 			fmt.Fprintln(logOut, "write failed:", err)
@@ -148,6 +148,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			code = exitIf(s.box.done(r))
 		case r := <-s.participantsDone:
 			code = exitIf(s.box.participantsDone(r))
+		case r := <-s.pasteDone:
+			code = s.pasted(r)
 		case e := <-s.historyEnded:
 			code = exitIf(s.hist.timedOut(e))
 		case <-s.muteTick:
