@@ -23,7 +23,12 @@ const ConnectRetryDelay = 5 * time.Second
 type sendPort interface {
 	Send(chat, id, text string, quote *whatsapp.Quote, timer int64) error
 	SendMedia(chat, id string, m whatsapp.Media, plain *os.File, caption string, timer int64) error
+	GroupParticipants(chat string) ([]whatsapp.Participant, error)
+	PhoneOf(lid string) string
 }
+
+// messageKey names a Message across Chats, for the maps that track work per Message.
+func messageKey(chat, id string) string { return chat + "\x00" + id }
 
 // outbox sends the Messages of the user and follows the connection.
 // A Message waits as `pending` in the chat store until the connection is up, so a restart loses nothing.
@@ -39,6 +44,8 @@ type outbox struct {
 	inflight      map[string]bool
 	merged        map[string]string // LID Chat to phone Chat: a send that began in the LID Chat ends in the phone Chat
 	results       chan sendResult
+	participants  chan participantsResult                  // the results of the Group Chat Participant lookups
+	looking       map[string]bool                          // Messages whose Participant lookup runs
 	store         *media.Store                             // holds the files of Media to send
 	incoming      func(whatsapp.NewMessage)                // runs after a new Message is stored
 	notice        func(whatsapp.NewMessage) map[string]any // the `notify` frame of a new Message, or nil
@@ -51,10 +58,17 @@ type sendResult struct {
 	err      error
 }
 
+type participantsResult struct {
+	chat, id     string
+	participants []whatsapp.Participant
+	err          error
+}
+
 func newOutbox(chats *chatstore.Store, port sendPort, store *media.Store, send func(map[string]any) bool, logOut io.Writer,
 	incoming func(whatsapp.NewMessage), notice func(whatsapp.NewMessage) map[string]any, autoDownloads func(size int64) bool) *outbox {
 	return &outbox{chats: chats, port: port, store: store, send: send, logOut: logOut, incoming: incoming, notice: notice, autoDownloads: autoDownloads,
-		inflight: map[string]bool{}, merged: map[string]string{}, results: make(chan sendResult, 64)}
+		inflight: map[string]bool{}, merged: map[string]string{}, results: make(chan sendResult, 64),
+		participants: make(chan participantsResult, 64), looking: map[string]bool{}}
 }
 
 // submit starts the send of a pending Message. It does nothing offline, or while that Message is in flight.
@@ -121,7 +135,11 @@ func (b *outbox) done(r sendResult) bool {
 	delete(b.inflight, r.id)
 	switch {
 	case r.err == nil:
-		return b.move(r.chat, r.id, func() (bool, error) { return b.chats.Advance(r.chat, r.id, whatsapp.StateSent) })
+		ok := b.move(r.chat, r.id, func() (bool, error) { return b.chats.Advance(r.chat, r.id, whatsapp.StateSent) })
+		if b.isGroup(r.chat) {
+			b.freeze(r.chat, r.id)
+		}
+		return ok
 	case errors.Is(r.err, whatsapp.ErrOffline):
 		// The Message stays pending. After a reconnect it goes out now, otherwise on the next Connected.
 		if r.gen == b.gen {
@@ -179,6 +197,9 @@ func (b *outbox) incomingMessage(ev whatsapp.NewMessage) bool {
 		return true
 	}
 	b.incoming(ev)
+	if ev.Message.FromMe && ev.Kind == whatsapp.KindGroup { // sent from another device of the user
+		b.freeze(ev.Chat, ev.Message.ID)
+	}
 	if !b.notify(ev.Chat, ev.Message.ID) || !b.send(notification("chatsChanged", nil)) {
 		return false
 	}
@@ -202,9 +223,94 @@ func (b *outbox) reacted(ev whatsapp.Reaction) bool {
 
 func (b *outbox) receipt(ev whatsapp.Receipt) bool {
 	for _, id := range ev.IDs {
+		if b.isGroup(ev.Chat) {
+			if !b.groupReceipt(ev, id) {
+				return false
+			}
+			continue
+		}
 		if !b.move(ev.Chat, id, func() (bool, error) { return b.chats.Advance(ev.Chat, id, ev.State) }) {
 			return false
 		}
 	}
 	return true
+}
+
+// isGroup tells that a stored Chat is a Group Chat.
+func (b *outbox) isGroup(chat string) bool {
+	c, err := b.chats.Chat(chat)
+	return err == nil && c.Kind == whatsapp.KindGroup
+}
+
+// groupReceipt keeps a receipt of a Group Chat and moves the Message to the state that every Recipient reached.
+// The receipt counts for the sender ID and for the phone JID of a LID, so it matches a Recipient by either ID.
+// Without the set, it tries the Participant lookup again: a failed lookup has no timer.
+func (b *outbox) groupReceipt(ev whatsapp.Receipt, id string) bool {
+	tracked := false
+	for _, sender := range []string{ev.Sender, b.port.PhoneOf(ev.Sender)} {
+		if sender == "" {
+			continue
+		}
+		t, err := b.chats.RecordReceipt(ev.Chat, id, sender, ev.State)
+		if err != nil {
+			fmt.Fprintln(b.logOut, "chat store write failed")
+			return true
+		}
+		tracked = tracked || t
+	}
+	if !tracked {
+		return true
+	}
+	ok, known := b.advanceGroup(ev.Chat, id)
+	if ok && !known {
+		b.freeze(ev.Chat, id)
+	}
+	return ok
+}
+
+// advanceGroup moves a Message of a Group Chat to the state that every Recipient reached.
+// known is false while the set is not frozen.
+func (b *outbox) advanceGroup(chat, id string) (ok, known bool) {
+	state, known, err := b.chats.Combined(chat, id)
+	if err != nil {
+		fmt.Fprintln(b.logOut, "chat store read failed")
+		return true, true
+	}
+	if !known || state == "" {
+		return true, known
+	}
+	return b.move(chat, id, func() (bool, error) { return b.chats.Advance(chat, id, state) }), true
+}
+
+// freeze starts the lookup of the Recipients of a Message in a Group Chat. The lookup runs off the Daemon loop.
+func (b *outbox) freeze(chat, id string) {
+	key := messageKey(chat, id)
+	if b.looking[key] {
+		return
+	}
+	b.looking[key] = true
+	go func() {
+		participants, err := b.port.GroupParticipants(chat)
+		b.participants <- participantsResult{chat, id, participants, err}
+	}()
+}
+
+// participantsDone stores the Recipients of a Message, then counts the receipts that came before them.
+func (b *outbox) participantsDone(r participantsResult) bool {
+	delete(b.looking, messageKey(r.chat, r.id))
+	if r.err != nil {
+		fmt.Fprintln(b.logOut, "group lookup failed") // the next receipt of the Message tries again
+		return true
+	}
+	for i, p := range r.participants { // a receipt can name the other ID than GetGroupInfo gave
+		if p.Phone == "" && p.LID != "" {
+			r.participants[i].Phone = b.port.PhoneOf(p.LID)
+		}
+	}
+	if err := b.chats.SetRecipients(r.chat, r.id, r.participants); err != nil {
+		fmt.Fprintln(b.logOut, "chat store write failed")
+		return true
+	}
+	ok, _ := b.advanceGroup(r.chat, r.id)
+	return ok
 }

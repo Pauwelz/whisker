@@ -53,12 +53,55 @@ type Fake struct {
 	pictures       map[string]string // chat -> "id|content"; a missing Chat has no picture
 	pictureReq     []string          // "chat:knownID" of each ProfilePicture call
 	gate           chan struct{}     // while set, Send waits
+	groups         map[string][]Participant
+	groupErr       error
+	groupLookups   int
+	groupGate      chan struct{} // while set, GroupParticipants waits
 }
 
 // SetOwn sets the user parts of the user's own IDs.
 func (f *Fake) SetOwn(users ...string) { f.mu.Lock(); f.own = users; f.mu.Unlock() }
 
 func (f *Fake) OwnUsers() []string { f.mu.Lock(); defer f.mu.Unlock(); return f.own }
+
+// SetGroup presets the Participants that GroupParticipants returns for a Group Chat.
+func (f *Fake) SetGroup(chat string, participants ...Participant) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.groups == nil {
+		f.groups = map[string][]Participant{}
+	}
+	f.groups[chat] = participants
+}
+
+// SetGroupError makes GroupParticipants fail with err. Pass nil to stop failing.
+func (f *Fake) SetGroupError(err error) { f.mu.Lock(); f.groupErr = err; f.mu.Unlock() }
+
+// GroupLookups counts the GroupParticipants calls.
+func (f *Fake) GroupLookups() int { f.mu.Lock(); defer f.mu.Unlock(); return f.groupLookups }
+
+func (f *Fake) GroupParticipants(chat string) ([]Participant, error) {
+	f.mu.Lock()
+	f.groupLookups++
+	gate, participants, err := f.groupGate, f.groups[chat], f.groupErr
+	f.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
+	return participants, err
+}
+
+// HoldGroupLookup makes GroupParticipants wait until the test calls it again with false.
+func (f *Fake) HoldGroupLookup(hold bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if hold && f.groupGate == nil {
+		f.groupGate = make(chan struct{})
+	} else if !hold && f.groupGate != nil {
+		close(f.groupGate)
+		f.groupGate = nil
+	}
+}
 
 // SetPhones presets the local LID store: LID to phone JID.
 func (f *Fake) SetPhones(phones map[string]string) { f.mu.Lock(); f.phones = phones; f.mu.Unlock() }

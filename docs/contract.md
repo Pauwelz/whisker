@@ -330,7 +330,7 @@ Delivery State of a Message of the user:
 | `played` | The recipient played the voice or audio Media. |
 | `failed` | The send failed. Retry with `chat.retry`. |
 
-A state only moves forward in this order. Receipts in a Group Chat are not used yet, so a Message there stays `sent`.
+A state only moves forward in this order. In a Group Chat, a Message of the user has the lowest state that every Recipient reached (the Participants of the Group Chat when the send succeeded). A Message from History Sync keeps the state that History Sync carries.
 
 Fixtures: `chat-messages.jsonl`, `chat-receive.jsonl`.
 

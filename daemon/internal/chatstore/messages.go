@@ -3,6 +3,7 @@ package chatstore
 import (
 	"database/sql"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/Pauwelz/whisker/daemon/internal/media"
@@ -168,8 +169,8 @@ func (s *Store) addPending(chat, id, text string, quote *whatsapp.Quote, m *what
 		if err := tx.QueryRow(`SELECT timer FROM chats WHERE jid = ?`, chat).Scan(&timer); err != nil {
 			return err
 		}
-		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, expires_at)
-			VALUES (?, ?, '', 1, ?, ?, ?, ?, ?, ?, ?)`,
+		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, expires_at, track_recipients)
+			VALUES (?, ?, '', 1, ?, ?, ?, ?, ?, ?, ?, 1)`,
 			chat, id, now, text, whatsapp.StatePending, q.ID, q.Sender, q.Text, expiry(now, timer))
 		if err != nil || m == nil {
 			return err
@@ -196,12 +197,7 @@ func (s *Store) Advance(chat, id, state string) (bool, error) {
 
 // advanceQuery is the UPDATE that moves a Message of the user forward to state. Its arguments are state, chat, id.
 func advanceQuery(state string) (string, error) {
-	at := -1
-	for i, st := range stateOrder {
-		if st == state {
-			at = i
-		}
-	}
+	at := slices.Index(stateOrder, state)
 	if at < 1 {
 		return "", errors.New("not a state to advance to: " + state)
 	}
@@ -560,6 +556,11 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
 	}
 	if known > 0 {
 		return nil
+	}
+	if ev.Message.FromMe { // History Sync Messages never get this: see Combined
+		if _, err := tx.Exec(`UPDATE messages SET track_recipients = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
+			return err
+		}
 	}
 	// With "Keep chats archived" off, a new Message unarchives its Chat. The live bit stops a later History Sync from archiving it again.
 	if _, err := tx.Exec(`UPDATE chats SET archived = 0, live_flags = live_flags | ? WHERE jid = ? AND archived = 1

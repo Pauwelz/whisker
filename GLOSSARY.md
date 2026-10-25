@@ -73,8 +73,12 @@ The placeholder that stays in the Chat timeline when a Message is revoked for ev
 _Avoid_: Soft delete, redacted message, retracted message
 
 **Delivery State**:
-The progress of an outbound Message: `Pending`, `Sent`, `Delivered`, `Read`, `Played` (voice and audio Media), or `Failed`. In a Group Chat, a state applies only when every recipient has reached it.
+The progress of an outbound Message: `Pending`, `Sent`, `Delivered`, `Read`, `Played` (voice and audio Media), or `Failed`. In a Group Chat, a state applies only when every Recipient has reached it.
 _Avoid_: Message State, ack status, tick status, receipt state
+
+**Recipient**:
+A Participant of a Group Chat at the moment the user sends a Message there. The set of Recipients of a Message never changes after the send. A Recipient is a Participant, not a device: one device that reaches a state is enough. The user's own devices are never Recipients.
+_Avoid_: Receiver, addressee, target, member device
 
 **Disappearing Message**:
 A Message in a Chat with a disappearing timer. Every device deletes it when the timer expires.

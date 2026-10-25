@@ -146,6 +146,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			code = exitIf(s.loader.done(r))
 		case r := <-s.sent:
 			code = exitIf(s.box.done(r))
+		case r := <-s.participantsDone:
+			code = exitIf(s.box.participantsDone(r))
 		case <-s.muteTick:
 			s.muteTick, s.muteAt = nil, 0
 			code = exitIf(s.send(notification("chatsChanged", nil)))

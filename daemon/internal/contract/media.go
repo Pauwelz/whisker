@@ -59,7 +59,7 @@ func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Stor
 // start downloads the Media of a Message that is marked downloading. It does nothing while that Media is in flight.
 func (l *mediaLoader) start(chat, id string) {
 	ref, err := l.chats.MediaOf(chat, id)
-	key := chat + "\x00" + id
+	key := messageKey(chat, id)
 	if err != nil || l.inflight[key] {
 		return
 	}
@@ -83,7 +83,7 @@ func (l *mediaLoader) autoStart(ev whatsapp.NewMessage) {
 // shortcut: all fetches of a page start at once; a page holds at most maxChatsLimit Messages. Add a limit if WhatsApp throttles.
 func (l *mediaLoader) previews(chat string, msgs []chatstore.Message) {
 	for _, m := range msgs {
-		key := chat + "\x00" + m.ID
+		key := messageKey(chat, m.ID)
 		if m.Media == nil || len(m.Media.Thumbnail) > 0 || l.thumbTried[key] {
 			continue
 		}
@@ -134,7 +134,7 @@ func (l *mediaLoader) done(r mediaResult) bool {
 	if r.thumbnail {
 		return l.thumbnailDone(r)
 	}
-	delete(l.inflight, r.chat+"\x00"+r.id)
+	delete(l.inflight, messageKey(r.chat, r.id))
 	state := chatstore.MediaReady
 	if r.err != nil {
 		fmt.Fprintln(l.logOut, "media download failed") // the error text could hold hosts or paths
