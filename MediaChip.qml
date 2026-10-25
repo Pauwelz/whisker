@@ -11,7 +11,7 @@ Column {
   required property var message
   required property var panel // the pop-out: service, colours and the Save as state
   readonly property var service: panel.whiskerService
-  readonly property string thumbnail: State.thumbnailSource(message)
+  readonly property string thumbnail: State.thumbnailSource(message, State.mediaPath(panel.view, message))
   readonly property string badge: State.fileBadge(message)
   readonly property bool failed: State.mediaFailed(message)
   readonly property bool voice: State.isVoice(message)
@@ -28,7 +28,7 @@ Column {
   Row {
     spacing: Style.space(8)
 
-    // Thumbnail, or the file-type badge when WhatsApp sent none. A click runs the main action.
+    // Thumbnail, or the file-type badge when there is none. A click runs the main action.
     Item {
       id: preview
       width: Style.space(56)
@@ -40,6 +40,8 @@ Column {
         visible: chip.thumbnail !== "" && !State.chipBlurred(chip.message)
         source: chip.thumbnail
         fillMode: Image.PreserveAspectCrop
+        sourceSize: Qt.size(Style.space(112), Style.space(72)) // a downloaded file is decoded small, twice the box for a scaled screen
+        asynchronous: true
       }
       MultiEffect {
         anchors.fill: thumb

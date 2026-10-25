@@ -630,8 +630,9 @@ Panel {
                 }
               }
               Text {
-                // Fill, but never wider than the name: the name then shrinks and elides when the Chat links need the room.
-                Layout.fillWidth: true
+                // While the Chat links show, the name fills but never grows past itself: it shrinks and elides when the links need the room.
+                // Otherwise the status takes the cut, as before.
+                Layout.fillWidth: chatLinks.active
                 Layout.maximumWidth: Math.min(implicitWidth, parent.width * 0.6)
                 elide: Text.ElideRight
                 textFormat: Text.PlainText

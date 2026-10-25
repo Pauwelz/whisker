@@ -182,7 +182,7 @@ Item {
             bordered: true
             onClicked: line.panel.whiskerService.openLink(map.url)
           }
-          // An image or sticker shows here once the Daemon holds it. The path comes from media.open, never bytes.
+          // A sticker shows here once the Daemon holds it. The path comes from media.open, never bytes.
           Image {
             readonly property string file: line.isMessage ? State.mediaPath(line.panel.view, line.message) : ""
             visible: file !== "" && State.showsInline(line.message)

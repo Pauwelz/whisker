@@ -10,10 +10,10 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 const photo = { id: "m1", chat: "1@s.whatsapp.net", media: { kind: "image", mime: "image/jpeg", name: "", size: 2048, state: "ready" } };
 const pdf = { id: "m2", chat: "1@s.whatsapp.net", media: { kind: "document", mime: "application/pdf", name: "a.pdf", size: 3 * 1024 * 1024, state: "none" } };
 
-test("only ready images and stickers show inside the pop-out", () => {
-  assert.equal(State.showsInline(photo), true);
+test("only a ready sticker shows inside the pop-out; an image shows as a thumbnail in its chip", () => {
+  assert.equal(State.showsInline(photo), false);
   assert.equal(State.showsInline({ ...photo, media: { ...photo.media, kind: "sticker" } }), true);
-  assert.equal(State.showsInline({ ...photo, media: { ...photo.media, state: "downloading" } }), false);
+  assert.equal(State.showsInline({ ...photo, media: { ...photo.media, kind: "sticker", state: "downloading" } }), false);
   assert.equal(State.showsInline({ ...photo, media: { ...photo.media, kind: "video" } }), false);
   assert.equal(State.showsInline({ id: "t", chat: "c" }), false);
 });
@@ -21,7 +21,8 @@ test("only ready images and stickers show inside the pop-out", () => {
 test("the Plugin asks for each image path once, and a media.open result stores it", () => {
   let state = State.openChat(State.initialState(), { jid: photo.chat, name: "Ann", kind: "direct" });
   state = State.applyFrame(state, { method: "messageChanged", params: { message: { ...photo, time: 1, text: "" } } });
-  assert.deepEqual(plain(State.mediaToLoad(state).map((m) => m.id)), ["m1"]);
+  state = State.applyFrame(state, { method: "messageChanged", params: { message: { ...photo, id: "m3", time: 2, text: "", media: { ...photo.media, thumbnail: "x" } } } });
+  assert.deepEqual(plain(State.mediaToLoad(state).map((m) => m.id)), ["m1"]); // m3 has WhatsApp's thumbnail
   state = State.markMediaRequested(state, State.mediaToLoad(state));
   assert.deepEqual(plain(State.mediaToLoad(state)), []);
   assert.equal(State.mediaPath(state, photo), "");

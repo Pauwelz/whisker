@@ -1138,16 +1138,21 @@ function mediaPath(state, message) {
   return (state.mediaPaths || {})[mediaKey(message.chat, message.id)] || ""
 }
 
-// Images and stickers show inside the pop-out once the Daemon holds them.
+// A sticker shows inside the pop-out once the Daemon holds it. An image shows only as the thumbnail of its chip.
 function showsInline(message) {
-  return !!message.media && message.media.state === MEDIA_STATE.READY && (message.media.kind === "image" || message.media.kind === "sticker")
+  return !!message.media && message.media.state === MEDIA_STATE.READY && message.media.kind === "sticker"
+}
+
+// A ready image without WhatsApp's thumbnail: its chip shows the downloaded file as the thumbnail.
+function previewsFile(message) {
+  return !!message.media && message.media.state === MEDIA_STATE.READY && message.media.kind === "image" && !message.media.thumbnail
 }
 
 // The Messages of the open Chat whose path the Plugin must ask for. markMediaRequested then stops a second request.
 function mediaToLoad(state) {
   if (!state.openChat) return []
   var known = state.mediaPaths || {}
-  return state.openChat.messages.filter(function(m) { return showsInline(m) && known[mediaKey(m.chat, m.id)] === undefined })
+  return state.openChat.messages.filter(function(m) { return (showsInline(m) || previewsFile(m)) && known[mediaKey(m.chat, m.id)] === undefined })
 }
 
 function markMediaRequested(state, messages) {
@@ -1333,9 +1338,11 @@ function chipShown(m) {
   return !!m.media && !(m.media.kind === "sticker" && m.media.state === MEDIA_STATE.READY)
 }
 
-// WhatsApp's thumbnail as a data URL, or "" when it sent none.
-function thumbnailSource(m) {
-  return m.media && m.media.thumbnail ? "data:image/jpeg;base64," + m.media.thumbnail : ""
+// WhatsApp's thumbnail as a data URL. Without one, the downloaded file of an image (`path`, from mediaPath), else "".
+function thumbnailSource(m, path) {
+  if (!m.media) return ""
+  if (m.media.thumbnail) return "data:image/jpeg;base64," + m.media.thumbnail
+  return previewsFile(m) && path ? "file://" + path : ""
 }
 
 // A video that is not downloaded shows its thumbnail blurred.
@@ -1345,10 +1352,14 @@ function chipBlurred(m) {
 
 var MIME_BADGES = { "application/pdf": "PDF", "audio/mpeg": "MP3", "audio/ogg": "OGG", "audio/mp4": "M4A", "audio/wav": "WAV", "audio/flac": "FLAC" }
 
-// The file-type badge of a document or audio chip without a thumbnail: the extension of the name, else the MIME type, else the kind.
+// The file-type badge of a chip without a thumbnail. An image or video says IMG or VID.
+// A document or audio file shows the extension of the name, else the MIME type, else the kind.
 function fileBadge(m) {
   var md = m.media
-  if (!md || (md.kind !== "document" && md.kind !== "audio") || md.thumbnail) return ""
+  if (!md || md.thumbnail) return ""
+  if (md.kind === "image") return "IMG"
+  if (md.kind === "video") return "VID"
+  if (md.kind !== "document" && md.kind !== "audio") return ""
   var ext = /\.([A-Za-z0-9]{1,5})$/.exec(md.name || "")
   if (ext) return ext[1].toUpperCase()
   return MIME_BADGES[String(md.mime).split(";")[0]] || (md.kind === "audio" ? "AUDIO" : "FILE")

@@ -7,10 +7,13 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 
 const media = (kind, state, extra) => ({ id: "m", chat: "c", fromMe: false, text: "", state: "", media: { kind, mime: "", name: "", size: 10, state, ...extra } });
 
-test("the thumbnail is a data URL, empty when WhatsApp sent none", () => {
-  assert.equal(State.thumbnailSource(media("video", "none", { thumbnail: "/9j/4A==" })), "data:image/jpeg;base64,/9j/4A==");
-  assert.equal(State.thumbnailSource(media("video", "none")), "");
-  assert.equal(State.thumbnailSource({ text: "hi" }), "");
+test("the thumbnail is a data URL, else the downloaded image file, else empty", () => {
+  assert.equal(State.thumbnailSource(media("video", "none", { thumbnail: "/9j/4A==" }), ""), "data:image/jpeg;base64,/9j/4A==");
+  assert.equal(State.thumbnailSource(media("image", "ready", { thumbnail: "/9j/4A==" }), "/run/m.jpg"), "data:image/jpeg;base64,/9j/4A==");
+  assert.equal(State.thumbnailSource(media("image", "ready"), "/run/m.jpg"), "file:///run/m.jpg");
+  assert.equal(State.thumbnailSource(media("image", "none"), ""), "");
+  assert.equal(State.thumbnailSource(media("video", "ready"), "/run/m.mp4"), ""); // a video file is no image
+  assert.equal(State.thumbnailSource({ text: "hi" }, ""), "");
 });
 
 test("a video that is not downloaded is blurred", () => {
@@ -20,7 +23,7 @@ test("a video that is not downloaded is blurred", () => {
   assert.equal(State.chipBlurred(media("image", "none", { thumbnail: "x" })), false);
 });
 
-test("document and audio chips without a thumbnail show a file-type badge", () => {
+test("chips without a thumbnail show a file-type badge", () => {
   assert.equal(State.fileBadge(media("document", "none", { name: "report.pdf" })), "PDF");
   assert.equal(State.fileBadge(media("document", "none", { name: "a.tar.gz" })), "GZ");
   assert.equal(State.fileBadge(media("document", "none", { mime: "application/pdf" })), "PDF");
@@ -28,7 +31,9 @@ test("document and audio chips without a thumbnail show a file-type badge", () =
   assert.equal(State.fileBadge(media("audio", "none", { mime: "audio/x-weird" })), "AUDIO");
   assert.equal(State.fileBadge(media("document", "none")), "FILE");
   assert.equal(State.fileBadge(media("document", "none", { name: "a.pdf", thumbnail: "x" })), "");
-  assert.equal(State.fileBadge(media("image", "none")), "");
+  assert.equal(State.fileBadge(media("image", "none")), "IMG");
+  assert.equal(State.fileBadge(media("video", "none")), "VID");
+  assert.equal(State.fileBadge(media("image", "none", { thumbnail: "x" })), "");
 });
 
 test("a click on the thumbnail or name runs the main action", () => {
