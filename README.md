@@ -13,6 +13,8 @@ omarchy plugin remove pauwelz.whisker                    # remove the Plugin and
 
 The Plugin downloads its Daemon on first start and checks it against `SHA256SUMS`.
 
+To attach a file with Ctrl+V, whisker needs `wl-clipboard` (`wl-paste`). Omarchy installs it. Without it, Ctrl+V pastes text only.
+
 ## Your data
 
 whisker keeps the Profile in these places:
@@ -38,6 +40,7 @@ The pop-out has these fixed shortcuts:
 | Ctrl+F | Focus the search field of the Chat list. |
 | Enter | Send the composer text. |
 | Shift+Enter | Add a line in the composer. |
+| Ctrl+V | Paste in the composer. A file copied in a file manager becomes the Attachment. |
 
 ## Development
 

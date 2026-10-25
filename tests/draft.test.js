@@ -79,7 +79,7 @@ test("clearing the Draft clears the staged file", () => {
   assert.equal(State.draftOf(state).attachment, "");
 });
 
-test("the composer shows Attach except during an Edit, and the file row only with a file", () => {
+test("a paste can attach a file except during an Edit, and the file row shows only with a file", () => {
   assert.equal(State.canAttach(""), true);
   assert.equal(State.canAttach("in1"), false);
   assert.equal(State.hasAttachment({ attachment: "/a/b.png" }), true);
@@ -91,4 +91,19 @@ test("a location Message has an Open map view with the link, others have none", 
   assert.deepEqual(JSON.parse(JSON.stringify(State.mapView({ text: "Location: Cafe\n" + url }))), { url });
   assert.equal(State.mapView({ text: "hello" }), null);
   assert.equal(State.mapView({ text: url, revoked: true }), null);
+});
+
+test("a draft.paste reply gives the open Chat a path, or empty for a text paste", () => {
+  const state = opened();
+  assert.equal(State.pastedAttachment(state, { id: 1, result: { chat: chat.jid, pasted: "/a/b.pdf" } }), "/a/b.pdf");
+  assert.equal(State.pastedAttachment(state, { id: 1, result: { chat: chat.jid, pasted: "" } }), "");
+  assert.equal(State.pastedAttachment(state, { id: 1, result: { chat: "2@s.whatsapp.net", pasted: "/a/b.pdf" } }), null);
+  assert.equal(State.pastedAttachment(state, { id: 1, result: { chat: chat.jid, draft: {} } }), null);
+  assert.equal(State.applyFrame(state, { id: 1, result: { chat: chat.jid, pasted: "/a/b.pdf" } }), state);
+  assert.deepEqual(JSON.parse(State.pasteRequest(3, chat.jid)), { jsonrpc: "2.0", id: 3, method: "draft.paste", params: { chat: chat.jid } });
+});
+
+test("the paste errors have a notice", () => {
+  assert.equal(State.applyFrame(opened(), { id: 1, error: { code: -32012, message: "paste one file at a time" } }).notice, "Paste one file at a time");
+  assert.equal(State.applyFrame(opened(), { id: 1, error: { code: -32013, message: "file not sendable" } }).notice, "That file cannot be sent");
 });

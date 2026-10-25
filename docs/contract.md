@@ -422,7 +422,17 @@ Params: `chat`. Valid once the Daemon is `ready`. The result is `{"chat": ..., "
 
 Params: `chat`, `text`, `quote`, `edit` and `attachment`. Valid once the Daemon is `ready`. It replaces the Draft of the Chat and answers with an empty result. An empty Draft removes it. The chat store keeps Drafts, so they survive a Daemon restart. The Plugin sends it on each change of the composer.
 
-Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is not a stored Message of the Chat. It also means a new `attachment` that `chat.sendMedia` would refuse (not absolute, not a regular file, empty or over 100 MiB; the Daemon checks it with `stat`, never `open`), or an `attachment` together with an `edit`. The Daemon checks the file only when `attachment` differs from the stored one, so a keystroke that keeps a file that is gone now still saves. A staged file and an Edit never combine: the Plugin drops the file when an Edit starts, and refuses to stage a file during an Edit. A file that is gone at send time gives the error of `chat.sendMedia`. A successful `chat.send`, `chat.sendMedia` or `chat.edit` clears the Draft of its Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`, `draft-attachment.jsonl`, `draft-attachment-gone.jsonl`.
+Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is not a stored Message of the Chat. It also means a new `attachment` that `chat.sendMedia` would refuse (not absolute, not a regular file, empty or over 100 MiB; the Daemon checks it with `stat`, never `open`), or an `attachment` together with an `edit`. The Daemon checks the file only when `attachment` differs from the stored one, so a keystroke that keeps a file that is gone now still saves. A staged file and an Edit never combine: the Plugin drops the file when an Edit starts, and sends no `draft.paste` during an Edit. A file that is gone at send time gives the error of `chat.sendMedia`. A successful `chat.send`, `chat.sendMedia` or `chat.edit` clears the Draft of its Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`, `draft-attachment.jsonl`, `draft-attachment-gone.jsonl`.
+
+### `draft.paste`
+
+Params: `chat`. Valid once the Daemon is `ready`. The Plugin sends it on Ctrl+V in the composer, except during an Edit. The Daemon reads the clipboard with `wl-paste` and answers `{"chat": ..., "pasted": ...}`. It does not change the Draft.
+
+- `pasted` is the absolute path of the one `file://` URI in `text/uri-list`, as a file manager copies a file. The Plugin then stages it as the `attachment` with `draft.set`.
+- `pasted` is empty when the clipboard has no `file://` URI, when `wl-paste` is not installed, or when a `wl-paste` call takes more than 2 seconds. The Plugin then pastes the text of the clipboard itself. A missing `wl-paste` is logged once.
+- Error -32012 means two or more `file://` URIs. Error -32013 means a file that `chat.sendMedia` would refuse: not a regular file, empty or over 100 MiB.
+
+The `chat` param only comes back in the result, so the Plugin drops a reply for a Chat that is no longer open.
 
 ### Presence
 
@@ -530,6 +540,8 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
 | -32010 | invalid chat | `chat.start` got a `jid` that is not a person's WhatsApp ID. `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got an unknown Chat. |
 | -32011 | pin limit | `chat.pin` would make a 4th Pinned Chat. Nothing changed. |
+| -32012 | paste one file at a time | `draft.paste` found two or more copied files. |
+| -32013 | file not sendable | `draft.paste` found a copied file that is not a regular file, is empty, or is over 100 MiB. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 

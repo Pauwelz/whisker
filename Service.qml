@@ -18,6 +18,9 @@ Item {
   property bool downloaded: false
   property bool replacing: false
 
+  // A Ctrl+V that gave no Attachment: the composer pastes text.
+  signal pasteText()
+
   // The Plugin never runs a Daemon with another version. It never restarts a Daemon that exited.
   // A wrong or missing binary is fetched once; a running wrong Daemon is stopped first.
   function startDaemon(versionOutput) {
@@ -286,9 +289,9 @@ Item {
     send(State.reactRequest, view.openChat.jid, message.id, State.reactionChoice(message, emoji))
   }
 
-  // Called by the file picker of the composer. `url` is the picked file. It waits in the Draft until the user sends.
-  function stageAttachment(url) {
-    changeDraft({ attachment: State.filePath(url) })
+  // Called by Ctrl+V in the composer. A copied file becomes the Attachment; anything else comes back as pasteText.
+  function pasteIntoComposer() {
+    send(State.pasteRequest, view.openChat.jid)
   }
 
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.
@@ -380,6 +383,9 @@ Item {
         root.view = State.applyFrame(root.view, frame)
         if (State.isNotify(frame)) Quickshell.execDetached(State.notifyCommand(frame.params))
         root.handleMediaFrame(frame)
+        var pasted = State.pastedAttachment(root.view, frame)
+        if (pasted === "") root.pasteText()
+        else if (pasted !== null) root.changeDraft({ attachment: pasted })
         if (State.resendsAttention(frame)) root.syncAttention()
         if (State.reloadsOpenChat(root.view, frame)) {
           root.syncAttention()

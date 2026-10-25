@@ -166,6 +166,8 @@ daemon.write(JSON.stringify(req) + "\n")   // write(QString): UTF-8, no newline 
 
 ### 7. File picker
 
+Update 2026-10-25: whisker no longer has a file picker. Ctrl+V in the composer attaches a copied file (issue #62). The notes below are kept as research.
+
 Installed Qt QML modules (`/usr/lib/qt6/qml`): `QtQuick`, `QtQuick/Controls`, `QtQuick/Dialogs`, `QtQuick/Layouts`, `QtQuick/Shapes`, `QtQuick/Effects`, `Qt/labs/{platform,folderlistmodel,settings,...}`, `QtTest`, `QtNetwork`, `QtQml`, `QtWayland`, `QtWebEngine`, `QtWebChannel`, `QtPositioning`. There is no `QtMultimedia`. `pacman -Q qt6-multimedia` reports it is not installed.
 
 So `QtQuick.Dialogs` is installed here (`QtQuick/Dialogs/qmldir`, `plugins.qmltypes` lists `FileDialog`). It is also on the ship list of qt6-declarative. Do not assume other users have it, because it is an optional plugin (`optional plugin qtquickdialogsplugin`).

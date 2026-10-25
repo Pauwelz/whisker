@@ -275,6 +275,9 @@ test("Enter sends, Shift+Enter adds a line, an empty Enter does nothing", () => 
   assert.equal(State.composerAction(0x41, false, "hi"), "default");
   assert.equal(State.composerAction(State.KEY_RETURN, false, "", true), "send");
   assert.equal(State.composerAction(State.KEY_RETURN, false, " ", false), "swallow");
+  assert.equal(State.composerAction(State.KEY_V, false, "", false, true, ""), "paste");
+  assert.equal(State.composerAction(State.KEY_V, false, "", false, true, "m1"), "default"); // an Edit pastes text only
+  assert.equal(State.composerAction(State.KEY_V, false, "", false, false, ""), "default");
 });
 
 test("the send button works when Enter would send", () => {
@@ -429,8 +432,7 @@ test("the composer sends an edit when a Message is under edit, otherwise a new M
   assert.deepEqual(JSON.parse(State.deleteForMeRequest(7, direct.jid, "m1")), { jsonrpc: "2.0", id: 7, method: "chat.deleteForMe", params: { chat: direct.jid, id: "m1" } });
 });
 
-test("filePath turns a file URL into a path, and sendMediaRequest sends it", () => {
-  assert.equal(State.filePath("file:///home/me/My%20Doc%C3%A9.pdf"), "/home/me/My Docé.pdf");
+test("sendMediaRequest sends the path as it is", () => {
   assert.deepEqual(JSON.parse(State.sendMediaRequest(7, direct.jid, "/home/me/100%.pdf", "hi")), { jsonrpc: "2.0", id: 7, method: "chat.sendMedia", params: { chat: direct.jid, path: "/home/me/100%.pdf", caption: "hi" } });
 });
 

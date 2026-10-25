@@ -3,8 +3,8 @@ import qs.Commons
 import qs.Ui
 import "WhiskerState.js" as State
 
-// The composer of the open Chat: one strip under a line with a prompt, the text, Attach and Send.
-// Enter sends, Shift+Enter adds a line. The pop-out (Panel.qml) owns the Draft; this item only draws it.
+// The composer of the open Chat: one strip under a line with a prompt, the text and Send.
+// Enter sends, Shift+Enter adds a line. Ctrl+V of a copied file makes it the Attachment. The pop-out (Panel.qml) owns the Draft; this item only draws it.
 FocusScope {
   id: composer
   property var panel: null // the pop-out: service, Draft and colours
@@ -46,7 +46,7 @@ FocusScope {
     TextEdit {
       id: input
       anchors.verticalCenter: parent.verticalCenter
-      width: row.width - x - attach.width - sendButton.width - row.spacing * 2
+      width: row.width - x - sendButton.width - row.spacing
       focus: true
       wrapMode: TextEdit.Wrap
       color: composer.panel ? composer.panel.contentForeground : Color.foreground
@@ -57,10 +57,17 @@ FocusScope {
       onDraftTextChanged: if (text !== draftText) text = draftText
       Keys.onEscapePressed: composer.panel.runShortcut("Escape")
       Keys.onPressed: function(event) {
-        var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text, composer.hasAttachment)
+        var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text, composer.hasAttachment,
+                                          (event.modifiers & Qt.ControlModifier) !== 0, composer.panel ? composer.panel.editingId : "")
         if (action === "default") return
         event.accepted = true
         if (action === "send") composer.service.submitComposer(text)
+        if (action === "paste") composer.service.pasteIntoComposer()
+      }
+
+      Connections {
+        target: composer.service
+        function onPasteText() { input.paste() }
       }
 
       Text {
@@ -72,22 +79,6 @@ FocusScope {
       }
     }
 
-    // The picker loads on demand, see MediaPicker.qml. The picked file waits in the Draft; the text becomes its caption.
-    Loader {
-      id: picker
-      active: false
-      source: "MediaPicker.qml"
-      onLoaded: item.picked.connect(function(file) { composer.service.stageAttachment(file) })
-    }
-    Button {
-      id: attach
-      anchors.verticalCenter: parent.verticalCenter
-      enabled: State.canAttach(composer.panel ? composer.panel.editingId : "")
-      opacity: enabled ? 1 : 0.4
-      text: "📎"
-      tooltipText: "Attach a file"
-      onClicked: { picker.active = false; picker.active = true }
-    }
     Button {
       id: sendButton
       anchors.verticalCenter: parent.verticalCenter

@@ -64,6 +64,8 @@ const (
 	errMediaFailed    = -32009
 	errInvalidChat    = -32010
 	errPinLimit       = -32011
+	errPasteOneFile   = -32012
+	errNotSendable    = -32013
 )
 
 // The message of each application error. A code that has two messages has two constants.
@@ -83,6 +85,8 @@ const (
 	msgMediaCopy      = "media copy failed"
 	msgInvalidChat    = "invalid chat"
 	msgPinLimit       = "pin limit"
+	msgPasteOneFile   = "paste one file at a time"
+	msgNotSendable    = "file not sendable"
 )
 
 // qrScale is the pixel size of one QR module.

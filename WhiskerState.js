@@ -40,7 +40,9 @@ var NO_WHATSAPP = "Could not reach WhatsApp"
 var ERROR_NOTICES = {
   "-32007": NO_WHATSAPP,
   "-32010": "That chat is not in your chat list",
-  "-32011": "You can pin up to 3 chats"
+  "-32011": "You can pin up to 3 chats",
+  "-32012": "Paste one file at a time",
+  "-32013": "That file cannot be sent"
 }
 
 // The screens of the pop-out, and the states of Media. The Daemon sends the Media states (docs/contract.md).
@@ -309,6 +311,9 @@ var KEY_RETURN = 0x01000004
 
 var KEY_ENTER = 0x01000005
 
+// Qt key code of V: Ctrl+V pastes in the composer.
+var KEY_V = 0x56
+
 function withChanges(state, changes) {
   var next = {}
   for (var key in state) next[key] = state[key]
@@ -546,14 +551,21 @@ function sendRequest(id, jid, text, quoteId) {
   return request(id, "chat.send", params)
 }
 
-// The path of a file:// URL that FileDialog gives. The Daemon needs a path.
-function filePath(url) {
-  return decodeURIComponent(String(url).replace(/^file:\/\//, ""))
-}
-
-// Whether the composer shows the Attach button: not during an Edit, which never combines with a file.
+// Whether a paste can give an Attachment: not during an Edit, which never combines with one.
 function canAttach(editingId) {
   return editingId === ""
+}
+
+// The request that reads the clipboard for a Ctrl+V in the composer.
+function pasteRequest(id, jid) {
+  return request(id, "draft.paste", { chat: jid })
+}
+
+// What a draft.paste reply gives the open Chat: the path of the Attachment, "" to paste text, or null for any other frame.
+function pastedAttachment(state, frame) {
+  if (!frame || !frame.result || typeof frame.result.pasted !== "string") return null
+  if (!state.openChat || state.openChat.jid !== frame.result.chat) return null
+  return frame.result.pasted
 }
 
 // Whether the composer shows the staged file row (name and remove button).
@@ -575,10 +587,11 @@ function retryMessageRequest(id, jid, messageId) {
   return request(id, "chat.retry", { chat: jid, id: messageId })
 }
 
-// What the composer does with a key press: "send", "swallow" (Enter with nothing to send) or "default" (the text field handles it).
-// Enter sends and Shift+Enter adds a line. These keybindings are fixed.
-// A staged file can go without text.
-function composerAction(key, shift, text, hasAttachment) {
+// What the composer does with a key press: "send", "swallow" (Enter with nothing to send), "paste" (ask the Daemon)
+// or "default" (the text field handles it). Enter sends and Shift+Enter adds a line. These keybindings are fixed.
+// An Attachment can go without text. During an Edit, Ctrl+V pastes text in the text field.
+function composerAction(key, shift, text, hasAttachment, ctrl, editingId) {
+  if (ctrl && key === KEY_V) return canAttach(editingId || "") ? "paste" : "default"
   if (key !== KEY_RETURN && key !== KEY_ENTER) return "default"
   if (shift) return "default"
   return canSend(text, hasAttachment) ? "send" : "swallow"

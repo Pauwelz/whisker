@@ -39,6 +39,7 @@ const (
 	methodChatDeleteForMe = "chat.deleteForMe"
 	methodDraftGet        = "draft.get"
 	methodDraftSet        = "draft.set"
+	methodDraftPaste      = "draft.paste"
 	methodSettingsGet     = "settings.get"
 	methodSettingsSet     = "settings.set"
 	methodLogout          = "profile.logout"
@@ -119,6 +120,7 @@ var handlers = map[string]handler{
 	methodContactsLookup:  {whenLinked, (*session).contactsLookup},
 	methodDraftGet:        {whenReady, (*session).draftGet},
 	methodDraftSet:        {whenReady, (*session).draftSet},
+	methodDraftPaste:      {whenReady, (*session).draftPaste},
 	methodChatSend:        {whenLinked, (*session).chatSend},
 	methodChatSendMedia:   {whenLinked, (*session).chatSendMedia},
 	methodChatRetry:       {whenLinked, (*session).chatRetry},

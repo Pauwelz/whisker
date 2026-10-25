@@ -32,12 +32,13 @@ func exitIf(ok bool) int {
 // session is the state of one Run. It lives on the Daemon loop; only the sends and downloads run on other goroutines.
 // The fields below `ready` are nil until the Profile is open, and nil again after an unlink.
 type session struct {
-	profile Profile
-	prefs   *settings.Store
-	newPort NewPort
-	send    func(map[string]any) bool
-	logOut  io.Writer
-	attn    attention.Attention // the pop-out state: it outlives the Profile, so a new link keeps it
+	profile   Profile
+	prefs     *settings.Store
+	newPort   NewPort
+	send      func(map[string]any) bool
+	logOut    io.Writer
+	attn      attention.Attention // the pop-out state: it outlives the Profile, so a new link keeps it
+	noWlPaste bool                // wl-paste is missing; the Daemon logged it once
 
 	ready        bool
 	port         whatsapp.Port

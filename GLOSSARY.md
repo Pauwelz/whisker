@@ -85,8 +85,12 @@ Batches of historical Chats and Messages pushed by the primary phone to a newly 
 _Avoid_: Backfill, archive dump, initial load
 
 **Draft**:
-Unsent message composition state (text and any pending Quote or Edit target) preserved per Chat when navigating between Chats.
+Unsent message composition state (text, and a pending Quote, Edit target or Attachment) preserved per Chat when navigating between Chats.
 _Avoid_: Unsent buffer, scratch text, composer cache
+
+**Attachment**:
+The Media that waits in a Draft until the user sends it. The user adds it with a paste. A Draft holds at most one, and it never combines with a Quote or an Edit.
+_Avoid_: Staged file, upload, pick
 
 **App State**:
 The state that the primary phone syncs to all linked devices, such as `Pinned`, `Muted`, `Archived` and the Read Marker of a Chat. It is not the state of whisker.
