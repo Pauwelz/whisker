@@ -225,7 +225,7 @@ Panel {
           width: parent.width
           wrapMode: Text.Wrap
           textFormat: Text.PlainText
-          text: root.view.message
+          text: State.linkMessage(root.view, root.pairMode)
           color: root.parts.error ? Color.urgent : root.contentForeground
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
@@ -267,7 +267,7 @@ Panel {
           anchors.horizontalCenter: parent.horizontalCenter
           visible: root.parts.qr
           source: root.view.qr || ""
-          width: Style.space(232)
+          width: Math.min(parent.width, Style.space(360))
           height: width
           fillMode: Image.PreserveAspectFit
           smooth: false
@@ -288,35 +288,90 @@ Panel {
           }
         }
 
-        Text {
-          anchors.horizontalCenter: parent.horizontalCenter
-          visible: !!root.view.pairCode
-          text: root.view.pairCode || ""
-          color: root.contentForeground
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body * 2
-        }
-
-        TextInput {
-          id: phoneInput
+        // The Pair Code form: a prompt strip like the composer. Enter asks the Daemon for the Pair Code.
+        Item {
           visible: root.parts.pairForm
           width: parent.width
-          color: root.contentForeground
+          implicitHeight: phoneRow.implicitHeight + Style.space(8)
+          Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 1
+            color: Color.muted
+          }
+          Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: Color.muted
+          }
+          Row {
+            id: phoneRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(4)
+            spacing: Style.space(8)
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "›"
+              color: Color.accent
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+            TextInput {
+              id: phoneInput
+              anchors.verticalCenter: parent.verticalCenter
+              width: phoneRow.width - x - getCode.width - phoneRow.spacing
+              focus: root.parts.pairForm
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+              inputMethodHints: Qt.ImhDialableCharactersOnly
+              onAccepted: root.whiskerService.requestPairCode(text)
+              Text {
+                visible: phoneInput.text === ""
+                text: "phone number with country code · ⏎ get code"
+                color: phoneInput.color
+                opacity: 0.5
+                font: phoneInput.font
+              }
+            }
+            Button {
+              id: getCode
+              anchors.verticalCenter: parent.verticalCenter
+              enabled: phoneInput.text !== ""
+              opacity: enabled ? 1 : 0.4
+              text: "⏎"
+              tooltipText: "Get Pair Code"
+              onClicked: root.whiskerService.requestPairCode(phoneInput.text)
+            }
+          }
+        }
+
+        // The Pair Code, large and spaced, so it is easy to type on the phone.
+        Text {
+          anchors.horizontalCenter: parent.horizontalCenter
+          visible: root.parts.pairCode
+          topPadding: Style.space(16)
+          bottomPadding: Style.space(16)
+          text: root.view.pairCode || ""
+          color: Color.accent
           font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-          inputMethodHints: Qt.ImhDialableCharactersOnly
-          onAccepted: root.whiskerService.requestPairCode(text)
+          font.pixelSize: Style.font.body * 3
+          font.bold: true
+          font.letterSpacing: Style.space(4)
         }
 
+        // As wide as the QR code, under it, so the switch is easy to find in both modes.
         Button {
-          visible: root.parts.pairForm
-          text: "Get Pair Code"
-          bordered: true
-          onClicked: root.whiskerService.requestPairCode(phoneInput.text)
-        }
-
-        Button {
+          anchors.horizontalCenter: parent.horizontalCenter
           visible: root.parts.pairToggle
+          width: qrCode.width
+          verticalPadding: Style.spacing.controlPaddingY * 2
           text: root.pairMode ? "Use a QR code" : "Use a Pair Code"
           bordered: true
           onClicked: root.pairMode = !root.pairMode

@@ -535,7 +535,7 @@ const noLocal = { pairMode: false, showSettings: false };
 test("panelParts: each part shows on its screen only", () => {
   const linked = { screen: State.SCREEN.LINKED, connection: "offline", settings: { sendOnline: true }, moreChats: true };
   assert.deepEqual(plain(State.panelParts(linked, noLocal)), {
-    error: false, banner: true, qr: false, pairForm: false, pairToggle: false,
+    error: false, banner: true, qr: false, pairForm: false, pairCode: false, pairToggle: false,
     chatList: true, loadMoreChats: true, newChat: false, newChatButton: true, emptyChat: false, settingsButton: true, settings: false, chat: false,
   });
   assert.equal(State.panelParts(linked, { ...noLocal, showSettings: true }).settings, true);
@@ -555,6 +555,26 @@ test("panelParts: linking shows the QR code or the Pair Code form, and an error 
   assert.equal(State.panelParts(linking, noLocal).pairToggle, true);
   assert.equal(State.panelParts({ screen: State.SCREEN.ERROR }, noLocal).error, true);
   assert.equal(State.panelParts({ screen: State.SCREEN.STARTING }, noLocal).pairToggle, false);
+});
+
+test("panelParts: the Pair Code shows only in pair mode, once the Daemon sent it", () => {
+  const linking = { screen: State.SCREEN.LINKING, qr: "data:image/png;base64,AA", pairCode: "" };
+  assert.equal(State.panelParts(linking, { ...noLocal, pairMode: true }).pairCode, false);
+  assert.equal(State.panelParts({ ...linking, pairCode: "ABCD-1234" }, { ...noLocal, pairMode: true }).pairCode, true);
+  assert.equal(State.panelParts({ ...linking, pairCode: "ABCD-1234" }, noLocal).pairCode, false);
+});
+
+test("linkMessage: the line above the QR code or the Pair Code form fits the mode", () => {
+  let state = State.applyFrame(State.initialState(), { method: "linkQr", params: { qr: "data:a" } });
+  assert.equal(State.linkMessage(state, false), "Scan this QR code in WhatsApp: Linked devices, Link a device.");
+  assert.equal(State.linkMessage(state, true), "Type the phone number of your WhatsApp account, with the country code. Then press Enter.");
+  state = State.applyFrame(state, { id: 1, result: { code: "ABCD-1234" } });
+  assert.equal(State.linkMessage(state, true), "Enter this code in WhatsApp: Linked devices, Link a device, Link with phone number instead.");
+  assert.equal(State.linkMessage(state, false), "Scan this QR code in WhatsApp: Linked devices, Link a device.");
+  const failed = { screen: State.SCREEN.LINKING, qr: "", message: "The QR code expired. Select Retry for a new one." };
+  assert.equal(State.linkMessage(failed, false), failed.message);
+  assert.equal(State.linkMessage(failed, true), failed.message);
+  assert.equal(State.linkMessage({ screen: State.SCREEN.ERROR, message: "boom" }, true), "boom");
 });
 
 test("readReceiptDescription follows the Read Receipts mode that is set", () => {

@@ -129,7 +129,7 @@ var NOTIFICATIONS = {
   },
   linkQr: {
     fold: function (state, params) {
-      return linking(state, { qr: params.qr, reason: "", message: "Scan this QR code in WhatsApp: Linked devices, Link a device.", canRetry: false })
+      return linking(state, { qr: params.qr, reason: "", message: LINK_QR_MESSAGE, canRetry: false })
     }
   },
   linked: {
@@ -179,7 +179,7 @@ function foldFrame(state, frame) {
   if (frame && frame.result && frame.result.chats)
     return chatListPage(state, frame.result)
   if (frame && frame.result && frame.result.code)
-    return linking(state, { pairCode: frame.result.code, message: "Enter this code in WhatsApp: Linked devices, Link with phone number." })
+    return linking(state, { pairCode: frame.result.code, message: "Enter this code in WhatsApp: Linked devices, Link a device, Link with phone number instead." })
   if (frame && frame.error && PAIR_CODE_ERRORS[frame.error.code])
     return linking(state, { message: PAIR_CODE_ERRORS[frame.error.code] })
   if (frame && frame.error && ERROR_NOTICES[frame.error.code])
@@ -1250,6 +1250,17 @@ function mediaReleaseRequest(id, jid) {
   return request(id, "media.release", { chat: jid })
 }
 
+var LINK_QR_MESSAGE = "Scan this QR code in WhatsApp: Linked devices, Link a device."
+var LINK_PAIR_PROMPT = "Type the phone number of your WhatsApp account, with the country code. Then press Enter."
+
+// The line above the QR code or the Pair Code form. The QR text never shows in pair mode, nor the Pair Code text in QR mode.
+function linkMessage(state, pairMode) {
+  if (state.screen !== SCREEN.LINKING) return state.message
+  if (!pairMode) return state.qr ? LINK_QR_MESSAGE : state.message
+  if (state.pairCode || (state.message && state.message !== LINK_QR_MESSAGE)) return state.message
+  return LINK_PAIR_PROMPT
+}
+
 // Which parts of the pop-out show. `local` is the view state that only the pop-out keeps: { pairMode, showSettings }.
 // The views read these flags and hold no screen checks of their own.
 function panelParts(state, local) {
@@ -1261,6 +1272,7 @@ function panelParts(state, local) {
     banner: linked && connectionBanner(state) !== "",
     qr: linking && !!state.qr && !local.pairMode,
     pairForm: linking && local.pairMode,
+    pairCode: linking && !!local.pairMode && !!state.pairCode,
     pairToggle: linking,
     chatList: linked && !local.showSettings && !local.showNewChat && !chat,
     loadMoreChats: linked && state.moreChats === true && !local.showSettings && !local.showNewChat && !chat,
