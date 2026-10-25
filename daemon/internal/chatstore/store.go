@@ -54,19 +54,7 @@ type Page struct {
 func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 	switch ev := ev.(type) {
 	case whatsapp.HistorySync:
-		err = s.inTx(func(tx *sql.Tx) error {
-			for _, p := range ev.PushNames {
-				if err := setName(tx, "push_name", p.JID, p.Name); err != nil {
-					return err
-				}
-			}
-			for _, c := range ev.Chats {
-				if err := putChat(tx, c); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+		_, err = s.ApplyHistory(ev)
 	case whatsapp.PushName:
 		err = setName(s.db, "push_name", ev.JID, ev.Name)
 	case whatsapp.ContactName:
@@ -97,6 +85,33 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 		return false, nil
 	}
 	return true, err
+}
+
+// ApplyHistory stores a History Sync batch. It returns the number of Messages that were new, per Chat of the batch.
+func (s *Store) ApplyHistory(ev whatsapp.HistorySync) (added map[string]int, err error) {
+	added = map[string]int{}
+	err = s.inTx(func(tx *sql.Tx) error {
+		for _, p := range ev.PushNames {
+			if err := setName(tx, "push_name", p.JID, p.Name); err != nil {
+				return err
+			}
+		}
+		for _, c := range ev.Chats {
+			n, err := putChat(tx, c)
+			if err != nil {
+				return err
+			}
+			added[c.JID] += n
+		}
+		return nil
+	})
+	return added, err
+}
+
+// OldestMessage returns the oldest stored Message of a Chat, or sql.ErrNoRows. It skips System Messages: their ID can be one the Daemon made.
+func (s *Store) OldestMessage(chat string) (a whatsapp.HistoryAnchor, err error) {
+	err = s.db.QueryRow(`SELECT id, from_me, time FROM messages WHERE chat_jid = ? AND system_kind = '' ORDER BY time, rowid LIMIT 1`, chat).Scan(&a.ID, &a.FromMe, &a.Time)
+	return a, err
 }
 
 // List returns Chats: Pinned first, then newest first. A Chat with no Message and no Draft is not listed.
@@ -355,14 +370,15 @@ func setFlag(db execer, column string, bit int, jid string, value int64) error {
 	return err
 }
 
-func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
+// putChat returns the number of Messages of the Chat that were new.
+func putChat(tx *sql.Tx, c whatsapp.HistoryChat) (added int, err error) {
 	last := c.LastActive
 	for _, m := range c.Messages {
 		if m.System == nil { // a System Message does not move its Chat
 			last = max(last, m.Time)
 		}
 	}
-	_, err := tx.Exec(`
+	_, err = tx.Exec(`
 		INSERT INTO chats (jid, kind, subject, last_active, pinned, archived, muted_until, unread, timer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(jid) DO UPDATE SET kind = excluded.kind,
 		  subject = CASE WHEN excluded.subject = '' THEN subject ELSE excluded.subject END,
@@ -375,14 +391,18 @@ func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 		c.JID, kindOrDirect(c.Kind), c.Subject, last, boolInt(c.Pinned), boolInt(c.Archived), c.MutedUntil, boolInt(c.Unread), c.Timer,
 		sql.Named("pin", flagPin), sql.Named("archive", flagArchive), sql.Named("mute", flagMute), sql.Named("unread", flagUnread), sql.Named("timer", flagTimer))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	for _, m := range c.Messages {
-		if err := putMessage(tx, c.JID, m, MediaNone); err != nil {
-			return err
+		inserted, err := putMessage(tx, c.JID, m, MediaNone)
+		if err != nil {
+			return added, err
+		}
+		if inserted {
+			added++
 		}
 	}
-	return nil
+	return added, nil
 }
 
 func kindOrDirect(kind string) string {

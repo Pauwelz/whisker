@@ -1,0 +1,14 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","subject":"","lastActive":200,"messages":[{"id":"m1","sender":"1@s.whatsapp.net","time":100,"text":"one"},{"id":"m2","sender":"1@s.whatsapp.net","time":200,"text":"two"}]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.messages","params":{"chat":"1@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","messages":[{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":100,"text":"one","state":"","edited":false,"revoked":false},{"id":"m2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":200,"text":"two","state":"","edited":false,"revoked":false}],"more":false,"offset":0}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":100,"text":"one","state":"","edited":false,"revoked":false},{"id":"m2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":200,"text":"two","state":"","edited":false,"revoked":false}],"moreMessages":false}}}
+{"dir":"plugin","requestHistory":true}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.requestHistory","params":{"chat":"1@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"error":{"code":-32007,"message":"could not reach WhatsApp"}}}
+{"dir":"historyRequested","requests":[]}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":100,"text":"one","state":"","edited":false,"revoked":false},{"id":"m2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":200,"text":"two","state":"","edited":false,"revoked":false}],"moreMessages":false},"notice":"Could not reach WhatsApp"}}

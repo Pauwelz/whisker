@@ -466,7 +466,7 @@ func (s *Store) nameMentions(m *Message, jids string) error {
 
 // putMessage stores a Message that arrived live or in History Sync, and the Push Name that came with it.
 // mediaState is the state of the Media row: a live Message of a kind that downloads by itself starts downloading.
-func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) error {
+func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) (inserted bool, err error) {
 	state := ""
 	if m.FromMe && m.System == nil { // a System Message has no Delivery State
 		state = whatsapp.StateSent
@@ -482,21 +482,27 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 			targets, _ = json.Marshal(sys.Targets) // a []string always marshals
 		}
 	}
-	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, mentions, mentions_me, expires_at,
+	res, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, mentions, mentions_me, expires_at,
 		system_kind, system_targets, system_value)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text, strings.Join(m.Mentions, " "), boolInt(m.MentionsMe), expiry(m.Time, m.Timer),
-		sys.Kind, string(targets), sys.Value); err != nil {
-		return err
+		sys.Kind, string(targets), sys.Value)
+	if err != nil {
+		return false, err
 	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	inserted = n > 0
 	// A stored Message moves forward to the Delivery State of History Sync.
 	if m.FromMe && m.State != "" {
 		q, err := advanceQuery(m.State)
 		if err != nil {
-			return err
+			return inserted, err
 		}
 		if _, err := tx.Exec(q, m.State, chat, m.ID); err != nil {
-			return err
+			return inserted, err
 		}
 	}
 	if m.Media != nil {
@@ -511,7 +517,7 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 				thumb_direct_path = CASE WHEN media.thumb_direct_path = '' THEN excluded.thumb_direct_path ELSE media.thumb_direct_path END`,
 			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState, m.Media.Thumbnail, m.Media.Duration, m.Media.Gif,
 			m.Media.ThumbDirectPath, m.Media.ThumbSHA256, m.Media.ThumbEncSHA256); err != nil {
-			return err
+			return inserted, err
 		}
 	}
 	// A Reaction that a live event already set wins over the one History Sync carries.
@@ -522,13 +528,13 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 		}
 		if _, err := tx.Exec(`INSERT OR IGNORE INTO reactions (chat_jid, message_id, sender_jid, emoji) VALUES (?, ?, ?, ?)`,
 			chat, m.ID, sender, r.Emoji); err != nil {
-			return err
+			return inserted, err
 		}
 	}
 	if !m.FromMe && m.PushName != "" {
-		return setName(tx, "push_name", m.Sender, m.PushName)
+		return inserted, setName(tx, "push_name", m.Sender, m.PushName)
 	}
-	return nil
+	return inserted, nil
 }
 
 // MediaRef is the stored Media of a Message, with what a download or a decrypt needs.
@@ -597,7 +603,7 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID).Scan(&known); err != nil {
 		return err
 	}
-	if err := putMessage(tx, ev.Chat, ev.Message, p.MediaState); err != nil {
+	if _, err := putMessage(tx, ev.Chat, ev.Message, p.MediaState); err != nil {
 		return err
 	}
 	if known > 0 {

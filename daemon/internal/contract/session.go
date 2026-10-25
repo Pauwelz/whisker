@@ -49,9 +49,11 @@ type session struct {
 	read             *reader // clears Read Markers and sends Read Receipts
 	pres             *presenter
 	loader           *mediaLoader
+	hist             *history                  // the open On-Demand History Sync requests
 	sent             <-chan sendResult         // the results of the sends
 	mediaDone        <-chan mediaResult        // the results of the Media downloads
 	participantsDone <-chan participantsResult // the results of the Group Chat Participant lookups
+	historyEnded     <-chan historyEnd         // the requests of On-Demand History Sync that got no answer
 	expiryTick       <-chan time.Time          // fires when the sweep of Disappearing Messages is due
 	retryConnect     <-chan time.Time          // fires when a failed connect of a linked Profile is due again
 	muteTick         <-chan time.Time          // fires when the next Mute ends, so the bar count moves
@@ -87,6 +89,8 @@ func (s *session) open() int {
 		s.participantsDone = s.box.participants
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)
 		s.mediaDone = s.loader.results
+		s.hist = newHistory(s.port, s.send, s.logOut)
+		s.historyEnded = s.hist.ended
 		// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
 		if _, err := s.chats.Expire(Clock.Now().Unix()); err != nil {
 			fmt.Fprintln(s.logOut, "chat store write failed")
@@ -144,8 +148,8 @@ func (s *session) unlink(by string) int {
 	s.port.Disconnect()
 	s.wipeMedia()
 	dropAllPasted() // the Drafts go with the Profile
-	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader = false, nil, nil, nil, nil, nil, nil, nil, nil
-	s.sent, s.participantsDone, s.mediaDone, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, nil, 0
+	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader, s.hist = false, nil, nil, nil, nil, nil, nil, nil, nil, nil
+	s.sent, s.participantsDone, s.mediaDone, s.historyEnded, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, nil, nil, 0
 	s.attn.Set(s.attn.Open(), "") // the Chat is gone with the Profile
 	if err := s.profile.Delete(); err != nil {
 		fmt.Fprintln(s.logOut, "profile delete failed")
@@ -199,7 +203,7 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		s.pres.connected() // before the `connected` frame
 		ok = s.box.connected() && s.mergeKnownLIDs()
 	case whatsapp.Disconnected:
-		ok = s.box.disconnected()
+		ok = s.box.disconnected() && s.hist.disconnected()
 	case whatsapp.NewMessage:
 		ok = s.box.incomingMessage(ev)
 		s.loader.autoStart(ev)
@@ -224,7 +228,18 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 			break
 		}
 		ok = s.send(notification("activityChanged", map[string]any{"chat": ev.Chat, "participant": ev.Sender, "name": name, "state": ev.State}))
-	default: // History Sync and App State: the chat store knows its kinds
+	case whatsapp.HistorySync:
+		added, err := s.chats.ApplyHistory(ev)
+		if err != nil {
+			fmt.Fprintln(s.logOut, "chat store write failed") // the error text could hold names
+			break
+		}
+		ok = s.send(notification("chatsChanged", nil))
+		s.scheduleMuteEnd()
+		if ev.OnDemand {
+			ok = ok && s.hist.answered(ev, added)
+		}
+	default: // App State: the chat store knows its kinds
 		stored, err := s.chats.Apply(ev)
 		if err != nil {
 			fmt.Fprintln(s.logOut, "chat store write failed") // the error text could hold names

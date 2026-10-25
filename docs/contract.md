@@ -143,6 +143,21 @@ Later tickets add keys to the Message and send `messageChanged` for each change.
 
 Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`, `chat-edit.jsonl`, `chat-revoke.jsonl`.
 
+### `historyReceived`
+
+An On-Demand History Sync request (`chat.requestHistory`) ended. Params: `chat`, `count`, and `timedOut` (only on a timeout).
+
+```json
+{"jsonrpc":"2.0","method":"historyReceived","params":{"chat":"1@s.whatsapp.net","count":50}}
+```
+
+- `count` is the number of Messages that are new in the chat store. Messages that were already stored do not count. The Plugin loads them with `chat.messages`.
+- `count` 0 without `timedOut` means the phone has nothing more. The Daemon does not remember this.
+- `timedOut` is true when the phone did not answer within 30 s, or the connection dropped while the request was open. Then `count` is 0 and the store did not change.
+- A batch for a Chat with no open request is stored, and the Daemon sends no `historyReceived`. This includes a batch that arrives after the timeout.
+
+Fixtures: see `chat.requestHistory`.
+
 ### `messageExpired`
 
 A Disappearing Message reached the end of its timer, or `chat.deleteForMe` deleted it. The Daemon has deleted it from the chat store, with its Media. The Plugin takes it out of the open Chat. No `chatsChanged` follows.
@@ -347,6 +362,18 @@ A state only moves forward in this order. In a Group Chat, a Message of the user
 
 Fixtures: `chat-messages.jsonl`, `chat-receive.jsonl`.
 
+### `chat.requestHistory`
+
+Asks the phone for older Messages of a Chat (On-Demand History Sync). Params: `chat` (JID). Result: `{}`. Valid once the Profile is linked.
+
+- The Daemon takes the oldest stored Message of the Chat as the anchor. It asks the phone for the 50 Messages before it. The count is fixed. The call does not block the Daemon.
+- The phone answers with a History Sync batch marked on-demand. The Daemon stores it like any History Sync batch, sends `chatsChanged`, then sends `historyReceived`. A stored Message is not overwritten.
+- Only one request per Chat is open. A second call for that Chat answers `{}` and sends nothing. Requests for different Chats can be open together.
+- A Chat with no stored Message, or an unknown Chat, has no anchor. A System Message is no anchor: its ID can be one that the Daemon made. The Daemon does not ask the phone. It answers `{}`, then sends `historyReceived` with `count` 0.
+- Error -32007 means there is no connection. Nothing changed and no request was sent. Error -32003 means the chat store failed.
+
+Fixtures: `chat-history.jsonl`, `chat-history-nothing-more.jsonl`, `chat-history-timeout.jsonl`, `chat-history-late.jsonl`, `chat-history-disconnect.jsonl`, `chat-history-offline.jsonl`, `chat-history-no-message.jsonl`.
+
 ### `chat.send`
 
 Params: `chat` (JID of a stored Chat), `text` (not blank, at most 65536 characters) and optional `quote` (the ID of a Message of the same Chat). Valid once the Daemon is `ready` and linked. The Daemon stores the Message as `pending`, answers `{"message": {...}}` at once, and sends it when the connection is up. `messageChanged` reports `sent`, or `failed`.
@@ -547,10 +574,10 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32602 | invalid params | `chat.mute` got an `until` that is not `-1`, `0` or in the future. |
 | -32001 | invalid phone number | `link.pairCode` or `contacts.lookup` got a number that is too short or not international. |
 | -32002 | pair code failed | WhatsApp did not give a Pair Code. |
-| -32003 | chat store failed | `chats.list`, `contacts.search`, `chat.start`, `chat.messages`, `chat.send`, `chat.retry`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` could not use the chat store. |
+| -32003 | chat store failed | `chats.list`, `contacts.search`, `chat.start`, `chat.messages`, `chat.requestHistory`, `chat.send`, `chat.retry`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
 | -32006 | invalid message | `chat.send` or `chat.sendMedia` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.deleteForMe` got an unknown Message. `chat.react` got an unknown or revoked Message, a System Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown, revoked or a System Message. |
-| -32007 | could not reach WhatsApp (was "send failed") | `chat.edit`, `chat.revoke`, `chat.react`, `contacts.lookup`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got no answer from WhatsApp: no connection or a timeout. Nothing changed. |
+| -32007 | could not reach WhatsApp (was "send failed") | `chat.requestHistory` found no connection. `chat.edit`, `chat.revoke`, `chat.react`, `contacts.lookup`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got no answer from WhatsApp: no connection or a timeout. Nothing changed. |
 | -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
 | -32010 | invalid chat | `chat.start` got a `jid` that is not a person's WhatsApp ID. `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got an unknown Chat. |
@@ -594,10 +621,12 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `pictured` | `requests` | The Go test checks the picture calls that reached the fake port so far, in order, as `"chat:knownID"`. A call that the cache answered is not in the list. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
 | `uploaded` | `uploads` | The Go test checks the Media that the fake port has uploaded and sent so far, in order, as `"id\|kind\|mime\|name\|caption\|content"`. |
+| `clock` | `historyTimer` | With `historyTimer` (true), the Go test fires the 30 s timeout of the open On-Demand History Sync request. It fires the sweep timer first. |
 | `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest timer of the Daemon clock. That is the sweep of Disappearing Messages, then a Mute end, in the order the Daemon set them. Without it, the line fires the keyring timeout as above. |
 | `restart` | `now` (optional) | The Go test stops the Daemon like a closed stdin and starts it again on the same Profile, with a new fake WhatsApp port. `now` sets the Daemon time while it was off. Put the `whatsapp` start-up lines after it. |
 | `file` | `path`, and `content` or `missing` | With `write`: true the Go test writes the file with `content` (a source file for `chat.sendMedia`). With `remove`: true the Go test deletes the file. Otherwise the Go test checks a file: it holds `content`, or (`missing`: true) it does not exist, or (`present`: true) it exists. `$PROFILE` in `path` is the Profile folder. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
-| `plugin` | `openChat` | The Plugin test opens this Chat (`jid`, `name`, `kind`) as the user does. The Go test ignores it. |
+| `plugin` | `openChat`, `requestHistory` or `lookup` | The Plugin test acts as the user: it opens this Chat (`jid`, `name`, `kind`), taps the older link at the end of the stored history (`requestHistory`: true), or starts a lookup. The Go test ignores it. |
+| `historyRequested` | `requests` | The Go test checks the On-Demand History Sync requests that reached the fake port so far, in order, as `"chat:anchorID:count"`. |
 | `whatsapp` | one of the keys below | The Go test scripts the fake WhatsApp port. |
 
 Keys of a `whatsapp` line. Each line has exactly one:
@@ -611,6 +640,7 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `lookups` | An object of digits to WhatsApp ID: the answers of `contacts.lookup`. A number that is not in it is not on WhatsApp. `sendError` makes the lookup fail. |
 | `pictures` | An object of Chat to `"id\|content"`: the Profile pictures that `chat.picture` finds. A Chat that is not in it has no picture. `sendError` makes the call fail. |
 | `phones` | An object of LID to phone JID: what the local LID store holds. The Daemon reads it on `connected`. |
+| `historyAnswer` | The number of Messages in the answer to each `chat.requestHistory` that reaches the fake port. The answer is an on-demand batch of older Messages. 0 is an empty batch. Without this line, the phone does not answer. `sendError` makes the call fail. |
 | `hold` | `true` makes the fake port hold every `chat.send` until a `hold` line with `false`. A fixture uses it to end a send after other events. |
 | `download` | The plain Media that the next downloads write. |
 | `downloadError` | Any text, or empty: the fake port fails every download with that error, or works again (empty). |

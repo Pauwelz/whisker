@@ -355,6 +355,19 @@ func (c *Client) Edit(chat, id, text string) error {
 	})
 }
 
+// RequestHistory sends the On-Demand History Sync request to the phone, as a peer Message to the user's own ID.
+func (c *Client) RequestHistory(chat string, anchor HistoryAnchor, count int) error {
+	jid, err := types.ParseJID(chat)
+	if err != nil {
+		return err
+	}
+	info := types.MessageInfo{MessageSource: types.MessageSource{Chat: jid, IsFromMe: anchor.FromMe}, ID: anchor.ID, Timestamp: time.Unix(anchor.Time, 0)}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	_, err = c.cli.SendPeerMessage(ctx, c.cli.BuildHistorySyncRequest(&info, count))
+	return offline(err)
+}
+
 func (c *Client) Revoke(chat, id string) error {
 	return c.send(chat, editTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
 		return c.cli.BuildRevoke(jid, types.EmptyJID, id), whatsmeow.SendRequestExtra{}
@@ -811,7 +824,7 @@ func liveAliases(src types.MessageSource, chat types.JID) []ChatAlias {
 
 // historySync maps one History Sync batch, and lists the aliases that the batch taught. Chats that do not parse are dropped.
 func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []ChatAlias) {
-	batch := HistorySync{}
+	batch := HistorySync{OnDemand: data.GetSyncType() == waHistorySync.HistorySync_ON_DEMAND}
 	for _, p := range data.GetPushnames() {
 		batch.PushNames = append(batch.PushNames, PushName{JID: c.phoneString(p.GetID()), Name: p.GetPushname()})
 	}

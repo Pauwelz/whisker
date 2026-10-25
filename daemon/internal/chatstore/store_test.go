@@ -2,6 +2,7 @@ package chatstore_test
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -589,5 +590,38 @@ func TestANewMessageUnarchivesOnlyWhenTheSettingIsOn(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOldestMessageIsTheAnchorOfTheChat(t *testing.T) {
+	s, _ := newStore(t)
+	if _, err := s.OldestMessage("a@s.whatsapp.net"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("a Chat with no Message has no anchor, got %v", err)
+	}
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "a@s.whatsapp.net", Messages: []whatsapp.Message{
+		{ID: "new", Time: 300}, {ID: "old", FromMe: true, Time: 100}, {ID: "mid", Time: 200},
+	}}}})
+	got, err := s.OldestMessage("a@s.whatsapp.net")
+	if err != nil || got != (whatsapp.HistoryAnchor{ID: "old", FromMe: true, Time: 100}) {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	// A System Message can carry an ID that the Daemon made, which the phone does not know.
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "a@s.whatsapp.net", Messages: []whatsapp.Message{
+		{ID: "sys", Time: 50, System: &whatsapp.System{Kind: whatsapp.SystemTimer, Value: "86400"}},
+	}}}})
+	if got, err := s.OldestMessage("a@s.whatsapp.net"); err != nil || got.ID != "old" {
+		t.Fatalf("a System Message is no anchor, got %+v, %v", got, err)
+	}
+}
+
+func TestApplyHistoryCountsOnlyNewMessages(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "a@s.whatsapp.net", Messages: []whatsapp.Message{{ID: "2", Time: 200}}}}})
+	added, err := s.ApplyHistory(whatsapp.HistorySync{OnDemand: true, Chats: []whatsapp.HistoryChat{
+		{JID: "a@s.whatsapp.net", Messages: []whatsapp.Message{{ID: "1", Time: 100}, {ID: "2", Time: 200}}},
+		{JID: "b@s.whatsapp.net"},
+	}})
+	if err != nil || added["a@s.whatsapp.net"] != 1 || added["b@s.whatsapp.net"] != 0 {
+		t.Fatalf("got %v, %v", added, err)
 	}
 }
