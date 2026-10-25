@@ -570,79 +570,90 @@ Panel {
           }
         }
 
-        // Profile Settings in three sections: Privacy, Notifications, Account. The Daemon owns the values: each control sends one change.
-        Column {
+        // Profile Settings in four sections: Privacy, Notifications, Media, Account. The Daemon owns the values: each control sends one change.
+        // They scroll when they do not fit the pop-out, as the Chat list does.
+        Flickable {
+          id: settingsView
+          WheelScroll { view: settingsView }
           visible: root.parts.settings
           width: parent.width
-          spacing: Style.space(10)
+          height: visible ? Math.max(0, root.popoutHeight - y) : 0
+          contentHeight: settingsColumn.height
+          boundsBehavior: Flickable.StopAtBounds
+          clip: true
+          Column {
+            id: settingsColumn
+            width: settingsView.width
+            spacing: Style.space(10)
 
-          PanelSectionHeader { text: "Privacy"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
-          Text {
-            text: "Read Receipts"
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.subtitle
-          }
-          ButtonGroup {
-            options: State.READ_RECEIPT_MODES
-            value: root.settings ? root.settings.readReceipts : ""
-            foreground: root.contentForeground
-            fontFamily: root.contentFontFamily
-            onChanged: function(mode) { root.whiskerService.changeSettings({ readReceipts: mode }) }
-          }
-          Text {
-            width: parent.width
-            wrapMode: Text.Wrap
-            opacity: 0.6
-            text: State.readReceiptDescription(root.settings)
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-          }
-          SettingToggle { key: "sendOnline" }
-          SettingToggle { key: "sendTyping" }
-
-          PanelSeparator { width: parent.width; foreground: root.contentForeground }
-          PanelSectionHeader { text: "Notifications"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
-          SettingToggle { key: "notifications" }
-
-          PanelSeparator { width: parent.width; foreground: root.contentForeground }
-          PanelSectionHeader { text: "Media"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
-          SettingToggle { key: "autoDownload" }
-
-          PanelSeparator { width: parent.width; foreground: root.contentForeground }
-          PanelSectionHeader { text: "Account"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
-          Text {
-            visible: root.confirmLogout
-            width: parent.width
-            wrapMode: Text.Wrap
-            text: "Log out removes this device from your phone and deletes your local chats."
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.body
-          }
-          Row {
-            spacing: Style.space(8)
-            Button {
-              visible: !root.confirmLogout
-              text: "Log out"
-              bordered: true
-              onClicked: root.confirmLogout = true
+            PanelSectionHeader { text: "Privacy"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
+            Text {
+              text: "Read Receipts"
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.subtitle
             }
-            Button {
-              visible: root.confirmLogout
-              text: "Cancel"
-              bordered: true
-              onClicked: root.confirmLogout = false
+            ButtonGroup {
+              options: State.READ_RECEIPT_MODES
+              value: root.settings ? root.settings.readReceipts : ""
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              onChanged: function(mode) { root.whiskerService.changeSettings({ readReceipts: mode }) }
             }
-            Button {
+            Text {
+              width: parent.width
+              wrapMode: Text.Wrap
+              opacity: 0.6
+              text: State.readReceiptDescription(root.settings)
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+            }
+            SettingToggle { key: "sendOnline" }
+            SettingToggle { key: "sendTyping" }
+
+            PanelSeparator { width: parent.width; foreground: root.contentForeground }
+            PanelSectionHeader { text: "Notifications"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
+            SettingToggle { key: "notifications" }
+
+            PanelSeparator { width: parent.width; foreground: root.contentForeground }
+            PanelSectionHeader { text: "Media"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
+            SettingToggle { key: "autoDownload" }
+
+            PanelSeparator { width: parent.width; foreground: root.contentForeground }
+            PanelSectionHeader { text: "Account"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
+            Text {
               visible: root.confirmLogout
-              text: "Confirm Log out"
-              bordered: true
-              onClicked: {
-                root.confirmLogout = false
-                root.showSettings = false
-                root.whiskerService.logout()
+              width: parent.width
+              wrapMode: Text.Wrap
+              text: "Log out removes this device from your phone and deletes your local chats."
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+            Row {
+              spacing: Style.space(8)
+              Button {
+                visible: !root.confirmLogout
+                text: "Log out"
+                bordered: true
+                onClicked: root.confirmLogout = true
+              }
+              Button {
+                visible: root.confirmLogout
+                text: "Cancel"
+                bordered: true
+                onClicked: root.confirmLogout = false
+              }
+              Button {
+                visible: root.confirmLogout
+                text: "Confirm Log out"
+                bordered: true
+                onClicked: {
+                  root.confirmLogout = false
+                  root.showSettings = false
+                  root.whiskerService.logout()
+                }
               }
             }
           }
