@@ -119,3 +119,17 @@ test("a lookup starts only for a full phone number", () => {
   assert.equal(State.lookupPhone("ann"), "");
   assert.equal(State.lookupPhone(""), "");
 });
+
+test("newChatTarget names a phone row by its number and passes a contact row through", () => {
+  const phoneRow = { kind: "phone", phone: "+15551234567", jid: "15551234567@s.whatsapp.net", status: "found" };
+  const target = State.newChatTarget(phoneRow);
+  assert.equal(target.jid, phoneRow.jid);
+  assert.equal(target.name, "+15551234567");
+  const contactRow = State.newChatRows([ann])[0];
+  assert.equal(State.newChatTarget(contactRow), contactRow);
+});
+
+test("newChatRowName is the number of a phone row and the name of a contact row", () => {
+  assert.equal(State.newChatRowName({ kind: "phone", phone: "+1555" }), "+1555");
+  assert.equal(State.newChatRowName({ kind: "contact", name: "Ann", phone: "+1" }), "Ann");
+});

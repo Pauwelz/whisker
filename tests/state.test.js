@@ -115,9 +115,24 @@ test("docs/releasing.md lists the fetch script exit codes", () => {
   for (const code of Object.keys(State.FETCH_EXIT_MESSAGES)) assert.ok(doc.includes(`| ${code} |`), code);
 });
 
-test("the contract doc lists the exit code the Plugin maps", () => {
+test("the contract doc lists the exit codes the Plugin maps", () => {
   const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
   assert.ok(doc.includes(`| ${State.EXIT_OVERSIZED_LINE} |`));
+  assert.ok(doc.includes(`| ${State.EXIT_PROFILE_IN_USE} |`));
+});
+
+test("the Plugin exit codes equal the Go constants of the contract package", () => {
+  const go = fs.readFileSync(path.join(root, "daemon", "internal", "contract", "contract.go"), "utf8");
+  const goCode = (name) => Number(new RegExp(`\\b${name}\\s*=\\s*(\\d+)`).exec(go)[1]);
+  assert.equal(State.EXIT_OVERSIZED_LINE, goCode("ExitOversizedLine"));
+  assert.equal(State.EXIT_PROFILE_IN_USE, goCode("ExitProfileInUse"));
+});
+
+test("the contract doc lists every error code that the Plugin maps", () => {
+  const doc = fs.readFileSync(path.join(root, "docs", "contract.md"), "utf8");
+  for (const code of [...Object.keys(State.PAIR_CODE_ERRORS), ...Object.keys(State.ERROR_NOTICES)]) {
+    assert.ok(doc.includes(`| ${code} |`), code);
+  }
 });
 
 test("an unavailable keyring shows a Retry action", () => {

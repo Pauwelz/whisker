@@ -436,7 +436,7 @@ Panel {
               text: modelData.label
               selected: root.chatFilter === modelData.value
               onClicked: {
-                const archivedChanged = (modelData.value === "archived") !== (root.chatFilter === "archived")
+                const archivedChanged = State.archivedFilterChanged(root.chatFilter, modelData.value)
                 root.chatFilter = modelData.value
                 if (archivedChanged) root.whiskerService.showArchived(modelData.value === "archived")
               }
@@ -554,7 +554,7 @@ Panel {
                 enabled: modelData.kind === "contact" || modelData.status === "found"
                 onTapped: {
                   root.showNewChat = false
-                  root.whiskerService.startChat(modelData.kind === "phone" ? { jid: modelData.jid, name: modelData.phone } : modelData)
+                  root.whiskerService.startChat(State.newChatTarget(modelData))
                 }
               }
               // Contact row: "@ name    +phone  open|new". A phone row shows the number and its status. The note is a dim footer line.
@@ -577,7 +577,7 @@ Panel {
                   Layout.fillWidth: true
                   wrapMode: Text.Wrap
                   textFormat: Text.PlainText
-                  text: note ? modelData.text : (modelData.kind === "phone" ? modelData.phone : modelData.name)
+                  text: note ? modelData.text : State.newChatRowName(modelData)
                   color: root.contentForeground
                   opacity: note || modelData.pushNameOnly ? 0.6 : 1
                   font.family: root.contentFontFamily

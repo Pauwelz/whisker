@@ -96,3 +96,10 @@ test("the contract doc lists the error codes of the Chat options", () => {
   for (const code of ["-32007", "-32010", "-32011", "-32602"]) assert.ok(doc.includes(`| ${code} |`), code);
   for (const code of Object.keys(State.ERROR_NOTICES)) assert.ok(doc.includes(`| ${code} |`), code);
 });
+
+test("archivedFilterChanged is true only when the filter moves to or from archived", () => {
+  assert.equal(State.archivedFilterChanged("all", "archived"), true);
+  assert.equal(State.archivedFilterChanged("archived", "unread"), true);
+  assert.equal(State.archivedFilterChanged("all", "unread"), false);
+  assert.equal(State.archivedFilterChanged("archived", "archived"), false);
+});

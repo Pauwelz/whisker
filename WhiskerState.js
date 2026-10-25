@@ -634,6 +634,21 @@ function newChatRows(contacts, query, lookup) {
   return rows
 }
 
+// The name a new Chat row shows: the number for a "phone" row, the name for a contact row.
+function newChatRowName(row) {
+  return row.kind === "phone" ? row.phone : row.name
+}
+
+// What startChat gets for a tapped row. A "phone" row has no name, so the number is its name.
+function newChatTarget(row) {
+  return row.kind === "phone" ? { jid: row.jid, name: newChatRowName(row) } : row
+}
+
+// Whether a change of Chat filter changes the list the Daemon sends: only to or from "archived".
+function archivedFilterChanged(current, next) {
+  return (next === "archived") !== (current === "archived")
+}
+
 // The request for one page of the Chat timeline. The next page starts at the number of Messages shown.
 function messagesRequest(id, jid, offset) {
   return request(id, "chat.messages", { chat: jid, offset: offset })
