@@ -64,7 +64,7 @@ const (
 	errMediaFailed    = -32009
 	errInvalidChat    = -32010
 	errPinLimit       = -32011
-	errPasteOneFile   = -32012
+	errTooManyFiles   = -32012
 	errNotSendable    = -32013
 )
 
@@ -85,7 +85,7 @@ const (
 	msgMediaCopy      = "media copy failed"
 	msgInvalidChat    = "invalid chat"
 	msgPinLimit       = "pin limit"
-	msgPasteOneFile   = "paste one file at a time"
+	msgTooManyFiles   = "30 files at most"
 	msgNotSendable    = "file not sendable"
 )
 
@@ -202,9 +202,18 @@ func notification(method string, params map[string]any) map[string]any {
 }
 
 func errorReply(id json.RawMessage, code int, message string) map[string]any {
+	return errorReplyData(id, code, message, nil)
+}
+
+// errorReplyData is errorReply with an `error.data` member. A nil data leaves it out.
+func errorReplyData(id json.RawMessage, code int, message string, data any) map[string]any {
 	var idValue any // nil encodes as JSON null
 	if len(id) > 0 {
 		_ = json.Unmarshal(id, &idValue)
 	}
-	return map[string]any{"jsonrpc": "2.0", "id": idValue, "error": map[string]any{"code": code, "message": message}}
+	e := map[string]any{"code": code, "message": message}
+	if data != nil {
+		e["data"] = data
+	}
+	return map[string]any{"jsonrpc": "2.0", "id": idValue, "error": e}
 }

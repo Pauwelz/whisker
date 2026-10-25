@@ -70,5 +70,5 @@ func (s *session) changed(id json.RawMessage, chat, msgID string, change func() 
 	}
 	m, err := s.chats.Message(chat, msgID)
 	reply, changed := s.messageReply(id, m, err)
-	return s.followUp(reply, changed, before, s.announce, nil)
+	return s.followUp(reply, oneOf(changed), before, s.announce, nil)
 }

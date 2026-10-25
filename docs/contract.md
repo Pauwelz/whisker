@@ -350,11 +350,11 @@ Params: `chat` and `id` of a `failed` Message. The Daemon makes it `pending`, an
 
 ### `chat.sendMedia`
 
-Params: `chat`, `path` (absolute path of a file) and `caption` (optional, at most 65536 characters). Valid once the Daemon is `ready` and linked. The file must be a regular file of 1 byte to 100 MiB. A JPEG, PNG or WebP file goes out as `image`. Every other file goes out as `document` with its file name.
+Params: `chat`, `paths` (a list of 1 to 30 absolute file paths) and `caption` (optional, at most 65536 characters). Valid once the Daemon is `ready` and linked. Each file must be a regular file of 1 byte to 100 MiB. The Daemon checks every path first. If all pass, it stores one Message per path, in list order, and clears the Draft once. Only the first Message has the caption. A JPEG, PNG or WebP file goes out as `image`. Every other file goes out as `document` with its file name.
 
-The Daemon encrypts a copy of the file in the Profile (see Media), stores the Message as `pending` with `media.state` `ready`, answers `{"message": {...}}` at once, and uploads it when the connection is up. `messageChanged` reports `sent`, or `failed`. `chat.retry` works as for text. The Message keeps one ID for life. A restart keeps the Media: `media.open` works at once. The copy into the Profile blocks the Daemon for a moment on a large file.
+The Daemon encrypts a copy of the file in the Profile (see Media), stores each Message as `pending` with `media.state` `ready`, answers `{"sent": [{...}, ...]}` (the Messages in list order) at once, and uploads it when the connection is up. `messageChanged` reports `sent`, or `failed`. `chat.retry` works as for text. The Message keeps one ID for life. A restart keeps the Media: `media.open` works at once. The copy into the Profile blocks the Daemon for a moment on a large file.
 
-Error -32006 means a relative or unreadable `path`, a file that is empty, too large or not a regular file, a too long caption, or an unknown Chat. Error -32009 means the copy into the Profile failed. Fixtures: `chat-send-media.jsonl`, `chat-send-media-offline.jsonl`.
+Error -32013 means one or more paths that are relative, missing, empty, too large or not a regular file. It is all or nothing: the Daemon stores no Message and keeps the Draft. The error carries `error.data`: `{"paths": [...]}`, every bad path. Error -32006 means no path, more than 30 paths, a too long caption, or an unknown Chat. Error -32009 means a copy into the Profile failed. The send is all or nothing: the Daemon deletes the Messages it stored in this call, keeps the pasted images and keeps the Draft. Fixtures: `chat-send-media.jsonl`, `chat-send-media-offline.jsonl`.
 
 ### `chat.edit`
 
@@ -416,23 +416,23 @@ The store changes only after WhatsApp accepts the write: the Message goes with i
 
 ### `draft.get`
 
-Params: `chat`. Valid once the Daemon is `ready`. The result is `{"chat": ..., "draft": {"text", "quote", "edit", "attachment"}}`. A Draft is the unsent composition of one Chat: its text, the ID of the Message it quotes (`quote`), the ID of the Message under edit (`edit`) and the absolute path of a staged file (`attachment`). An empty string means none. A Chat with no Draft gives four empty strings. The Daemon drops a `quote` or `edit` whose Message is gone or revoked, and an `attachment` whose file is gone or no longer a regular file. The text stays. The Plugin sends it when it opens a Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`, `draft-attachment.jsonl`, `draft-attachment-gone.jsonl`.
+Params: `chat`. Valid once the Daemon is `ready`. The result is `{"chat": ..., "draft": {"text", "quote", "edit", "attachments"}, "unsendable": [...]}`. A Draft is the unsent composition of one Chat: its text, the ID of the Message it quotes (`quote`), the ID of the Message under edit (`edit`) and the absolute paths of the Attachments, in order (`attachments`, at most 30). An empty string or an empty list means none. A Chat with no Draft gives empty values. The Daemon drops a `quote` or `edit` whose Message is gone or revoked. It keeps every Attachment. `unsendable` lists the Attachments that `chat.sendMedia` would refuse now (the file is gone or no longer a regular file of 1 B to 100 MiB). The Plugin marks those rows; the mark is not stored. The Plugin sends it when it opens a Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`, `draft-attachment.jsonl`, `draft-attachment-gone.jsonl`.
 
 ### `draft.set`
 
-Params: `chat`, `text`, `quote`, `edit` and `attachment`. Valid once the Daemon is `ready`. It replaces the Draft of the Chat and answers with an empty result. An empty Draft removes it. The chat store keeps Drafts, so they survive a Daemon restart. The Plugin sends it on each change of the composer.
+Params: `chat`, `text`, `quote`, `edit` and `attachments` (a list of at most 30 paths). Valid once the Daemon is `ready`. It replaces the Draft of the Chat and answers with an empty result. An empty Draft removes it. The chat store keeps Drafts, so they survive a Daemon restart. The Plugin sends it on each change of the composer.
 
-Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is not a stored Message of the Chat. It also means a new `attachment` that `chat.sendMedia` would refuse (not absolute, not a regular file, empty or over 100 MiB; the Daemon checks it with `stat`, never `open`), or an `attachment` together with an `edit`. The Daemon checks the file only when `attachment` differs from the stored one, so a keystroke that keeps a file that is gone now still saves. A staged file and an Edit never combine: the Plugin drops the file when an Edit starts, and sends no `draft.paste` during an Edit. A file that is gone at send time gives the error of `chat.sendMedia`. A successful `chat.send`, `chat.sendMedia` or `chat.edit` clears the Draft of its Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`, `draft-attachment.jsonl`, `draft-attachment-gone.jsonl`.
+Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is not a stored Message of the Chat. It also means more than 30 `attachments`, a path in `attachments` that is new to the stored list and that `chat.sendMedia` would refuse (not absolute, not a regular file, empty or over 100 MiB; the Daemon checks it with `stat`, never `open`), or `attachments` together with a `quote` or an `edit`. The Daemon checks only the paths that are new to the stored list, so a keystroke that keeps a file that is gone now still saves. Attachments and an Edit never combine: the Plugin drops the files when an Edit starts, and sends no `draft.paste` during an Edit. A file that is gone at send time gives the error of `chat.sendMedia`. A successful `chat.send`, `chat.sendMedia` or `chat.edit` clears the Draft of its Chat. Fixtures: `draft-chat-switch.jsonl`, `draft-send.jsonl`, `draft-attachment.jsonl`, `draft-attachment-gone.jsonl`.
 
 ### `draft.paste`
 
-Params: `chat`. Valid once the Daemon is `ready`. The Plugin sends it on Ctrl+V in the composer, except during an Edit. The Daemon reads the clipboard with `wl-paste` and answers `{"chat": ..., "pasted": ...}`. It does not change the Draft.
+Params: `chat`. Valid once the Daemon is `ready`. The Plugin sends it on Ctrl+V in the composer, except during an Edit. The Daemon reads the clipboard with `wl-paste` and answers `{"chat": ..., "pasted": [...]}`. It does not change the Draft.
 
-- `pasted` is the absolute path of the one `file://` URI in `text/uri-list`, as a file manager copies a file. The Plugin then stages it as the `attachment` with `draft.set`.
-- With no `file://` URI, an image wins over text. For `image/png`, `image/jpeg` or `image/webp` (best first), the Daemon writes the bytes to `$XDG_RUNTIME_DIR/whisker/pasted/<random>/Pasted image.<ext>` (folder 0700, file 0600) and `pasted` is that path. The folder is in memory, so the plain image never reaches the disk.
-- The Daemon deletes a pasted image, with its folder, when `draft.set` changes the `attachment` away from it, when `chat.sendMedia` has stored its encrypted copy, and on an unlink. It never deletes an `attachment` outside that folder. There is no sweep at start; a reboot clears the folder.
-- `pasted` is empty when the clipboard has no `file://` URI and no image, when `wl-paste` is not installed, or when a `wl-paste` call takes more than 2 seconds. The Plugin then pastes the text of the clipboard itself. A missing `wl-paste` is logged once.
-- Error -32012 means two or more `file://` URIs. Error -32013 means a file or image that `chat.sendMedia` would refuse: not a regular file, empty or over 100 MiB.
+- `pasted` lists the absolute paths of the `file://` URIs in `text/uri-list`, in clipboard order, as a file manager copies files. The Plugin adds them to the end of the Attachments (a path already there stays once) and stores the list with `draft.set`.
+- With no `file://` URI, an image wins over text. For `image/png`, `image/jpeg` or `image/webp` (best first), the Daemon writes the bytes to `$XDG_RUNTIME_DIR/whisker/pasted/<random>/Pasted image.<ext>` (folder 0700, file 0600) and `pasted` is a list of that one path. The folder is in memory, so the plain image never reaches the disk.
+- The Daemon deletes a pasted image, with its folder, when `draft.set` leaves its path out of `attachments`, when `chat.sendMedia` has stored its encrypted copy, and on an unlink. It never deletes an Attachment outside that folder. There is no sweep at start; a reboot clears the folder.
+- `pasted` is an empty list when the clipboard has no `file://` URI and no image, when `wl-paste` is not installed, or when a `wl-paste` call takes more than 2 seconds. The Plugin then pastes the text of the clipboard itself. A missing `wl-paste` is logged once.
+- Error -32012 means that the stored Attachments plus the new paths (without duplicates) would be more than 30. The Daemon changes nothing. Error -32013 means a file or image that `chat.sendMedia` would refuse: not a regular file, empty or over 100 MiB.
 
 The `chat` param only comes back in the result, so the Plugin drops a reply for a Chat that is no longer open.
 
@@ -525,7 +525,7 @@ Valid only after `keyringUnavailable`. The Daemon answers with an empty `result`
 
 ## Errors
 
-The Daemon answers a request with an `error` object. Application codes will join the standard ones here.
+The Daemon answers a request with an `error` object. Application codes will join the standard ones here. An error may carry `data`; only -32013 on `chat.sendMedia` does.
 
 | Code | Message | When |
 |---|---|---|
@@ -536,14 +536,14 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32002 | pair code failed | WhatsApp did not give a Pair Code. |
 | -32003 | chat store failed | `chats.list`, `contacts.search`, `chat.start`, `chat.messages`, `chat.send`, `chat.retry`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
-| -32006 | invalid message | `chat.send` or `chat.sendMedia` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.deleteForMe` got an unknown Message. `chat.react` got an unknown or revoked Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown or revoked. |
+| -32006 | invalid message | `chat.send` got a blank or too long text or an unknown Chat. `chat.sendMedia` got no path, more than 30 paths, a too long caption or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.deleteForMe` got an unknown Message. `chat.react` got an unknown or revoked Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown or revoked. |
 | -32007 | could not reach WhatsApp (was "send failed") | `chat.edit`, `chat.revoke`, `chat.react`, `contacts.lookup`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got no answer from WhatsApp: no connection or a timeout. Nothing changed. |
 | -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
 | -32010 | invalid chat | `chat.start` got a `jid` that is not a person's WhatsApp ID. `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got an unknown Chat. |
 | -32011 | pin limit | `chat.pin` would make a 4th Pinned Chat. Nothing changed. |
-| -32012 | paste one file at a time | `draft.paste` found two or more copied files. |
-| -32013 | file not sendable | `draft.paste` found a copied file that is not a regular file, is empty, or is over 100 MiB, or an image over 100 MiB. |
+| -32012 | 30 files at most | `draft.paste` would make a Draft with more than 30 Attachments. |
+| -32013 | file not sendable | `draft.paste` found a copied file that is not a regular file, is empty, or is over 100 MiB, or an image over 100 MiB. `chat.sendMedia` got one or more such paths; `error.data` is `{"paths": [...]}` with every bad path. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 

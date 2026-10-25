@@ -2,6 +2,7 @@ package chatstore_test
 
 import (
 	"database/sql"
+	"reflect"
 	"testing"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
@@ -128,27 +129,27 @@ func TestMergeChatDraftKeepsPhoneTargetsAndTheOnlyDraft(t *testing.T) {
 		{JID: lidJID, LastActive: 5, Messages: []whatsapp.Message{msg("a", 5)}},
 		{JID: phoneJID, LastActive: 5, Messages: []whatsapp.Message{msg("b", 5)}},
 	}})
-	if err := s.SetDraft(lidJID, chatstore.Draft{Text: "lid", Quote: "a"}); err != nil {
+	if err := s.SetDraft(lidJID, chatstore.Draft{Text: "lid", Quote: "a", Attachments: []string{"/lid.png"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetDraft(phoneJID, chatstore.Draft{Text: "phone", Quote: "b"}); err != nil {
+	if err := s.SetDraft(phoneJID, chatstore.Draft{Text: "phone", Quote: "b", Attachments: []string{"/phone.png"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.MergeChat(lidJID, phoneJID); err != nil {
 		t.Fatal(err)
 	}
-	if d, _ := s.Draft(phoneJID); d != (chatstore.Draft{Text: "phone\nlid", Quote: "b"}) {
-		t.Errorf("Draft = %+v; want the phone Quote and both texts", d)
+	if d, _ := s.Draft(phoneJID); !reflect.DeepEqual(d, chatstore.Draft{Text: "phone\nlid", Quote: "b", Attachments: []string{"/phone.png"}}) {
+		t.Errorf("Draft = %+v; want the phone Quote and Attachments, and both texts", d)
 	}
 
 	// A lone LID Draft moves over whole.
-	if err := s.SetDraft("98@lid", chatstore.Draft{Text: "only", Attachment: "/a/b.png"}); err != nil {
+	if err := s.SetDraft("98@lid", chatstore.Draft{Text: "only", Attachments: []string{"/a/b.png"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.MergeChat("98@lid", "31601@s.whatsapp.net"); err != nil {
 		t.Fatal(err)
 	}
-	if d, _ := s.Draft("31601@s.whatsapp.net"); d != (chatstore.Draft{Text: "only", Attachment: "/a/b.png"}) {
+	if d, _ := s.Draft("31601@s.whatsapp.net"); !reflect.DeepEqual(d, chatstore.Draft{Text: "only", Attachments: []string{"/a/b.png"}}) {
 		t.Errorf("Draft = %+v; the lone Draft must move whole", d)
 	}
 }

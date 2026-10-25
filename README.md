@@ -42,7 +42,7 @@ The pop-out has these fixed shortcuts:
 | Ctrl+F | Focus the search field of the Chat list. |
 | Enter | Send the composer text. |
 | Shift+Enter | Add a line in the composer. |
-| Ctrl+V | Paste in the composer. A file copied in a file manager, or an image such as a screenshot, becomes the Attachment. |
+| Ctrl+V | Paste in the composer. A file copied in a file manager, or an image such as a screenshot, becomes an Attachment (up to 30). |
 
 ## Development
 

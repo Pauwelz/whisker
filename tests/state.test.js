@@ -432,8 +432,8 @@ test("the composer sends an edit when a Message is under edit, otherwise a new M
   assert.deepEqual(JSON.parse(State.deleteForMeRequest(7, direct.jid, "m1")), { jsonrpc: "2.0", id: 7, method: "chat.deleteForMe", params: { chat: direct.jid, id: "m1" } });
 });
 
-test("sendMediaRequest sends the path as it is", () => {
-  assert.deepEqual(JSON.parse(State.sendMediaRequest(7, direct.jid, "/home/me/100%.pdf", "hi")), { jsonrpc: "2.0", id: 7, method: "chat.sendMedia", params: { chat: direct.jid, path: "/home/me/100%.pdf", caption: "hi" } });
+test("sendMediaRequest sends the paths as they are", () => {
+  assert.deepEqual(JSON.parse(State.sendMediaRequest(7, direct.jid, ["/home/me/100%.pdf", "/b.png"], "hi")), { jsonrpc: "2.0", id: 7, method: "chat.sendMedia", params: { chat: direct.jid, paths: ["/home/me/100%.pdf", "/b.png"], caption: "hi" } });
 });
 
 test("Reactions: the user picks, replaces or removes one; chips count the emoji", () => {

@@ -19,42 +19,62 @@ const pasteTimeout = 2 * time.Second
 // pastedImageTypes are the image types a paste takes, best first, with the extension that sniffMime knows.
 var pastedImageTypes = []struct{ mime, ext string }{{"image/png", ".png"}, {"image/jpeg", ".jpg"}, {"image/webp", ".webp"}}
 
-// draftPaste reads the clipboard for a Ctrl+V in the composer. `pasted` is the path of the one copied file,
-// or of a pasted image that the Daemon wrote. An image wins over text.
+// draftPaste reads the clipboard for a Ctrl+V in the composer. `pasted` lists the paths of the copied files in clipboard order,
+// or the path of a pasted image that the Daemon wrote. Files win over an image, and an image wins over text.
 // An empty `pasted` tells the Plugin to paste text: no file or image, no wl-paste, or a timeout.
+// Error -32012 means that the stored Attachments plus the new paths would pass maxAttachments.
 // shortcut: the read runs on the Daemon loop for up to 3 × pasteTimeout, move it off the loop when that stall shows.
 func (s *session) draftPaste(req *request) outcome {
-	pasted := func(path string) outcome {
-		return outcome{reply: resultReply(req.ID, map[string]any{"chat": req.Params.Chat, "pasted": path})}
+	pasted := func(paths ...string) outcome {
+		return outcome{reply: resultReply(req.ID, map[string]any{"chat": req.Params.Chat, "pasted": append([]string{}, paths...)})}
 	}
 	out, err := s.wlPaste("--list-types")
 	if err != nil {
-		return pasted("")
+		return pasted()
 	}
 	types := strings.Fields(string(out))
 	files := s.copiedFiles(types)
-	switch {
-	case len(files) > 1:
-		return outcome{reply: errorReply(req.ID, errPasteOneFile, msgPasteOneFile)}
-	case len(files) == 1:
-		if _, err := statSendable(files[0]); err != nil {
-			return outcome{reply: errorReply(req.ID, errNotSendable, msgNotSendable)}
-		}
-		return pasted(files[0])
+	i := slices.IndexFunc(pastedImageTypes, func(t struct{ mime, ext string }) bool { return slices.Contains(types, t.mime) })
+	if len(files) == 0 && i < 0 {
+		return pasted()
 	}
-	for _, t := range pastedImageTypes {
-		if slices.Contains(types, t.mime) {
-			path, err := s.pasteImage(t.mime, t.ext)
-			if errors.Is(err, errTooLarge) {
+	stored, err := s.chats.Draft(req.Params.Chat)
+	if err != nil {
+		fmt.Fprintln(s.logOut, "draft read failed")
+		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
+	}
+	if len(files) > 0 {
+		added := 0
+		for _, f := range files {
+			if !slices.Contains(stored.Attachments, f) {
+				added++
+			}
+		}
+		if len(stored.Attachments)+added > maxAttachments {
+			return outcome{reply: errorReply(req.ID, errTooManyFiles, msgTooManyFiles)}
+		}
+		for _, f := range files {
+			if _, err := statSendable(f); err != nil {
 				return outcome{reply: errorReply(req.ID, errNotSendable, msgNotSendable)}
 			}
-			return pasted(path) // a failed read or write pastes text
 		}
+		return pasted(files...)
 	}
-	return pasted("")
+	if len(stored.Attachments) >= maxAttachments {
+		return outcome{reply: errorReply(req.ID, errTooManyFiles, msgTooManyFiles)}
+	}
+	t := pastedImageTypes[i]
+	path, err := s.pasteImage(t.mime, t.ext)
+	if errors.Is(err, errTooLarge) {
+		return outcome{reply: errorReply(req.ID, errNotSendable, msgNotSendable)}
+	}
+	if path == "" { // a failed read or write pastes text
+		return pasted()
+	}
+	return pasted(path)
 }
 
-// copiedFiles gives the paths of the file:// URIs on the clipboard, as a file manager copies them.
+// copiedFiles gives the paths of the file:// URIs on the clipboard, as a file manager copies them, without duplicates.
 func (s *session) copiedFiles(types []string) []string {
 	if !slices.Contains(types, "text/uri-list") {
 		return nil
@@ -73,7 +93,9 @@ func (s *session) copiedFiles(types []string) []string {
 		if err != nil || u.Scheme != "file" || (u.Host != "" && u.Host != "localhost") {
 			continue // a web link pastes as text
 		}
-		files = append(files, u.Path)
+		if !slices.Contains(files, u.Path) { // a path listed twice counts once
+			files = append(files, u.Path)
+		}
 	}
 	return files
 }
