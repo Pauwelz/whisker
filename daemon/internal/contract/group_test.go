@@ -103,13 +103,40 @@ func TestGroupLookupFailureIsRetriedOnTheNextReceipt(t *testing.T) {
 	}
 }
 
-func TestMessageFromAnotherDeviceGetsItsRecipientsOnArrival(t *testing.T) {
-	r := groupRunner(t, ann)
-	r.port.Emit(whatsapp.NewMessage{Chat: crew, Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: "fake-1", FromMe: true, Time: 2, Text: "from the phone"}})
+func fromThePhone() whatsapp.NewMessage {
+	return whatsapp.NewMessage{Chat: crew, Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: "fake-1", FromMe: true, Time: 2, Text: "from the phone"}}
+}
+
+func TestMessageFromAnotherDeviceMovesOnlyAfterTheLastRecipient(t *testing.T) {
+	r := groupRunner(t, ann, bob)
+	r.port.Emit(fromThePhone())
 	r.waitLookups(1)
-	r.port.Emit(receiptFrom(ann.LID, whatsapp.StateDelivered))
+	r.port.Emit(receiptFrom(ann.LID, whatsapp.StateRead))
+	r.port.Emit(receiptFrom(bob.Phone, whatsapp.StateDelivered))
 	for {
 		if f := r.nextFrame(); strings.Contains(f, `"state":"delivered"`) {
+			break
+		}
+	}
+	r.port.Emit(receiptFrom(bob.LID, whatsapp.StateRead))
+	r.expectFrame(`"state":"read"`)
+}
+
+func TestReceiptBeforeTheMemberLookupEndsStillCounts(t *testing.T) {
+	r := groupRunner(t, ann)
+	r.port.HoldGroupLookup(true)
+	r.port.Emit(fromThePhone())
+	r.waitLookups(1)
+	for { // the arrival frames
+		if f := r.nextFrame(); strings.Contains(f, "chatsChanged") {
+			break
+		}
+	}
+	r.port.Emit(receiptFrom(ann.LID, whatsapp.StateRead))
+	r.expectQuiet() // no set yet, so nothing moves
+	r.port.HoldGroupLookup(false)
+	for {
+		if f := r.nextFrame(); strings.Contains(f, `"state":"read"`) {
 			break
 		}
 	}

@@ -56,6 +56,7 @@ type Fake struct {
 	groups         map[string][]Member
 	groupErr       error
 	groupLookups   int
+	groupGate      chan struct{} // while set, GroupMembers waits
 }
 
 // SetOwn sets the user parts of the user's own IDs.
@@ -81,9 +82,25 @@ func (f *Fake) GroupLookups() int { f.mu.Lock(); defer f.mu.Unlock(); return f.g
 
 func (f *Fake) GroupMembers(chat string) ([]Member, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.groupLookups++
-	return f.groups[chat], f.groupErr
+	gate, members, err := f.groupGate, f.groups[chat], f.groupErr
+	f.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
+	return members, err
+}
+
+// HoldGroupLookup makes GroupMembers wait until the test calls it again with false.
+func (f *Fake) HoldGroupLookup(hold bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if hold && f.groupGate == nil {
+		f.groupGate = make(chan struct{})
+	} else if !hold && f.groupGate != nil {
+		close(f.groupGate)
+		f.groupGate = nil
+	}
 }
 
 // SetPhones presets the local LID store: LID to phone JID.
