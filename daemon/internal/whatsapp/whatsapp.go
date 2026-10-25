@@ -1,6 +1,6 @@
 // Package whatsapp is the WhatsApp port: a small interface over the WhatsApp client.
 // Later tickets add methods (sends, receipts, Presence) and event kinds here.
-// Only the adapter (client.go and content.go) imports whatsmeow here, and it maps whatsmeow types to these types.
+// Only the adapter (client.go, content.go and system.go) imports whatsmeow here, and it maps whatsmeow types to these types.
 // The device store (internal/profile) and the Media crypto (internal/media) import small whatsmeow parts.
 package whatsapp
 
@@ -189,7 +189,36 @@ type Message struct {
 	Reactions []HistoryReaction `json:"reactions"`
 	// State is the Delivery State that History Sync carries on a Message of the user. It is empty for a live Message.
 	State string `json:"state"`
+	// System is set for a System Message: Sender and FromMe name the actor, Text is empty, and the ID is SystemID.
+	System *System `json:"system"`
 }
+
+// System is the change to a Chat that a System Message records. Kind is one of the System kinds.
+// Targets are phone JIDs of Participants (a LID when no phone JID is known), and "" for the user.
+// Value is the new subject, the timer in seconds, or SystemDeleted for a deleted description or icon.
+type System struct {
+	Kind    string   `json:"kind"`
+	Targets []string `json:"targets"`
+	Value   string   `json:"value"`
+}
+
+// System kinds. The timer kind applies to every Chat, the others to Group Chats only.
+const (
+	SystemAdd         = "add"
+	SystemInvite      = "invite" // joined using an invite link
+	SystemLeave       = "leave"
+	SystemRemove      = "remove"
+	SystemPromote     = "promote"
+	SystemDemote      = "demote"
+	SystemSubject     = "subject"
+	SystemDescription = "description"
+	SystemIcon        = "icon"
+	SystemCreate      = "create"
+	SystemTimer       = "timer"
+)
+
+// SystemDeleted is the Value of a description or icon that was deleted.
+const SystemDeleted = "deleted"
 
 // HistoryReaction is one Reaction on a Message of History Sync. Sender is the reactor, empty when FromMe.
 type HistoryReaction struct {

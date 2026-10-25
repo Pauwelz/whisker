@@ -13,7 +13,7 @@ var ReactionEmoji = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
 func (s *session) chatReact(req *request) outcome {
 	p := req.Params
 	m, err := s.chats.Message(p.Chat, p.ID)
-	if err != nil || m.Revoked || (p.Emoji != "" && !slices.Contains(ReactionEmoji, p.Emoji)) {
+	if err != nil || inert(m) || (p.Emoji != "" && !slices.Contains(ReactionEmoji, p.Emoji)) {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
 	if err := s.port.React(p.Chat, p.ID, m.Sender, p.Emoji); err != nil {

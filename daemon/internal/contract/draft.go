@@ -28,7 +28,7 @@ func liveTarget(chats *chatstore.Store, chat, id string) string {
 	if id == "" {
 		return ""
 	}
-	if m, err := chats.Message(chat, id); err != nil || m.Revoked {
+	if m, err := chats.Message(chat, id); err != nil || inert(m) {
 		return ""
 	}
 	return id
@@ -58,7 +58,8 @@ func (s *session) draftSet(req *request) outcome {
 		if target == "" {
 			continue
 		}
-		if _, err := s.chats.Message(chat, target); err != nil {
+		// A revoked target may stay: liveTarget drops it at the next draft.get. A System Message never is a target.
+		if m, err := s.chats.Message(chat, target); err != nil || m.System {
 			return outcome{reply: s.storeOrInvalid(req.ID, err)}
 		}
 	}

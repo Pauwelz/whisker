@@ -1,0 +1,29 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"Old","lastActive":10,"timer":60,"messages":[{"id":"m1","sender":"2@s.whatsapp.net","time":10,"text":"hi"},{"id":"sys-h1","sender":"2@s.whatsapp.net","time":20,"system":{"kind":"add","targets":["3@s.whatsapp.net",""]}}]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","chatKind":"group","message":{"id":"sys-l1","sender":"2@s.whatsapp.net","time":30,"system":{"kind":"subject","value":"Family"}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"sys-l1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"+2","fromMe":false,"time":30,"text":"+2 changed the subject to \"Family\"","state":"","edited":false,"revoked":false,"system":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","chatKind":"group","message":{"id":"sys-l2","sender":"9@s.whatsapp.net","fromMe":true,"time":40,"system":{"kind":"timer","value":"604800"}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"sys-l2","chat":"g1@g.us","sender":"9@s.whatsapp.net","senderName":"","fromMe":true,"time":40,"text":"You set the disappearing timer to 7 days","state":"","edited":false,"revoked":false,"system":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"Family","lastActive":10,"timer":604800,"messages":[{"id":"sys-l1","sender":"2@s.whatsapp.net","time":30,"system":{"kind":"subject","value":"Family"}}]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"contactName","jid":"2@s.whatsapp.net","name":"Jef Cools"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"contactName","jid":"3@s.whatsapp.net","name":"Robert Maes"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"g1@g.us","kind":"group","name":"Family","lastActive":10,"pinned":false,"muted":false,"unread":false,"timer":604800}],"more":false,"offset":0,"unreadChats":0}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.messages","params":{"chat":"g1@g.us"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chat":"g1@g.us","messages":[{"id":"m1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Jef Cools","fromMe":false,"time":10,"text":"hi","state":"","edited":false,"revoked":false},{"id":"sys-h1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Jef Cools","fromMe":false,"time":20,"text":"Jef Cools added Robert Maes and you","state":"","edited":false,"revoked":false,"system":true},{"id":"sys-l1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Jef Cools","fromMe":false,"time":30,"text":"Jef Cools changed the subject to \"Family\"","state":"","edited":false,"revoked":false,"system":true},{"id":"sys-l2","chat":"g1@g.us","sender":"9@s.whatsapp.net","senderName":"","fromMe":true,"time":40,"text":"You set the disappearing timer to 7 days","state":"","edited":false,"revoked":false,"system":true}],"more":false,"offset":0}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.react","params":{"chat":"g1@g.us","id":"sys-l1","emoji":"👍"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"error":{"code":-32006,"message":"invalid message"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.send","params":{"chat":"g1@g.us","text":"re","quote":"sys-l1"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"error":{"code":-32006,"message":"invalid message"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chat.edit","params":{"chat":"g1@g.us","id":"sys-l2","text":"x"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"error":{"code":-32006,"message":"invalid message"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":6,"method":"chat.revoke","params":{"chat":"g1@g.us","id":"sys-l2"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":6,"error":{"code":-32006,"message":"invalid message"}}}

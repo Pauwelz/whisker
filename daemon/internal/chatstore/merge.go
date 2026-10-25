@@ -19,7 +19,7 @@ func (s *Store) MergeChat(lid, phone string) (changed bool, err error) {
 		if err := tx.QueryRow(`SELECT
 			(SELECT COUNT(*) FROM chats WHERE jid = :lid) + (SELECT COUNT(*) FROM names WHERE jid = :lid) +
 			(SELECT COUNT(*) FROM drafts WHERE chat_jid = :lid) +
-			(SELECT COUNT(*) FROM messages WHERE chat_jid = :lid OR sender_jid = :lid OR quote_sender = :lid) +
+			(SELECT COUNT(*) FROM messages WHERE chat_jid = :lid OR sender_jid = :lid OR quote_sender = :lid OR instr(system_targets, '"' || :lid || '"')) +
 			(SELECT COUNT(*) FROM reactions WHERE chat_jid = :lid OR sender_jid = :lid)`, sql.Named("lid", lid)).Scan(&known); err != nil {
 			return err
 		}
@@ -57,6 +57,8 @@ func (s *Store) MergeChat(lid, phone string) (changed bool, err error) {
 			// Authors and quoted authors in any Chat.
 			`UPDATE messages SET sender_jid = :phone WHERE sender_jid = :lid`,
 			`UPDATE messages SET quote_sender = :phone WHERE quote_sender = :lid`,
+			// The targets are a JSON array of strings, so the quoted LID matches one whole target.
+			`UPDATE messages SET system_targets = replace(system_targets, '"' || :lid || '"', '"' || :phone || '"') WHERE instr(system_targets, '"' || :lid || '"')`,
 			`UPDATE OR IGNORE reactions SET sender_jid = :phone WHERE sender_jid = :lid`,
 			`DELETE FROM reactions WHERE sender_jid = :lid`,
 			// A name the phone row holds wins.

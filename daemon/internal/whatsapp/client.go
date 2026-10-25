@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -586,6 +587,18 @@ func (c *Client) handle(evt any) {
 		}
 	case *events.Picture:
 		c.events <- PictureChanged{JID: c.phone(evt.JID).String()}
+		if evt.JID.Server == types.GroupServer {
+			c.emitSystem(evt.JID, c.systemMessage(evt.JID, evt.Author, types.EmptyJID, SystemIcon, nil, deletedIf(evt.Remove), evt.Timestamp))
+		}
+	case *events.GroupInfo:
+		if evt.Ephemeral != nil {
+			c.events <- ChatTimer{Chat: evt.JID.String(), Seconds: int64(groupTimer(evt.Ephemeral))}
+		}
+		for _, m := range c.groupInfoMessages(evt) {
+			c.emitSystem(evt.JID, m)
+		}
+	case *events.JoinedGroup:
+		c.emitSystem(evt.JID, c.joinedGroupMessage(evt))
 	case *events.Pin:
 		c.emitFlag(Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}, evt.FromFullSync)
 	case *events.Archive:
@@ -601,6 +614,11 @@ func (c *Client) handle(evt any) {
 	case *events.MarkChatAsRead:
 		c.emitFlag(ReadMarker{JID: c.phone(evt.JID).String(), Unread: !evt.Action.GetRead()}, evt.FromFullSync)
 	}
+}
+
+// emitSystem sends a live System Message of a Chat.
+func (c *Client) emitSystem(chat types.JID, m Message) {
+	c.events <- NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Message: m}
 }
 
 // emitFlag sends a live flag event at once. A flag event of a full sync waits for the end of the sync,
@@ -642,6 +660,10 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 		c.events <- MessageRevoked{Chat: chat, ID: id}
 	case pm.GetType() == waE2E.ProtocolMessage_EPHEMERAL_SETTING:
 		c.events <- ChatTimer{Chat: chat, Seconds: int64(pm.GetEphemeralExpiration())}
+		if src := evt.Info.MessageSource; !src.IsGroup { // a Group Chat gets its System Message from GroupInfo
+			jid := c.chatOf(src)
+			c.emitSystem(jid, c.systemMessage(jid, src.Sender, src.SenderAlt, SystemTimer, nil, strconv.FormatUint(uint64(pm.GetEphemeralExpiration()), 10), evt.Info.Timestamp))
+		}
 	default:
 		return false
 	}
@@ -819,6 +841,16 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 			chat.MutedUntil = muteUntil(int64(conv.GetMuteEndTime()))
 		}
 		for _, hm := range conv.GetMessages() {
+			// A stub can lack a sender, so it is read before ParseWebMessage. A stub without content that whisker does not show is dropped.
+			if wm := hm.GetMessage(); wm.GetMessageStubType() != waWeb.WebMessageInfo_UNKNOWN {
+				if m, ok := c.stubMessage(jid, wm); ok {
+					chat.Messages = append(chat.Messages, m)
+					continue
+				}
+				if wm.GetMessage() == nil {
+					continue
+				}
+			}
 			parsed, err := c.cli.ParseWebMessage(jid, hm.GetMessage())
 			if err != nil {
 				continue

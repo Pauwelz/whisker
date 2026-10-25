@@ -259,12 +259,13 @@ func (s *Store) ParticipantName(jid string) (string, error) {
 	return participantName(contact, push, jid), nil
 }
 
-// LIDs lists every LID the store holds as a Chat, a name, an author, a quoted author or a Reaction sender.
+// LIDs lists every LID the store holds as a Chat, a name, an author, a quoted author, a Reaction sender or a System Message target.
 func (s *Store) LIDs() ([]string, error) {
 	rows, err := s.db.Query(`
 		SELECT jid FROM chats WHERE jid LIKE '%@lid' UNION SELECT jid FROM names WHERE jid LIKE '%@lid'
 		UNION SELECT sender_jid FROM messages WHERE sender_jid LIKE '%@lid' UNION SELECT quote_sender FROM messages WHERE quote_sender LIKE '%@lid'
-		UNION SELECT sender_jid FROM reactions WHERE sender_jid LIKE '%@lid'`)
+		UNION SELECT sender_jid FROM reactions WHERE sender_jid LIKE '%@lid'
+		UNION SELECT t.value FROM messages m, json_each(m.system_targets) t WHERE t.value LIKE '%@lid'`)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +358,9 @@ func setFlag(db execer, column string, bit int, jid string, value int64) error {
 func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 	last := c.LastActive
 	for _, m := range c.Messages {
-		last = max(last, m.Time)
+		if m.System == nil { // a System Message does not move its Chat
+			last = max(last, m.Time)
+		}
 	}
 	_, err := tx.Exec(`
 		INSERT INTO chats (jid, kind, subject, last_active, pinned, archived, muted_until, unread, timer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

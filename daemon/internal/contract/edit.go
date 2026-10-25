@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
@@ -23,7 +24,7 @@ func sentByWhatsApp(state string) bool {
 func (s *session) chatEdit(req *request) outcome {
 	p := req.Params
 	m, err := s.chats.Message(p.Chat, p.ID)
-	if err != nil || !m.FromMe || m.Revoked || !sentByWhatsApp(m.State) ||
+	if err != nil || !m.FromMe || inert(m) || !sentByWhatsApp(m.State) ||
 		!validText(p.Text) ||
 		Clock.Now().Sub(time.Unix(m.Time, 0)) > EditWindow {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}
@@ -38,7 +39,7 @@ func (s *session) chatEdit(req *request) outcome {
 func (s *session) chatRevoke(req *request) outcome {
 	p := req.Params
 	m, err := s.chats.Message(p.Chat, p.ID)
-	if err != nil || !m.FromMe || m.Revoked || !sentByWhatsApp(m.State) {
+	if err != nil || !m.FromMe || inert(m) || !sentByWhatsApp(m.State) {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
 	if err := s.port.Revoke(p.Chat, p.ID); err != nil {
@@ -46,6 +47,9 @@ func (s *session) chatRevoke(req *request) outcome {
 	}
 	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.Revoke(p.Chat, p.ID) }, nil)
 }
+
+// inert tells that no action applies to a Message: a Tombstone or a System Message. It shows as not found.
+func inert(m chatstore.Message) bool { return m.Revoked || m.System }
 
 // storeOrInvalid answers a failed lookup with "chat store failed", and any other refusal with "invalid message".
 func (s *session) storeOrInvalid(id json.RawMessage, err error) map[string]any {

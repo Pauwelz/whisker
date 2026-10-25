@@ -159,6 +159,18 @@ The Daemon deletes expired Messages at start-up before `ready`, so a Message tha
 
 Fixtures: `disappearing-expire.jsonl`, `disappearing-restart.jsonl`, `disappearing-send.jsonl`.
 
+### System Messages
+
+A System Message records a change to a Chat. The Daemon stores each one as a Message, from live events and from History Sync, and returns it in time order. These kinds exist: a Participant was added, joined using an invite link, left or was removed, was made an admin or no longer is. The subject, the description or the group icon changed. The group was created, or the Disappearing timer changed. The timer kind applies to every Chat, the other kinds to Group Chats only. WhatsApp sends more kinds of change; the Daemon drops them.
+
+- The Daemon stores the change as data and builds `text` when it reads the Message, with the name rule. A later Phone Contact name replaces a number. The user is "You" at the start of the line and "you" in other places.
+- The ID is `sys-` and a hash of the change and its time in whole seconds. A live change and its History Sync copy have one ID, so the Chat shows it once.
+- A System Message is quiet: no `notify`, no Read Marker, and the Chat keeps its place in the Chat list. It never expires.
+- `chat.react`, `chat.edit`, `chat.revoke` and a `quote` of `chat.send` or `draft.set` refuse a System Message with -32006, as for an unknown Message.
+- A live subject change also renames the Group Chat. `messageChanged` and `chatsChanged` follow each live System Message.
+
+Fixture: `chat-system-messages.jsonl`.
+
 ### `notify`
 
 A new Message raises a desktop notification. The Daemon sends `notify` after `messageChanged` and `chatsChanged` of that Message. `kind` is the Chat kind, `name` follows the name rule, and `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it.
@@ -316,6 +328,7 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 - `mentionsMe` is true when the Message mentions the user. Only such Messages have the key. Fixture: `notify-mention-muted.jsonl`.
 - `senderPush` is true when `senderName` is a Push Name: the user has no phone contact for the sender. Only such Messages have the key. The Plugin shows "~" and the phone number from `sender`.
 - `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
+- `system` is true for a System Message: a change to the Chat. Only such Messages have the key. `text` holds the line, such as `Jef Cools added Robert Maes and Ann`. `sender`, `senderName` and `fromMe` name who made the change, and `state` is empty. See System Messages below.
 - `media` is present only for a Message with Media, see Media below. It never holds a path or bytes.
 - Error -32003 means the chat store failed.
 
@@ -536,7 +549,7 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32002 | pair code failed | WhatsApp did not give a Pair Code. |
 | -32003 | chat store failed | `chats.list`, `contacts.search`, `chat.start`, `chat.messages`, `chat.send`, `chat.retry`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
-| -32006 | invalid message | `chat.send` or `chat.sendMedia` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.deleteForMe` got an unknown Message. `chat.react` got an unknown or revoked Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown or revoked. |
+| -32006 | invalid message | `chat.send` or `chat.sendMedia` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.deleteForMe` got an unknown Message. `chat.react` got an unknown or revoked Message, a System Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown, revoked or a System Message. |
 | -32007 | could not reach WhatsApp (was "send failed") | `chat.edit`, `chat.revoke`, `chat.react`, `contacts.lookup`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got no answer from WhatsApp: no connection or a timeout. Nothing changed. |
 | -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
