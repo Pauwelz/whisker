@@ -78,14 +78,19 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 			}
 			return nil
 		})
-	case whatsapp.Pin:
-		err = s.setFlag("pinned", flagPin, ev.JID, boolInt(ev.Pinned))
-	case whatsapp.Mute:
-		err = s.setFlag("muted_until", flagMute, ev.JID, ev.Until)
-	case whatsapp.ReadMarker:
-		err = s.setFlag("unread", flagUnread, ev.JID, boolInt(ev.Unread))
+	case whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker:
+		err = applyFlag(s.db, ev)
+	case whatsapp.AppStateBatch:
+		err = s.inTx(func(tx *sql.Tx) error {
+			for _, e := range ev.Events {
+				if err := applyFlag(tx, e); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	case whatsapp.ChatTimer:
-		err = s.setFlag("timer", flagTimer, ev.Chat, ev.Seconds)
+		err = setFlag(s.db, "timer", flagTimer, ev.Chat, ev.Seconds)
 	default:
 		return false, nil
 	}
@@ -309,9 +314,26 @@ const (
 	flagTimer
 )
 
-// setFlag sets one live column of a stored Chat and marks it live. column is a fixed string from this file.
-func (s *Store) setFlag(column string, bit int, jid string, value int64) error {
-	_, err := s.db.Exec("UPDATE chats SET "+column+" = ?, live_flags = live_flags | ? WHERE jid = ?", value, bit, jid)
+// applyFlag stores a Pin, Mute or ReadMarker event. Other events change nothing.
+func applyFlag(db execer, ev whatsapp.Event) error {
+	switch ev := ev.(type) {
+	case whatsapp.Pin:
+		return setFlag(db, "pinned", flagPin, ev.JID, boolInt(ev.Pinned))
+	case whatsapp.Mute:
+		return setFlag(db, "muted_until", flagMute, ev.JID, ev.Until)
+	case whatsapp.ReadMarker:
+		return setFlag(db, "unread", flagUnread, ev.JID, boolInt(ev.Unread))
+	}
+	return nil
+}
+
+// setFlag sets one live column of a Chat and marks it live. column is a fixed string from this file.
+// App State can come before the History Sync batch that holds the Chat, so a Chat that is not stored yet gets a row.
+// That row is not listed until it has a Message or a Draft. Its kind is direct until a Message sets it.
+func setFlag(db execer, column string, bit int, jid string, value int64) error {
+	_, err := db.Exec("INSERT INTO chats (jid, "+column+", live_flags) VALUES (?, ?, ?) "+
+		"ON CONFLICT(jid) DO UPDATE SET "+column+" = excluded."+column+", live_flags = live_flags | excluded.live_flags",
+		jid, value, bit)
 	return err
 }
 

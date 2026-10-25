@@ -30,6 +30,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- After a link, Pinned Chats match the phone. The first App State sync after a link dropped its Pin events, so only the old pin of History Sync counted. Now a Pin from App State wins over the History Sync pin, also when it arrives first or when a LID Chat merges. Mutes and Read Markers of that first sync now also come through, in one refresh. Re-link to repair the pins of a device that is linked already.
+- Older Messages of the user that come in History Sync keep their Delivery State. Before, they all showed one ✓ (sent), even when the other person had read them. A later History Sync moves a stored Message forward to its state. Re-link to repair Messages that are stored already.
 - Older Messages from History Sync now show their Reactions. Before, the Daemon dropped the Reactions that History Sync carries, so only Reactions that arrived live showed.
 - The composer is visible again: one bordered row with a "type a message" hint, an attach button and a send button. Before, an empty composer drew nothing.
 - Messages use the width of the pop-out. The pop-out is wider and the sender column narrower, so a short Message no longer wraps over many lines.

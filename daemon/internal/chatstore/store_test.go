@@ -392,3 +392,87 @@ func TestListCountsWaitingMessagesAndFlagsMentions(t *testing.T) {
 		t.Errorf("a read Chat has unreadCount = %d, mention = %v", c.UnreadCount, c.Mention)
 	}
 }
+
+// An older Message of the user keeps the Delivery State that History Sync carries. A later batch moves it forward, never back.
+func TestHistorySyncSetsTheDeliveryStateOfOwnMessages(t *testing.T) {
+	s, _ := newStore(t)
+	const jid = "a@s.whatsapp.net"
+	batch := func(state string) whatsapp.HistorySync {
+		return whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: jid, LastActive: 1, Messages: []whatsapp.Message{
+			{ID: "m1", FromMe: true, Time: 1, Text: "hi", State: state},
+		}}}}
+	}
+	state := func() string {
+		t.Helper()
+		m, err := s.Message(jid, "m1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m.State
+	}
+	apply(t, s, batch(""))
+	if got := state(); got != whatsapp.StateSent {
+		t.Fatalf("no state from History Sync: State = %q, want sent", got)
+	}
+	apply(t, s, batch(whatsapp.StateRead))
+	if got := state(); got != whatsapp.StateRead {
+		t.Errorf("a later batch with read: State = %q, want read", got)
+	}
+	apply(t, s, batch(whatsapp.StateDelivered))
+	if got := state(); got != whatsapp.StateRead {
+		t.Errorf("a stale batch moved the state back: State = %q, want read", got)
+	}
+}
+
+// The first App State sync can come before the History Sync batch that holds the Chat. The batch carries a stale pin.
+// The pin of App State must win, also for a Chat that is not stored yet.
+func TestAPinBeforeHistorySyncWins(t *testing.T) {
+	s, _ := newStore(t)
+	const pinned, unpinned = "a@s.whatsapp.net", "b@s.whatsapp.net"
+	apply(t, s, whatsapp.Pin{JID: pinned, Pinned: true})
+	apply(t, s, whatsapp.Pin{JID: unpinned, Pinned: false})
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{
+		{JID: pinned, LastActive: 1, Pinned: false},
+		{JID: unpinned, LastActive: 2, Pinned: true},
+	}})
+	for _, jid := range []string{pinned, unpinned} {
+		c, err := s.Chat(jid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := jid == pinned; c.Pinned != want {
+			t.Errorf("%s: Pinned = %v, want %v (the App State pin)", jid, c.Pinned, want)
+		}
+	}
+}
+
+// The flags of one full App State sync come as one batch, so the Plugin gets one chatsChanged, not one per Chat.
+func TestAppStateBatchAppliesEveryFlag(t *testing.T) {
+	s, _ := newStore(t)
+	const a, b = "a@s.whatsapp.net", "b@s.whatsapp.net"
+	apply(t, s, whatsapp.AppStateBatch{Events: []whatsapp.Event{
+		whatsapp.Pin{JID: a, Pinned: true},
+		whatsapp.Mute{JID: b, Until: -1},
+		whatsapp.ReadMarker{JID: b, Unread: true},
+	}})
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: a, LastActive: 1}, {JID: b, LastActive: 2}}})
+	ca, _ := s.Chat(a)
+	cb, _ := s.Chat(b)
+	if !ca.Pinned || !cb.Muted || !cb.Unread {
+		t.Errorf("a = %+v, b = %+v; want a pinned, b muted and unread", ca, cb)
+	}
+}
+
+// A Pin can store a Chat before any Message. The first live Message sets its kind.
+func TestALiveMessageSetsTheKindOfAChatThatAPinStored(t *testing.T) {
+	s, _ := newStore(t)
+	const g = "g@g.us"
+	apply(t, s, whatsapp.Pin{JID: g, Pinned: true})
+	ev := whatsapp.NewMessage{Chat: g, Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: "m1", Sender: "b@s.whatsapp.net", Time: 5, Text: "hi"}}
+	if err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := s.Chat(g); err != nil || c.Kind != whatsapp.KindGroup {
+		t.Errorf("Kind = %q, %v; want group", c.Kind, err)
+	}
+}

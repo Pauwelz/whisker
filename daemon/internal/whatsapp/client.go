@@ -47,6 +47,9 @@ type Client struct {
 	cli    *whatsmeow.Client
 	events chan Event
 	mu     sync.Mutex // one Connect at a time
+
+	syncMu  sync.Mutex
+	pending []Event // the flag events of a full App State sync, until it completes
 }
 
 // SetDeviceIdentity names the linked device "whisker" on the phone. Call it once, before the first connect and pair.
@@ -65,6 +68,8 @@ func NewClient(container *sqlstore.Container) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{cli: whatsmeow.NewClient(dev, waLog.Noop), events: make(chan Event, 64)}
+	// The first App State sync after a link is a full sync. Without this, its Pin, Mute and Read Marker events are lost.
+	c.cli.EmitAppStateEventsOnFullSync = true
 	c.cli.AddEventHandler(c.handle)
 	return c, nil
 }
@@ -479,19 +484,45 @@ func (c *Client) handle(evt any) {
 	case *events.PushName:
 		c.events <- PushName{JID: c.phone(evt.JID).String(), Name: evt.NewPushName}
 	case *events.AppStateSyncComplete:
+		c.flushFullSync()
 		c.emitContactBook()
 	case *events.Contact:
-		c.events <- ContactName{JID: c.phone(evt.JID).String(), Name: evt.Action.GetFullName()}
+		if !evt.FromFullSync { // a full sync ends with one ContactBook, not a frame per contact
+			c.events <- ContactName{JID: c.phone(evt.JID).String(), Name: evt.Action.GetFullName()}
+		}
 	case *events.Pin:
-		c.events <- Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}
+		c.emitFlag(Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}, evt.FromFullSync)
 	case *events.Mute:
 		until := int64(0)
 		if evt.Action.GetMuted() {
 			until = muteUntil(appStateMuteSeconds(evt.Action.GetMuteEndTimestamp()))
 		}
-		c.events <- Mute{JID: c.phone(evt.JID).String(), Until: until}
+		c.emitFlag(Mute{JID: c.phone(evt.JID).String(), Until: until}, evt.FromFullSync)
 	case *events.MarkChatAsRead:
-		c.events <- ReadMarker{JID: c.phone(evt.JID).String(), Unread: !evt.Action.GetRead()}
+		c.emitFlag(ReadMarker{JID: c.phone(evt.JID).String(), Unread: !evt.Action.GetRead()}, evt.FromFullSync)
+	}
+}
+
+// emitFlag sends a live flag event at once. A flag event of a full sync waits for the end of the sync,
+// so a sync of hundreds of Chats costs the Plugin one refresh.
+func (c *Client) emitFlag(ev Event, fullSync bool) {
+	if !fullSync {
+		c.events <- ev
+		return
+	}
+	c.syncMu.Lock()
+	c.pending = append(c.pending, ev)
+	c.syncMu.Unlock()
+}
+
+// flushFullSync sends the waiting flag events of a full sync as one AppStateBatch.
+func (c *Client) flushFullSync() {
+	c.syncMu.Lock()
+	batch := c.pending
+	c.pending = nil
+	c.syncMu.Unlock()
+	if len(batch) > 0 {
+		c.events <- AppStateBatch{Events: batch}
 	}
 }
 
@@ -544,6 +575,19 @@ func receiptState(t types.ReceiptType) string {
 	case types.ReceiptTypeRead:
 		return StateRead
 	case types.ReceiptTypePlayed:
+		return StatePlayed
+	}
+	return ""
+}
+
+// historyState maps the status of a History Sync Message to a Delivery State, or "" for one before delivered.
+func historyState(s waWeb.WebMessageInfo_Status) string {
+	switch s {
+	case waWeb.WebMessageInfo_DELIVERY_ACK:
+		return StateDelivered
+	case waWeb.WebMessageInfo_READ:
+		return StateRead
+	case waWeb.WebMessageInfo_PLAYED:
 		return StatePlayed
 	}
 	return ""
@@ -681,6 +725,9 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 			if body, ok := contentOf(parsed.Message, parsed.IsViewOnce); ok {
 				m := c.messageOf(parsed.Info, parsed.Message, body)
 				m.Reactions = historyReactions(hm.GetMessage().GetReactions(), c.phoneString)
+				if m.FromMe {
+					m.State = historyState(hm.GetMessage().GetStatus())
+				}
 				chat.Messages = append(chat.Messages, m)
 			}
 		}

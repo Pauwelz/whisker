@@ -172,6 +172,8 @@ type Message struct {
 	Timer      int64    `json:"timer"` // the Disappearing timer in seconds that the Message carries, 0 for none
 	// Reactions are the Reactions that History Sync carries on the Message. Live Reactions come as Reaction events.
 	Reactions []HistoryReaction `json:"reactions"`
+	// State is the Delivery State that History Sync carries on a Message of the user. It is empty for a live Message.
+	State string `json:"state"`
 }
 
 // HistoryReaction is one Reaction on a Message of History Sync. Sender is the reactor, empty when FromMe.
@@ -241,6 +243,11 @@ type Mute struct {
 type ReadMarker struct {
 	JID    string `json:"jid"`
 	Unread bool   `json:"unread"`
+}
+
+// AppStateBatch holds the Pin, Mute and ReadMarker events of one full App State sync, in order.
+type AppStateBatch struct {
+	Events []Event `json:"events"`
 }
 
 // NewMessage is a Message that arrived live, or that another device of the user sent. Time is Unix seconds.
@@ -347,6 +354,7 @@ func (ContactBook) isEvent()    {}
 func (Pin) isEvent()            {}
 func (Mute) isEvent()           {}
 func (ReadMarker) isEvent()     {}
+func (AppStateBatch) isEvent()  {}
 
 // Reasons for LinkFailed. docs/contract.md mirrors this list.
 const (

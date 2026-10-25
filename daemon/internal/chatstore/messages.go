@@ -185,6 +185,15 @@ func (s *Store) addPending(chat, id, text string, quote *whatsapp.Quote, m *what
 // Advance moves a Message of the user forward to state (delivered, read or played, also sent).
 // It reports whether the Message changed: a Message never moves back, and a failed Message does not move.
 func (s *Store) Advance(chat, id, state string) (bool, error) {
+	q, err := advanceQuery(state)
+	if err != nil {
+		return false, err
+	}
+	return s.change(q, state, chat, id)
+}
+
+// advanceQuery is the UPDATE that moves a Message of the user forward to state. Its arguments are state, chat, id.
+func advanceQuery(state string) (string, error) {
 	at := -1
 	for i, st := range stateOrder {
 		if st == state {
@@ -192,11 +201,11 @@ func (s *Store) Advance(chat, id, state string) (bool, error) {
 		}
 	}
 	if at < 1 {
-		return false, errors.New("not a state to advance to: " + state)
+		return "", errors.New("not a state to advance to: " + state)
 	}
 	// The list holds our own constants, never input.
 	before := "'" + strings.Join(stateOrder[:at], "','") + "'"
-	return s.change(`UPDATE messages SET state = ? WHERE chat_jid = ? AND id = ? AND from_me = 1 AND state IN (`+before+`)`, state, chat, id)
+	return `UPDATE messages SET state = ? WHERE chat_jid = ? AND id = ? AND from_me = 1 AND state IN (` + before + `)`, nil
 }
 
 // Fail marks a pending Message as failed. Requeue makes a failed Message pending again (Retry).
@@ -436,6 +445,16 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text, strings.Join(m.Mentions, " "), boolInt(m.MentionsMe), expiry(m.Time, m.Timer)); err != nil {
 		return err
 	}
+	// A stored Message moves forward to the Delivery State of History Sync.
+	if m.FromMe && m.State != "" {
+		q, err := advanceQuery(m.State)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(q, m.State, chat, m.ID); err != nil {
+			return err
+		}
+	}
 	if m.Media != nil {
 		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state, thumbnail, duration)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -509,9 +528,10 @@ func (s *Store) PutLive(ev whatsapp.NewMessage, p LivePolicy) error {
 }
 
 func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
+	// A Message that knows its kind fixes the kind of a row that a Pin stored.
 	if _, err := tx.Exec(`INSERT INTO chats (jid, kind, last_active) VALUES (?, ?, ?)
-		ON CONFLICT(jid) DO UPDATE SET last_active = MAX(last_active, excluded.last_active)`,
-		ev.Chat, kindOrDirect(ev.Kind), ev.Message.Time); err != nil {
+		ON CONFLICT(jid) DO UPDATE SET kind = COALESCE(NULLIF(?, ''), kind), last_active = MAX(last_active, excluded.last_active)`,
+		ev.Chat, kindOrDirect(ev.Kind), ev.Message.Time, ev.Kind); err != nil {
 		return err
 	}
 	var known int

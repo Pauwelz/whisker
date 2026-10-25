@@ -172,3 +172,19 @@ func TestMergeChatFindsTheLIDInAnyTable(t *testing.T) {
 		t.Errorf("Draft = %+v", d)
 	}
 }
+
+// A pin of App State is newer than a History Sync pin. A merge keeps the live pin, also an unpin.
+func TestMergeChatKeepsTheLivePin(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{
+		{JID: lidJID, LastActive: 50, Pinned: true, Messages: []whatsapp.Message{msg("a", 10)}},
+		{JID: phoneJID, LastActive: 30, Messages: []whatsapp.Message{msg("b", 30)}},
+	}})
+	apply(t, s, whatsapp.Pin{JID: phoneJID, Pinned: false})
+	if _, err := s.MergeChat(lidJID, phoneJID); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := s.Chat(phoneJID); err != nil || c.Pinned {
+		t.Errorf("Pinned = %v, %v; want the live unpin", c.Pinned, err)
+	}
+}
