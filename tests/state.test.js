@@ -403,6 +403,10 @@ test("MEDIA_STATE agrees with the Media states in Go", () => {
   assert.deepEqual(Object.values(State.MEDIA_STATE).sort(), goStrings(["chatstore", "messages.go"], "Media"));
 });
 
+test("AUTO_DOWNLOAD_LIMITS agrees with the limits in Go", () => {
+  assert.deepEqual(Array.from(State.AUTO_DOWNLOAD_LIMITS, (m) => m.value).sort(), goStrings(["settings", "settings.go"], "AutoDownloadLimit"));
+});
+
 test("READ_RECEIPT_MODES agrees with the Read Receipt modes in Go", () => {
   assert.deepEqual(Array.from(State.READ_RECEIPT_MODES, (m) => m.value).sort(), goStrings(["settings", "settings.go"], "ReadReceipts"));
 });

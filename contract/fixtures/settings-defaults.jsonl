@@ -1,4 +1,4 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"settings.get"}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true}}}
-{"dir":"view","expect":{"settings":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
+{"dir":"view","expect":{"settings":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}

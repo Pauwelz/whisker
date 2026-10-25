@@ -619,6 +619,21 @@ Panel {
             PanelSeparator { width: parent.width; foreground: root.contentForeground }
             PanelSectionHeader { text: "Media"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
             SettingToggle { key: "autoDownload" }
+            Text {
+              visible: !!root.settings && root.settings.autoDownload
+              text: "Up to"
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.subtitle
+            }
+            ButtonGroup {
+              visible: !!root.settings && root.settings.autoDownload
+              options: State.AUTO_DOWNLOAD_LIMITS
+              value: root.settings ? root.settings.autoDownloadLimit : ""
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              onChanged: function(limit) { root.whiskerService.changeSettings({ autoDownloadLimit: limit }) }
+            }
 
             PanelSeparator { width: parent.width; foreground: root.contentForeground }
             PanelSectionHeader { text: "Account"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }

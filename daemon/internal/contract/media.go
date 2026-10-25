@@ -34,8 +34,8 @@ type mediaLoader struct {
 	inflight map[string]bool
 	results  chan mediaResult
 	// thumbTried holds the thumbnails fetched in this run, done or not: a failed one waits for the next run.
-	thumbTried   map[string]bool
-	autoDownload func() bool // the autoDownload setting
+	thumbTried    map[string]bool
+	autoDownloads func(size int64) bool // settings.Settings.AutoDownloads of the current settings
 }
 
 // mediaResult ends a download of a file, or of a thumbnail when thumbnail is set.
@@ -47,13 +47,13 @@ type mediaResult struct {
 }
 
 // newMediaLoader wipes the plain copies of an earlier run and makes interrupted downloads startable again.
-func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Store, notify func(chat, id string) bool, logOut io.Writer, autoDownload func() bool) *mediaLoader {
+func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Store, notify func(chat, id string) bool, logOut io.Writer, autoDownloads func(size int64) bool) *mediaLoader {
 	store.Wipe()
 	if err := chats.ResetDownloads(); err != nil {
 		fmt.Fprintln(logOut, "chat store write failed")
 	}
 	chats.RemoveMedia = store.Remove
-	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}, autoDownload: autoDownload}
+	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}, autoDownloads: autoDownloads}
 }
 
 // start downloads the Media of a Message that is marked downloading. It does nothing while that Media is in flight.
@@ -103,9 +103,9 @@ func (l *mediaLoader) previews(chat string, msgs []chatstore.Message) {
 	}
 }
 
-// autoImage downloads an image that is not downloaded, when autoDownload is on. A failed one waits for a click: its retry link shows.
+// autoImage downloads an image that is not downloaded, when the settings allow its size. A failed one waits for a click: its retry link shows.
 func (l *mediaLoader) autoImage(chat, id string, ref chatstore.MediaRef) {
-	if ref.Kind != media.Image || ref.State != chatstore.MediaNone || !l.autoDownload() {
+	if ref.Kind != media.Image || ref.State != chatstore.MediaNone || !l.autoDownloads(ref.Size) {
 		return
 	}
 	if changed, err := l.chats.BeginDownload(chat, id); err != nil {

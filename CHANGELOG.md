@@ -9,7 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
-- The setting "Download media" under Media. Off, images, stickers and voice notes wait for a click. On by default. `settings.get` and `settings.set` have the new key `autoDownload`.
+- The setting "Download media" under Media. Off, images, stickers and voice notes wait for a click. On by default. "Up to" limits it to 1 MB, 5 MB (the default), 25 MB, or no limit; larger files wait for a click. `settings.get` and `settings.set` have the new keys `autoDownload` and `autoDownloadLimit`.
 - The linked device shows as "whisker (hostname)" on the phone, so two computers are easy to tell apart. The name applies after a new link.
 - The QR code of the linking screen is larger, centred, and shows the whisker logo in the middle. "pair code" and "qr code" in the header switch between the two ways to link. The Pair Code form is a prompt line like the composer: type the phone number and press Enter. The Pair Code then shows large, with the steps on the phone above it. The Daemon now makes it at error correction level Q, so the code stays readable under the logo.
 - The Chat header shows the round Profile picture of a contact, or the group icon, in place of the Chat sign. Without a picture, or when WhatsApp hides it, the sign stays. The Daemon keeps the small picture in the encrypted chat store for 24 hours. It has the new method `chat.picture` and the new notification `pictureChanged`.

@@ -72,11 +72,17 @@ func (s *session) open() int {
 		s.chats = chatstore.New(s.profile.Chat(), Clock.Now)
 		s.read = &reader{chats: s.chats, port: s.port, prefs: s.prefs, attn: &s.attn, logOut: s.logOut, played: map[string]bool{}}
 		notices := &notifier{chats: s.chats, prefs: s.prefs, attn: &s.attn, logOut: s.logOut}
-		// A settings file that cannot be read keeps the default: on.
-		autoDownload := func() bool { cur, err := s.prefs.Get(); return err != nil || cur.AutoDownload }
-		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, notices.frame, autoDownload)
+		// A settings file that cannot be read gives the defaults.
+		autoDownloads := func(size int64) bool {
+			cur, err := s.prefs.Get()
+			if err != nil {
+				cur = settings.Defaults()
+			}
+			return cur.AutoDownloads(size)
+		}
+		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, notices.frame, autoDownloads)
 		s.sent = s.box.results
-		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownload)
+		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)
 		s.mediaDone = s.loader.results
 		// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
 		if _, err := s.chats.Expire(Clock.Now().Unix()); err != nil {

@@ -4,12 +4,12 @@
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","subject":"","lastActive":10,"messages":[]}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"settings.set","params":{"notifications":false}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":false,"autoDownload":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":false,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"m1","sender":"1@s.whatsapp.net","time":50,"text":"silent","pushName":"Ann"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"silent","state":"","edited":false,"revoked":false,"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"settings.set","params":{"notifications":true}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"m2","sender":"1@s.whatsapp.net","time":60,"text":"loud","pushName":"Ann"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":60,"text":"loud","state":"","edited":false,"revoked":false,"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}

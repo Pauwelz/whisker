@@ -215,3 +215,36 @@ func TestAutoDownloadOffKeepsMediaWaiting(t *testing.T) {
 		t.Errorf("downloads = %d, want 0", n)
 	}
 }
+
+// An image over the size limit waits for a click; one under it downloads.
+func TestAutoDownloadLimitKeepsLargeMediaWaiting(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetDownload("pixels", nil)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.send(`{"jsonrpc":"2.0","id":9,"method":"settings.set","params":{"autoDownloadLimit":"1mb"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"autoDownloadLimit":"1mb"`) {
+		t.Fatalf("frame = %s, want the limit", f)
+	}
+	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
+		ID: "big", Sender: mediaChat, Time: 6, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Size: 2 << 20, Key: make([]byte, 32)},
+	}})
+	if f := r.nextFrame(); !strings.Contains(f, `"state":"none"`) {
+		t.Fatalf("frame = %s, want the large image waiting", f)
+	}
+	r.nextFrame() // chatsChanged
+	r.nextFrame() // notify
+	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
+		ID: "small", Sender: mediaChat, Time: 7, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Size: 1000, Key: make([]byte, 32)},
+	}})
+	for _, want := range []string{`"downloading"`, "chatsChanged", `"notify"`, `"ready"`} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	if n := r.port.Downloads(); n != 1 {
+		t.Errorf("downloads = %d, want 1", n)
+	}
+}

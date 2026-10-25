@@ -251,7 +251,7 @@ Fixtures: `chat-start.jsonl`, `chat-start-invalid.jsonl`.
 No params. Valid once the Daemon is `ready`. The result is the Profile Settings:
 
 ```json
-{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true}
+{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true,"autoDownloadLimit":"5mb"}
 ```
 
 The Daemon owns the settings in `$XDG_CONFIG_HOME/whisker/settings.json` (default `~/.config/whisker/settings.json`). The file is outside the Profile, so Log out keeps it. The Plugin reads and writes the settings only over JSON-RPC. Later tickets read them through `settings.Store.Get` in `daemon/internal/settings`.
@@ -263,8 +263,9 @@ The Daemon owns the settings in `$XDG_CONFIG_HOME/whisker/settings.json` (defaul
 | `sendTyping` | boolean | `true` |
 | `notifications` | boolean | `true` |
 | `autoDownload` | boolean | `true` |
+| `autoDownloadLimit` | `1mb`, `5mb`, `25mb`, `any` | `5mb` |
 
-`autoDownload` on: images, stickers and voice notes download when they arrive, and a listed image without a thumbnail downloads. Off: they wait for `media.download`. WhatsApp's separate thumbnails download either way.
+`autoDownload` on: images, stickers and voice notes download when they arrive, and a listed image without a thumbnail downloads. Off: they wait for `media.download`. `autoDownloadLimit` is the largest file that downloads this way; a larger one waits, and a file of unknown size downloads. WhatsApp's separate thumbnails download either way.
 
 A missing file or a missing key gives the default. Error -32004 means the settings file is unreadable. Fixture: `settings-defaults.jsonl`.
 

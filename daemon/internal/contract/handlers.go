@@ -412,7 +412,7 @@ func (s *session) settingsOutcome(id json.RawMessage, apply func() (settings.Set
 		fmt.Fprintln(s.logOut, "settings failed") // the error text could name paths
 		return outcome{reply: errorReply(id, errSetting, msgSettingsFailed)}
 	}
-	return outcome{reply: resultReply(id, map[string]any{"readReceipts": cur.ReadReceipts, "sendOnline": cur.SendOnline, "sendTyping": cur.SendTyping, "notifications": cur.Notifications, "autoDownload": cur.AutoDownload})}
+	return outcome{reply: resultReply(id, map[string]any{"readReceipts": cur.ReadReceipts, "sendOnline": cur.SendOnline, "sendTyping": cur.SendTyping, "notifications": cur.Notifications, "autoDownload": cur.AutoDownload, "autoDownloadLimit": cur.AutoDownloadLimit})}
 }
 
 // logout asks WhatsApp to remove the Companion Device, then deletes the Profile whatever the answer.

@@ -4,7 +4,7 @@
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","subject":"","lastActive":10,"messages":[]}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"settings.set","params":{"readReceipts":"onInteraction"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"onInteraction","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"onInteraction","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"attention.set","params":{"open":true,"chat":"1@s.whatsapp.net"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{}}}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"in1","sender":"1@s.whatsapp.net","time":50,"text":"tin1","pushName":"Ann"}}}

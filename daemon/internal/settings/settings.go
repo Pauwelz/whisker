@@ -18,6 +18,19 @@ const (
 	ReadReceiptsOnInteraction = "onInteraction"
 )
 
+// The size limits of automatic download. "any" has no limit.
+const (
+	AutoDownloadLimit1MB  = "1mb"
+	AutoDownloadLimit5MB  = "5mb"
+	AutoDownloadLimit25MB = "25mb"
+	AutoDownloadLimitAny  = "any"
+)
+
+// autoDownloadBytes is the largest size of each limit in bytes. 0 means no limit.
+var autoDownloadBytes = map[string]int64{
+	AutoDownloadLimit1MB: 1 << 20, AutoDownloadLimit5MB: 5 << 20, AutoDownloadLimit25MB: 25 << 20, AutoDownloadLimitAny: 0,
+}
+
 // ErrInvalid means a setting has a value that is not allowed.
 var ErrInvalid = errors.New("invalid setting")
 
@@ -28,20 +41,29 @@ type Settings struct {
 	SendTyping    bool   `json:"sendTyping"`
 	Notifications bool   `json:"notifications"`
 	AutoDownload  bool   `json:"autoDownload"` // images, stickers and voice notes download by themselves
+	// AutoDownloadLimit is the largest Media that downloads by itself, one of the limits above.
+	AutoDownloadLimit string `json:"autoDownloadLimit"`
+}
+
+// AutoDownloads tells whether Media of size bytes downloads by itself. An unknown size (0) does.
+func (s Settings) AutoDownloads(size int64) bool {
+	limit := autoDownloadBytes[s.AutoDownloadLimit]
+	return s.AutoDownload && (limit == 0 || size <= limit)
 }
 
 // Update is a partial change. A nil field stays as it is.
 type Update struct {
-	ReadReceipts  *string `json:"readReceipts"`
-	SendOnline    *bool   `json:"sendOnline"`
-	SendTyping    *bool   `json:"sendTyping"`
-	Notifications *bool   `json:"notifications"`
-	AutoDownload  *bool   `json:"autoDownload"`
+	ReadReceipts      *string `json:"readReceipts"`
+	SendOnline        *bool   `json:"sendOnline"`
+	SendTyping        *bool   `json:"sendTyping"`
+	Notifications     *bool   `json:"notifications"`
+	AutoDownload      *bool   `json:"autoDownload"`
+	AutoDownloadLimit *string `json:"autoDownloadLimit"`
 }
 
 // Defaults returns the settings of a Profile that has no settings file.
 func Defaults() Settings {
-	return Settings{ReadReceipts: ReadReceiptsOnOpen, SendOnline: true, SendTyping: true, Notifications: true, AutoDownload: true}
+	return Settings{ReadReceipts: ReadReceiptsOnOpen, SendOnline: true, SendTyping: true, Notifications: true, AutoDownload: true, AutoDownloadLimit: AutoDownloadLimit5MB}
 }
 
 func validMode(m string) bool {
@@ -90,6 +112,12 @@ func (s *Store) Set(u Update) (Settings, error) {
 	if u.AutoDownload != nil {
 		cur.AutoDownload = *u.AutoDownload
 	}
+	if u.AutoDownloadLimit != nil {
+		if _, ok := autoDownloadBytes[*u.AutoDownloadLimit]; !ok {
+			return cur, ErrInvalid
+		}
+		cur.AutoDownloadLimit = *u.AutoDownloadLimit
+	}
 	return cur, s.save(cur)
 }
 
@@ -108,6 +136,9 @@ func (s *Store) load() (Settings, error) {
 	// A hand-edited file with a bad mode falls back to the default.
 	if !validMode(cur.ReadReceipts) {
 		cur.ReadReceipts = Defaults().ReadReceipts
+	}
+	if _, ok := autoDownloadBytes[cur.AutoDownloadLimit]; !ok {
+		cur.AutoDownloadLimit = Defaults().AutoDownloadLimit
 	}
 	return cur, nil
 }

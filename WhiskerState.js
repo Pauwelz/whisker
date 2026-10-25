@@ -263,6 +263,14 @@ var READ_RECEIPT_MODES = [
   { value: "onInteraction", label: "On interaction", description: "Senders see it only when you reply or react." }
 ]
 
+// The size limits of "Download media". Mirror of the AutoDownloadLimit constants in daemon/internal/settings.
+var AUTO_DOWNLOAD_LIMITS = [
+  { value: "1mb", label: "1 MB" },
+  { value: "5mb", label: "5 MB" },
+  { value: "25mb", label: "25 MB" },
+  { value: "any", label: "No limit" }
+]
+
 // The on/off Profile Settings, by wire name, with the texts of their switches. Mirror of daemon/internal/settings.
 var SETTING_TOGGLES = {
   sendOnline: { label: "Send online", description: "Contacts see when you are online." },
