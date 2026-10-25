@@ -48,7 +48,7 @@ func TestMigrateTurnsAnAttachmentPathIntoAList(t *testing.T) {
 		`DROP TABLE drafts`,
 		`CREATE TABLE drafts (chat_jid TEXT NOT NULL PRIMARY KEY, text TEXT NOT NULL, quote_id TEXT NOT NULL, edit_id TEXT NOT NULL, attachment TEXT NOT NULL DEFAULT '')`,
 		`INSERT INTO drafts VALUES ('one@s.whatsapp.net', 'a', '', '', '/x/y.png'), ('none@s.whatsapp.net', 'b', '', '', '')`,
-		`PRAGMA user_version = 19`,
+		`PRAGMA user_version = 20`,
 	} {
 		if _, err := db.Exec(q); err != nil {
 			t.Fatal(err)
