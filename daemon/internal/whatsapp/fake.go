@@ -47,6 +47,8 @@ type Fake struct {
 	own        []string
 	lookups    map[string]string // digits -> WhatsApp ID; a missing number is not on WhatsApp
 	phones     map[string]string // LID -> phone JID, as the local LID store holds them
+	pictures   map[string]string // chat -> "id|content"; a missing Chat has no picture
+	pictureReq []string          // "chat:knownID" of each ProfilePicture call
 	gate       chan struct{}     // while set, Send waits
 }
 
@@ -75,6 +77,38 @@ func (f *Fake) Lookup(phone string) (string, string, error) {
 		return digits, "", f.sendErr
 	}
 	return digits, f.lookups[digits], nil
+}
+
+// SetPictures presets the Profile pictures: chat to "id|content".
+func (f *Fake) SetPictures(pictures map[string]string) {
+	f.mu.Lock()
+	f.pictures = pictures
+	f.mu.Unlock()
+}
+
+// ProfilePicture fails with the send error, records "chat:knownID", then answers from the preset.
+func (f *Fake) ProfilePicture(chat, knownID string) (string, []byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return "", nil, f.sendErr
+	}
+	f.pictureReq = append(f.pictureReq, chat+":"+knownID)
+	id, content, ok := strings.Cut(f.pictures[chat], "|")
+	switch {
+	case !ok:
+		return "", nil, nil
+	case id == knownID:
+		return knownID, nil, nil
+	}
+	return id, []byte(content), nil
+}
+
+// PictureRequests lists the ProfilePicture calls that reached WhatsApp, in order.
+func (f *Fake) PictureRequests() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.pictureReq...)
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }

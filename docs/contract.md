@@ -87,9 +87,11 @@ The chat store changed: History Sync brought Chats, or App State, a contact name
 {"jsonrpc":"2.0","method":"chatsChanged","params":{}}
 ```
 
-Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-state.jsonl`, `chats-mute-ends.jsonl`, `chats-history-after-live.jsonl`.
+Fixtures: `contract/fixtures/chats-list.jsonl`, `chats-names.jsonl`, `chats-app-state.jsonl`, `chats-mute-ends.jsonl`, `chats-history-after-live.jsonl`, `chats-archived.jsonl`.
 
-History Sync fills `pinned`, `muted`, `unread` and `timer` of a Chat only until a live event has set that field.
+History Sync fills `pinned`, `archived`, `muted`, `unread` and `timer` of a Chat only until a live event has set that field.
+
+App State also holds the setting "Keep chats archived". The Daemon stores it in the chat store. When it is off, a new live Message (incoming or sent by another device) unarchives its Chat and sets the live field `archived`, so a later History Sync does not archive the Chat again. When it is on or unknown, the Chat stays archived.
 
 ### `chatMerged`
 
@@ -171,6 +173,7 @@ The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies u
 |---|---|
 | The notifications setting is off. | `notify-off.jsonl` |
 | The Chat is Muted, and the Message does not mention the user. | `notify-muted.jsonl`, `notify-mention-muted.jsonl` |
+| The Chat stays archived after the Message ("Keep chats archived" is on or unknown), and the Message does not mention the user. A Message that unarchives its Chat notifies. | `chats-archived.jsonl` |
 | The Chat is the Attended Chat. | `notify-attended.jsonl` |
 | The user sent the Message from another device. | `notify-own-message.jsonl` |
 
@@ -180,7 +183,7 @@ The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies u
 
 ### `chats.list`
 
-Params, all optional: `offset` (default 0), `limit` (default 50, at most 200) and `query`. Valid once the Daemon is `ready`. The result is one page of the Chat list:
+Params, all optional: `offset` (default 0), `limit` (default 50, at most 200), `query` and `archived` (boolean, default false). Valid once the Daemon is `ready`. The result is one page of the Chat list:
 
 ```json
 {"chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":100,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0,"unreadChats":0}
@@ -188,10 +191,11 @@ Params, all optional: `offset` (default 0), `limit` (default 50, at most 200) an
 
 - Order: Pinned Chats first, then newest `lastActive` first (Unix seconds). A Chat with no Message and no Draft is not listed.
 - `kind` is `direct`, `group` or `self`.
+- Without `query`, the list holds the archived Chats if `archived` is true, and all other Chats if not. With a `query`, `archived: false` searches all Chats, also the archived ones, and `archived: true` searches only the archived Chats. A Chat has `archived: true` when it is archived. The field is absent otherwise.
 - `muted` is true for a Muted Chat whose mute has not ended. `unread` is the Read Marker. `pinned`, `muted` and `unread` come from App State.
 - `mutedUntil` is the end of the mute in Unix seconds, `-1` for ever. It is present only when `muted` is true.
 - `unreadCount` is the number of live Messages that wait for a Read Receipt in an unread Chat. It is absent (0) for a read Chat. A Chat that the phone marked unread has none, so the Plugin shows a dot. `mention` is true when one of those Messages mentions the user. It is absent otherwise.
-- `unreadChats` is the number of unread Chats that are not Muted and that the list shows (a Chat with no Message and no Draft is not listed), over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
+- `unreadChats` is the number of unread Chats that are not Muted or archived, and that the list shows (a Chat with no Message and no Draft is not listed), over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
 - `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
 - `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
 - Error -32003 means the chat store failed.
@@ -370,6 +374,17 @@ A Reaction from another device or another Participant arrives as `messageChanged
 
 The store changes only after WhatsApp accepts the write. Then the Daemon answers `{}` and sends `chatsChanged`. Error -32010 means an unknown Chat. Error -32007 means WhatsApp could not be reached: nothing changes. The write does not change the Attended Chat. The Plugin leaves the open Chat before it marks it unread, so the mark stays. Fixture: `chat-mark-unread.jsonl`.
 
+### `chat.picture`
+
+Params: `chat`. Valid once the Daemon is `ready` and linked. The result is `{"chat": "<jid>", "data": "<base64 JPEG>"}`. `data` is `""` when the Chat has no picture or WhatsApp hides it. The picture is the small preview of a contact's Profile picture or of a group icon.
+
+The Daemon keeps the picture in the encrypted chat store. A cache younger than 24 hours answers with no call to WhatsApp. An older cache makes the Daemon ask WhatsApp with the cached picture ID: an unchanged picture only renews the cache time, a changed one replaces the cache. Without a connection, or when the call fails, the Daemon answers from the cache (`""` when there is none) and no error. The call blocks the Daemon for up to 15 s.
+
+- Error -32010 means an unknown Chat.
+- Error -32003 means the chat store failed.
+
+The `pictureChanged` notification tells the Plugin to ask again. Fixture: `chat-picture.jsonl`.
+
 ### `chat.pin` and `chat.mute`
 
 `chat.pin` takes `chat` and `pinned` (boolean). `chat.mute` takes `chat` and `until`, in Unix seconds: `-1` mutes for ever, `0` unmutes, any other value must be in the future. Valid once the Daemon is `ready` and linked.
@@ -413,6 +428,7 @@ Incoming (Daemon to Plugin), shown under the Chat header:
 
 | Notification | Params | Meaning |
 |---|---|---|
+| `pictureChanged` | `chat` | The Profile picture of a Chat changed or went away. The Daemon dropped its cached picture. The Plugin asks again with `chat.picture` when the Chat is open. |
 | `presenceChanged` | `chat`, `online`, `lastSeen` | A Participant of a Direct Chat is `Online`, or went away at `lastSeen` (Unix seconds, 0 when WhatsApp hides it). The Daemon subscribes to the Attended Direct Chat to get it. |
 | `activityChanged` | `chat`, `participant`, `name`, `state` | `state` is `composing`, `recording` or `paused`. `name` follows the name rule for Participants. The Plugin shows "typing…" or "recording…", with the name in a Group Chat. `paused` ends the activity. |
 
@@ -544,6 +560,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `quoted` | `quotes` | The Go test checks the replies that the fake port has sent with a Quote so far, in order, as `"id:quotedID"`. |
 | `pinned` | `pins` | The Go test checks the pin writes that the fake port accepted so far, in order, as `"chat:true"` or `"chat:false"`. The fake port fails them with the `sendError`. |
 | `muted` | `mutes` | The Go test checks the mute writes that the fake port accepted so far, in order, as `"chat:until"`. The fake port fails them with the `sendError`. |
+| `pictured` | `requests` | The Go test checks the picture calls that reached the fake port so far, in order, as `"chat:knownID"`. A call that the cache answered is not in the list. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
 | `uploaded` | `uploads` | The Go test checks the Media that the fake port has uploaded and sent so far, in order, as `"id\|kind\|mime\|name\|caption\|content"`. |
 | `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest timer of the Daemon clock. That is the sweep of Disappearing Messages, then a Mute end, in the order the Daemon set them. Without it, the line fires the keyring timeout as above. |
@@ -561,14 +578,15 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `pairError` | `invalid-phone`, or any text: the next `link.pairCode` fails. |
 | `sendError` | `offline`, any other text, or empty: the fake port fails every send, edit, revoke, pin and mute with that error, or works again (empty). |
 | `lookups` | An object of digits to WhatsApp ID: the answers of `contacts.lookup`. A number that is not in it is not on WhatsApp. `sendError` makes the lookup fail. |
+| `pictures` | An object of Chat to `"id\|content"`: the Profile pictures that `chat.picture` finds. A Chat that is not in it has no picture. `sendError` makes the call fail. |
 | `phones` | An object of LID to phone JID: what the local LID store holds. The Daemon reads it on `connected`. |
 | `hold` | `true` makes the fake port hold every `chat.send` until a `hold` line with `false`. A fixture uses it to end a send after other events. |
 | `download` | The plain Media that the next downloads write. |
 | `downloadError` | Any text, or empty: the fake port fails every download with that error, or works again (empty). |
 | `readError` | `offline`, or empty: the fake port fails every Read Receipt, or works again (empty). |
-| `event` | The fake port plays this event now (also `presence` and `chatPresence`, with the JSON keys of their type). `kind` is `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`), `loggedOut`, `connected` or `disconnected`. |
+| `event` | The fake port plays this event now (also `presence` and `chatPresence`, with the JSON keys of their type). `kind` is `pictureChanged` (with `jid`), `qr` (with `code`), `pairSuccess`, `linkFailed` (with `reason`), `loggedOut`, `connected` or `disconnected`. |
 
-The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
+The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `archive`, `unarchiveChats`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
 
 The `event` kinds `newMessage`, `receipt`, `messageEdited`, `messageRevoked` and `reaction` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
 

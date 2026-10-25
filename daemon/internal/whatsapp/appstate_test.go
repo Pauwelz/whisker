@@ -53,3 +53,17 @@ func TestAFullSyncSendsItsFlagsAsOneBatch(t *testing.T) {
 		t.Errorf("a live Pin = %+v, want it alone", got)
 	}
 }
+
+func TestArchiveAndUnarchiveSettingEventsMap(t *testing.T) {
+	own := types.JID{User: "3160", Server: types.DefaultUserServer}
+	c := &Client{cli: whatsmeow.NewClient(&store.Device{ID: &own}, waLog.Noop), events: make(chan Event, 8)}
+	chat := types.JID{User: "3161", Server: types.DefaultUserServer}
+	c.handle(&events.Archive{JID: chat, Action: &waSyncAction.ArchiveChatAction{Archived: proto.Bool(true)}})
+	if got := <-c.events; got != (Archive{JID: "3161@s.whatsapp.net", Archived: true}) {
+		t.Errorf("Archive = %+v", got)
+	}
+	c.handle(&events.UnarchiveChatsSetting{Action: &waSyncAction.UnarchiveChatsSetting{UnarchiveChats: proto.Bool(true)}})
+	if got := <-c.events; got != (UnarchiveChats{On: true}) {
+		t.Errorf("UnarchiveChats = %+v", got)
+	}
+}

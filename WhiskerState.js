@@ -155,6 +155,7 @@ var NOTIFICATIONS = {
   messageChanged: { fold: function (state, params) { return upsertMessage(state, params.message) } },
   chatMerged: { fold: chatMerged },
   presenceChanged: { fold: presenceChanged },
+  pictureChanged: { fold: pictureChanged },
   activityChanged: { fold: activityChanged }
 }
 
@@ -210,9 +211,11 @@ function refreshesChats(frame) {
 
 // The request for one page of the Chat list. The next page starts at the number of Chats shown.
 // A non-empty query asks for the Chats that match the search field.
-function chatListRequest(id, offset, query) {
+// archived asks for the archived Chats only. Without it, the list hides them.
+function chatListRequest(id, offset, query, archived) {
   var params = { offset: offset }
   if (query) params.query = query
+  if (archived) params.archived = true
   return request(id, "chats.list", params)
 }
 
@@ -311,6 +314,7 @@ function foldChatResult(state, frame) {
   if (frame.result && frame.result.phone !== undefined) return lookupAnswered(state, frame.result)
   if (frame.result && frame.result.contacts) return withChanges(state, { contacts: frame.result.contacts })
   if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
+  if (frame.result && frame.result.data !== undefined && frame.result.chat) return pictureLoaded(state, frame.result)
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
   if (frame.result && frame.result.message) return upsertMessage(state, frame.result.message)
   return null
@@ -880,6 +884,11 @@ function unreadSuffix(state) {
   return count > 0 ? " · " + count + " unread" : ""
 }
 
+// True when contacts see the user Online: connected, and "send online" is on. The Daemon sends Online while the pop-out is open.
+function ownOnline(state) {
+  return state.connection === "online" && !!state.settings && state.settings.sendOnline === true
+}
+
 // The status line shows the state text. A linked whisker has nothing to say; the header shows it.
 function statusLineShown(state) {
   return state.screen !== SCREEN.LINKED
@@ -918,6 +927,35 @@ function chatByJid(state, jid) {
   return found.length > 0 ? found[0] : { jid: jid, name: jid, kind: "direct" }
 }
 
+// Profile pictures. `pictures[jid]` is the base64 JPEG of a Chat, or "" when it has none. No entry means not asked yet.
+function chatPictureRequest(id, jid) {
+  return request(id, "chat.picture", { chat: jid })
+}
+
+function pictureLoaded(state, result) {
+  var pictures = withChanges(state.pictures || {}, {})
+  pictures[result.chat] = result.data
+  return withChanges(state, { pictures: pictures })
+}
+
+function pictureChanged(state, params) {
+  var pictures = withChanges(state.pictures || {}, {})
+  delete pictures[params.chat]
+  return withChanges(state, { pictures: pictures })
+}
+
+// The JID of the open Chat when it has no picture entry yet, else "". The Plugin asks for that picture.
+function pictureToRequest(state) {
+  var chat = state.openChat
+  return chat && !(state.pictures && state.pictures[chat.jid] !== undefined) ? chat.jid : ""
+}
+
+// The picture of a Chat as a data URL, or "" when it has none.
+function chatPictureSource(state, jid) {
+  var data = state.pictures ? state.pictures[jid] : ""
+  return data ? "data:image/jpeg;base64," + data : ""
+}
+
 // Presence. `presence[jid]` is { online, lastSeen } of a Participant of a Direct Chat.
 // `activity[chat]` lists who is composing or recording there: { participant, name, state }.
 function presenceChanged(state, params) {
@@ -936,6 +974,8 @@ function activityChanged(state, p) {
 
 // The header line of a Direct Chat: "Online", "last seen at 14:05" (within a day), "last seen 2026-10-23", or "".
 function presenceLabel(state, nowSeconds) {
+  // With "send online" off, WhatsApp may stop sending Presence, so Online and Last Seen would go stale.
+  if (state.settings && state.settings.sendOnline === false) return ""
   var chat = state.openChat
   var p = chat && chat.kind !== "group" && state.presence ? state.presence[chat.jid] : null
   if (!p) return ""
@@ -963,10 +1003,12 @@ function chatActivityLabel(state, chat) {
 var CHAT_FILTERS = [
   { value: "all", label: "all" },
   { value: "unread", label: "unread" },
-  { value: "groups", label: "groups" }
+  { value: "groups", label: "groups" },
+  { value: "archived", label: "archived" }
 ]
 
 // shortcut: the filter works on the loaded pages only, upgrade to a Daemon param if "Load more" feels wrong with a filter.
+// The Daemon sends only the archived Chats for "archived", so that filter keeps every row.
 function filterChats(chats, filter) {
   return chats.filter(function(chat) {
     if (filter === "unread") return chat.unread === true
@@ -1069,6 +1111,7 @@ function chatRow(state, jid) {
 function emptyChatsText(filter, query) {
   if (query) return "No chat matches “" + query + "”."
   if (filter === "unread") return "No unread chats."
+  if (filter === "archived") return "No archived chats."
   return filter === "groups" ? "No group chats." : "No chats yet."
 }
 

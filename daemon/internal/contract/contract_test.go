@@ -34,6 +34,7 @@ type fixtureLine struct {
 	Linked    *bool             `json:"linked"`
 	PairCode  string            `json:"pairCode"`
 	PairError string            `json:"pairError"`
+	Pictures  map[string]string `json:"pictures"`  // dir "whatsapp": chat to "id|content" for chat.picture
 	Lookups   map[string]string `json:"lookups"`   // dir "whatsapp": digits to WhatsApp ID for contacts.lookup
 	Own       []string          `json:"own"`       // dir "whatsapp": the user parts of the user's own IDs
 	Phones    map[string]string `json:"phones"`    // dir "whatsapp": LID to phone JID in the local LID store
@@ -52,6 +53,7 @@ type fixtureLine struct {
 	Deletes   []string          `json:"deletes"`   // dir "deletedForMe": "chat:id" of each delete-for-me write the fake port has accepted
 	Mutes     []string          `json:"mutes"`     // dir "muted": "chat:until" of each mute write the fake port has accepted
 	Event     json.RawMessage   `json:"event"`
+	Requests  []string          `json:"requests"` // dir "pictured": "chat:knownID" of each picture call that reached the fake port
 
 	Download      *string  `json:"download"`      // dir "whatsapp": the plain Media the next downloads return
 	DownloadError *string  `json:"downloadError"` // dir "whatsapp": "" lets downloads work again
@@ -241,6 +243,10 @@ func TestFixtures(t *testing.T) {
 					if got, want := mustJSON(f.ChatReads()), mustJSON(append([]string{}, line.Markers...)); got != want {
 						t.Errorf("Read Markers cleared = %s, want %s", got, want)
 					}
+				case "pictured":
+					if got := r.currentPort().PictureRequests(); !reflect.DeepEqual(got, append([]string{}, line.Requests...)) {
+						t.Errorf("picture requests = %v, want %v", got, line.Requests)
+					}
 				case "edited":
 					if got := r.currentPort().Edits(); !reflect.DeepEqual(got, append([]string{}, line.Edits...)) {
 						t.Errorf("edits = %v, want %v", got, line.Edits)
@@ -390,6 +396,8 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 		f.SetPairCode(line.PairCode, nil)
 	case line.Lookups != nil:
 		f.SetLookups(line.Lookups)
+	case line.Pictures != nil:
+		f.SetPictures(line.Pictures)
 	case line.Phones != nil:
 		f.SetPhones(line.Phones)
 	case line.Own != nil:
@@ -428,7 +436,7 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 		if err := json.Unmarshal(line.Event, &e); err != nil {
 			r.t.Fatal(err)
 		}
-		// The kinds historySync to readMarker carry the JSON fields of their whatsapp type.
+		// The kinds historySync to unarchiveChats carry the JSON fields of their whatsapp type.
 		switch e.Kind {
 		case "historySync":
 			emitJSON[whatsapp.HistorySync](r.t, f, line.Event)
@@ -440,6 +448,10 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.ContactBook](r.t, f, line.Event)
 		case "pin":
 			emitJSON[whatsapp.Pin](r.t, f, line.Event)
+		case "archive":
+			emitJSON[whatsapp.Archive](r.t, f, line.Event)
+		case "unarchiveChats":
+			emitJSON[whatsapp.UnarchiveChats](r.t, f, line.Event)
 		case "mute":
 			emitJSON[whatsapp.Mute](r.t, f, line.Event)
 		case "readMarker":
@@ -458,6 +470,8 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.ChatAlias](r.t, f, line.Event)
 		case "reaction":
 			emitJSON[whatsapp.Reaction](r.t, f, line.Event)
+		case "pictureChanged":
+			emitJSON[whatsapp.PictureChanged](r.t, f, line.Event)
 		case "presence":
 			emitJSON[whatsapp.Presence](r.t, f, line.Event)
 		case "chatPresence":

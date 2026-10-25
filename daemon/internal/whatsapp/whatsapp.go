@@ -26,6 +26,10 @@ type Port interface {
 	// It returns the digits and the person's WhatsApp ID, or "" for a number that is not on WhatsApp.
 	// It returns ErrInvalidPhone for a bad number, and ErrOffline when there is no connection.
 	Lookup(phone string) (digits, jid string, err error)
+	// ProfilePicture fetches the small Profile picture (JPEG) of a Chat or group icon. knownID is the picture ID that the caller holds.
+	// It returns knownID and no data when the picture did not change, and "" and no data when there is no picture or WhatsApp hides it.
+	// It returns ErrOffline when there is no connection. It can block for a long time: call it off the Daemon loop.
+	ProfilePicture(chat, knownID string) (id string, data []byte, err error)
 	// PhoneOf is the phone JID that the local LID store holds for a LID, or "". It makes no network call.
 	PhoneOf(lid string) string
 	// Logout tells WhatsApp to remove this Companion Device, so the phone no longer lists it.
@@ -198,6 +202,7 @@ type HistoryChat struct {
 	Subject    string    `json:"subject"` // the group name, empty for other kinds
 	LastActive int64     `json:"lastActive"`
 	Pinned     bool      `json:"pinned"`
+	Archived   bool      `json:"archived"`
 	MutedUntil int64     `json:"mutedUntil"`
 	Unread     bool      `json:"unread"`
 	Timer      int64     `json:"timer"` // the Disappearing timer of the Chat in seconds, 0 for off
@@ -228,11 +233,26 @@ type ContactName struct {
 	Name string `json:"name"`
 }
 
-// Pin, Mute and ReadMarker are App State changes of one Chat.
+// Pin, Archive, Mute and ReadMarker are App State changes of one Chat.
 // Mute.Until is Unix seconds: 0 is not muted, -1 is muted for ever.
 type Pin struct {
 	JID    string `json:"jid"`
 	Pinned bool   `json:"pinned"`
+}
+
+type Archive struct {
+	JID      string `json:"jid"`
+	Archived bool   `json:"archived"`
+}
+
+// PictureChanged says that the Profile picture of a Chat changed or went away. It carries no picture.
+type PictureChanged struct {
+	JID string `json:"jid"`
+}
+
+// UnarchiveChats is the App State setting "Keep chats archived". On means a new Message unarchives its Chat.
+type UnarchiveChats struct {
+	On bool `json:"on"`
 }
 
 type Mute struct {
@@ -245,7 +265,7 @@ type ReadMarker struct {
 	Unread bool   `json:"unread"`
 }
 
-// AppStateBatch holds the Pin, Mute and ReadMarker events of one full App State sync, in order.
+// AppStateBatch holds the Pin, Archive, UnarchiveChats, Mute and ReadMarker events of one full App State sync, in order.
 type AppStateBatch struct {
 	Events []Event `json:"events"`
 }
@@ -352,9 +372,12 @@ func (PushName) isEvent()       {}
 func (ContactName) isEvent()    {}
 func (ContactBook) isEvent()    {}
 func (Pin) isEvent()            {}
+func (Archive) isEvent()        {}
+func (UnarchiveChats) isEvent() {}
 func (Mute) isEvent()           {}
 func (ReadMarker) isEvent()     {}
 func (AppStateBatch) isEvent()  {}
+func (PictureChanged) isEvent() {}
 
 // Reasons for LinkFailed. docs/contract.md mirrors this list.
 const (

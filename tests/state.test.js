@@ -195,6 +195,11 @@ test("the Chat list request carries the search query only when it is set", () =>
   assert.deepEqual(JSON.parse(State.chatListRequest(7, 0, "")).params, { offset: 0 });
 });
 
+test("the Chat list request carries archived only when it is true", () => {
+  assert.deepEqual(JSON.parse(State.chatListRequest(8, 0, "", true)).params, { offset: 0, archived: true });
+  assert.deepEqual(JSON.parse(State.chatListRequest(9, 0, "", false)).params, { offset: 0 });
+});
+
 test("the Chat list survives a chatsChanged frame and goes away on unlinked", () => {
   let state = State.applyFrame(State.initialState(), { method: "linked" });
   state = State.applyFrame(state, { id: 1, result: { chats: [{ jid: "a" }], more: false, offset: 0 } });
@@ -469,6 +474,16 @@ test("presenceLabel shows Online and Last Seen in a Direct Chat only", () => {
   assert.equal(State.presenceLabel(seen_(open("direct"), { online: false, lastSeen: old }), now), "last seen 2026-10-20");
   assert.equal(State.presenceLabel(seen_(open("direct"), { online: false, lastSeen: 0 }), now), "");
   assert.equal(State.presenceLabel(seen_(open("group"), { online: true, lastSeen: 0 }), now), "");
+  const hidden = (p) => ({ ...seen_(open("direct"), p), settings: { sendOnline: false } });
+  assert.equal(State.presenceLabel(hidden({ online: true, lastSeen: 0 }), now), "");
+  assert.equal(State.presenceLabel(hidden({ online: false, lastSeen: seen }), now), "");
+});
+
+test("ownOnline is true only when connected with send online on", () => {
+  assert.equal(State.ownOnline({ connection: "online", settings: { sendOnline: true } }), true);
+  assert.equal(State.ownOnline({ connection: "online", settings: { sendOnline: false } }), false);
+  assert.equal(State.ownOnline({ connection: "offline", settings: { sendOnline: true } }), false);
+  assert.equal(State.ownOnline({ connection: "online" }), false);
 });
 
 test("activityLabel names the Participant in a Group Chat and drops it on a connection loss", () => {
@@ -606,4 +621,37 @@ test("the wheel scrolls a fixed step per notch, a touchpad by its pixels, inside
   assert.equal(State.wheelScrollTarget(10, 120, 0, 0, 1000), 0);
   assert.equal(State.wheelScrollTarget(990, -120, 0, 0, 1000), 1000);
   assert.equal(State.wheelScrollTarget(0, -120, 0, 0, -50), 0); // content shorter than the view: stay at the top
+});
+
+test("a chat.picture request names the Chat", () => {
+  assert.deepEqual(JSON.parse(State.chatPictureRequest(3, "1@s.whatsapp.net")), { jsonrpc: "2.0", id: 3, method: "chat.picture", params: { chat: "1@s.whatsapp.net" } });
+});
+
+test("a chat.picture result is folded into the pictures, and pictureChanged removes it", () => {
+  const jid = "1@s.whatsapp.net";
+  let state = State.openChat(State.initialState(), { jid, name: "A", kind: "direct" });
+  assert.equal(State.pictureToRequest(state), jid);
+  assert.equal(State.chatPictureSource(state, jid), "");
+  state = State.applyFrame(state, { jsonrpc: "2.0", id: 1, result: { chat: jid, data: "QUJD" } });
+  assert.equal(State.chatPictureSource(state, jid), "data:image/jpeg;base64,QUJD");
+  assert.equal(State.pictureToRequest(state), "");
+  state = State.applyFrame(state, { jsonrpc: "2.0", method: "pictureChanged", params: { chat: jid } });
+  assert.equal(state.pictures[jid], undefined);
+  assert.equal(State.pictureToRequest(state), jid);
+});
+
+test("a Chat with no picture is not asked again, and shows no source", () => {
+  const jid = "2@s.whatsapp.net";
+  let state = State.openChat(State.initialState(), { jid, name: "B", kind: "group" });
+  state = State.applyFrame(state, { jsonrpc: "2.0", id: 1, result: { chat: jid, data: "" } });
+  assert.equal(State.chatPictureSource(state, jid), "");
+  assert.equal(State.pictureToRequest(state), "");
+});
+
+test("pictureChanged of another Chat asks for nothing", () => {
+  const jid = "1@s.whatsapp.net";
+  let state = State.openChat(State.initialState(), { jid, name: "A", kind: "direct" });
+  state = State.applyFrame(state, { jsonrpc: "2.0", id: 1, result: { chat: jid, data: "QUJD" } });
+  state = State.applyFrame(state, { jsonrpc: "2.0", method: "pictureChanged", params: { chat: "9@s.whatsapp.net" } });
+  assert.equal(State.pictureToRequest(state), "");
 });

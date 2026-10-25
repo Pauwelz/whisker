@@ -33,6 +33,7 @@ const (
 	methodChatReact       = "chat.react"
 	methodChatTyping      = "chat.typing"
 	methodChatPin         = "chat.pin"
+	methodChatPicture     = "chat.picture"
 	methodChatMute        = "chat.mute"
 	methodChatMarkUnread  = "chat.markUnread"
 	methodChatDeleteForMe = "chat.deleteForMe"
@@ -58,6 +59,7 @@ type request struct {
 		Caption    string `json:"caption"`
 		Open       bool   `json:"open"`
 		Pinned     bool   `json:"pinned"`
+		Archived   bool   `json:"archived"`
 		Unread     bool   `json:"unread"`
 		Until      *int64 `json:"until"` // nil when the request has none
 		Typing     bool   `json:"typing"`
@@ -131,6 +133,7 @@ var handlers = map[string]handler{
 	methodChatReact:       {whenLinked, (*session).chatReact},
 	methodChatTyping:      {whenLinked, (*session).chatTyping},
 	methodChatPin:         {whenLinked, (*session).chatPin},
+	methodChatPicture:     {whenLinked, (*session).chatPicture},
 	methodChatMute:        {whenLinked, (*session).chatMute},
 	methodChatMarkUnread:  {whenLinked, (*session).chatMarkUnread},
 	methodChatDeleteForMe: {whenLinked, (*session).chatDeleteForMe},
@@ -236,7 +239,7 @@ func pageParams(offset, limit int) (int, int) {
 func (s *session) chatsList(req *request) outcome {
 	p := req.Params
 	offset, limit := pageParams(p.Offset, p.Limit)
-	page, err := s.chats.List(offset, limit, p.Query)
+	page, err := s.chats.List(offset, limit, p.Query, p.Archived)
 	if err != nil {
 		fmt.Fprintln(s.logOut, "chat list failed")
 		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}

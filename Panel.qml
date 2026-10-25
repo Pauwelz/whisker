@@ -20,7 +20,7 @@ Panel {
   property bool showSettings: false
   property bool confirmLogout: false
   property bool showNewChat: false // the new Chat view: the user picks it, so it is view state only
-  property string chatFilter: "all" // the Chat list filter the user picked: all, unread or groups
+  property string chatFilter: "all" // the Chat list filter the user picked: all, unread, groups or archived
   readonly property var shownChats: State.filterChats(root.view.chats || [], root.chatFilter)
   property string savingId: "" // the Message whose Save as path is being typed, or empty
   // The Draft of the open Chat comes from the Daemon state. The Plugin changes it through Service.changeDraft.
@@ -38,6 +38,9 @@ Panel {
   readonly property var timeline: root.openChat ? State.timelineRows(root.openChat.messages) : [] // oldest first
   // Which parts show. The decision is State.panelParts.
   readonly property var parts: State.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings, showNewChat: root.showNewChat })
+
+  // The pop-out keeps one size in every view, so it never grows or shrinks on a view switch.
+  readonly property real popoutHeight: Style.space(560)
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   // The bars: the foreground colour at low opacity over the pop-out background.
@@ -139,7 +142,7 @@ Panel {
     centerOnBar: false // open under the bar button, as other plugins do
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(480))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight)
+    contentHeight: panel.fittedContentHeight(root.popoutHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -155,7 +158,7 @@ Panel {
         anchors.top: parent.top
         spacing: Style.space(8)
 
-        // Top bar: the small logo, the name, the unread count and "+ new chat". The Chat view and the new Chat view have their own bar.
+        // Top bar: the small logo, the name, "● online", the unread count, "+ new chat" and "settings". The Chat view and the new Chat view have their own bar.
         Rectangle {
           visible: !root.parts.chat && !root.parts.newChat
           width: parent.width
@@ -182,6 +185,13 @@ Panel {
               font.bold: true
             }
             Text {
+              visible: State.ownOnline(root.view)
+              text: "● online"
+              color: Color.accent
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+            Text {
               Layout.fillWidth: true
               textFormat: Text.PlainText
               text: State.unreadSuffix(root.view)
@@ -194,6 +204,16 @@ Panel {
               visible: root.parts.newChatButton
               text: "+ new chat"
               onClicked: root.showNewChat = true
+            }
+            // "settings" turns into "←" in its own place, so the bar does not shift.
+            Button {
+              visible: root.parts.settingsButton
+              text: root.showSettings ? "←" : "settings"
+              tooltipText: root.showSettings ? "Back to Chats" : ""
+              onClicked: {
+                root.showSettings = !root.showSettings
+                root.confirmLogout = false
+              }
             }
           }
         }
@@ -316,7 +336,11 @@ Panel {
             Button {
               text: modelData.label
               selected: root.chatFilter === modelData.value
-              onClicked: root.chatFilter = modelData.value
+              onClicked: {
+                const archivedChanged = (modelData.value === "archived") !== (root.chatFilter === "archived")
+                root.chatFilter = modelData.value
+                if (archivedChanged) root.whiskerService.showArchived(modelData.value === "archived")
+              }
             }
           }
         }
@@ -329,6 +353,7 @@ Panel {
 
         // The new Chat view: search the people, pick one to open the Chat.
         Column {
+          id: newChatView
           visible: root.parts.newChat
           width: parent.width
           spacing: Style.space(8)
@@ -345,13 +370,15 @@ Panel {
             RowLayout {
               id: newChatBar
               anchors.fill: parent
-              anchors.leftMargin: Style.space(4)
-              anchors.rightMargin: Style.space(8)
-              spacing: Style.space(4)
-              Button {
-                text: "←"
-                tooltipText: "Back to Chats"
-                onClicked: root.showNewChat = false
+              anchors.leftMargin: Style.space(8)
+              anchors.rightMargin: Style.space(4)
+              spacing: Style.space(8)
+              Image {
+                source: Qt.resolvedUrl("assets/whisker.svg")
+                Layout.preferredWidth: Style.space(16)
+                Layout.preferredHeight: Style.space(16)
+                sourceSize.width: Style.space(16) * Screen.devicePixelRatio
+                sourceSize.height: Style.space(16) * Screen.devicePixelRatio
               }
               Text {
                 Layout.fillWidth: true
@@ -360,6 +387,11 @@ Panel {
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
                 font.bold: true
+              }
+              Button {
+                text: "←"
+                tooltipText: "Back to Chats"
+                onClicked: root.showNewChat = false
               }
             }
           }
@@ -410,7 +442,7 @@ Panel {
             id: newChatList
             WheelScroll { view: newChatList }
             width: parent.width
-            height: Style.space(420)
+            height: Math.max(0, root.popoutHeight - newChatView.y - y)
             clip: true
             model: State.newChatRows(root.view.contacts, newChatInput.text, root.view.lookup)
             delegate: Item {
@@ -463,16 +495,6 @@ Panel {
                 }
               }
             }
-          }
-        }
-
-        Button {
-          visible: root.parts.settingsButton
-          text: root.showSettings ? "Back to Chats" : "Settings"
-          bordered: true
-          onClicked: {
-            root.showSettings = !root.showSettings
-            root.confirmLogout = false
           }
         }
 
@@ -555,11 +577,11 @@ Panel {
         ColumnLayout {
           visible: root.parts.chat
           width: parent.width
-          height: Style.space(560)
+          height: root.popoutHeight - y
           spacing: Style.space(4)
           onVisibleChanged: if (visible) composer.forceActiveFocus()
 
-          // Top bar: "← # name · status" on the left; the pin and mute marks of the Chat and "⋯" on the right.
+          // Top bar: the picture or sign, "name · status" on the left; the pin and mute marks, "⋯" and "←" on the right.
           Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: chatBar.implicitHeight + Style.space(8)
@@ -567,24 +589,50 @@ Panel {
             RowLayout {
               id: chatBar
               anchors.fill: parent
-              anchors.leftMargin: Style.space(4)
+              anchors.leftMargin: Style.space(8)
               anchors.rightMargin: Style.space(4)
-              spacing: Style.space(4)
-              Button {
-                text: "←"
-                tooltipText: "Back to Chats"
-                onClicked: {
-                  root.reactingId = ""
-                  root.menuId = ""
-                  root.optionsFor = ""
-                  root.whiskerService.closeChat()
+              spacing: Style.space(8)
+              // The icon slot has the size and place of the logo in the main header, so the name starts where "whisker" does.
+              // It holds the Profile picture or group icon, round, or else the Chat sign.
+              Item {
+                Layout.preferredWidth: Style.space(16)
+                Layout.preferredHeight: Style.space(16)
+                Image {
+                  id: chatPicture
+                  readonly property string pictureSource: root.openChat ? State.chatPictureSource(root.view, root.openChat.jid) : ""
+                  anchors.fill: parent
+                  visible: pictureSource !== ""
+                  source: pictureSource
+                  sourceSize: Qt.size(Style.space(32), Style.space(32)) // twice the size, sharp on a scaled screen
+                  fillMode: Image.PreserveAspectCrop
+                  layer.enabled: true
+                  layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: pictureMask
+                  }
+                }
+                Rectangle {
+                  id: pictureMask
+                  anchors.fill: parent
+                  radius: width / 2
+                  layer.enabled: true
+                  visible: false
+                }
+                Text {
+                  anchors.centerIn: parent
+                  visible: !chatPicture.visible
+                  text: root.openChat ? State.chatSign(root.openChat) : ""
+                  opacity: 0.6 // as in the Chat list row
+                  color: root.contentForeground
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.body
                 }
               }
               Text {
                 Layout.maximumWidth: parent.width * 0.6
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
-                text: root.openChat ? State.chatSign(root.openChat) + " " + root.openChat.name : ""
+                text: root.openChat ? root.openChat.name : ""
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
@@ -623,6 +671,17 @@ Panel {
                 text: "⋯"
                 tooltipText: "Chat menu"
                 onClicked: root.optionsFor = root.optionsFor === root.openChat.jid ? "" : root.openChat.jid
+              }
+              // Back sits at the right in every bar, so the left side never shifts.
+              Button {
+                text: "←"
+                tooltipText: "Back to Chats"
+                onClicked: {
+                  root.reactingId = ""
+                  root.menuId = ""
+                  root.optionsFor = ""
+                  root.whiskerService.closeChat()
+                }
               }
             }
           }
@@ -734,7 +793,7 @@ Panel {
           WheelScroll { view: chatListView }
           visible: root.parts.chatList && root.shownChats.length > 0
           width: parent.width
-          height: visible ? Style.space(320) : 0
+          height: visible ? Math.max(0, root.popoutHeight - y - (loadMoreButton.visible ? loadMoreButton.height + column.spacing : 0)) : 0
           clip: true
           model: root.shownChats
           delegate: ChatRow {
@@ -772,6 +831,7 @@ Panel {
         }
 
         Button {
+          id: loadMoreButton
           visible: root.parts.loadMoreChats
           text: "Load more"
           bordered: true

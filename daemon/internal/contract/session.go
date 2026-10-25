@@ -201,6 +201,8 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		ok = s.box.receipt(ev)
 	case whatsapp.ChatAlias:
 		ok = s.merge(ev)
+	case whatsapp.PictureChanged:
+		ok = s.pictureChanged(ev.JID)
 	case whatsapp.Presence:
 		ok = s.send(notification("presenceChanged", map[string]any{"chat": ev.JID, "online": ev.Online, "lastSeen": ev.LastSeen}))
 	case whatsapp.ChatPresence:

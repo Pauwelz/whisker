@@ -541,7 +541,15 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
 	if err := putMessage(tx, ev.Chat, ev.Message, p.MediaState); err != nil {
 		return err
 	}
-	if known > 0 || !p.MarkUnread {
+	if known > 0 {
+		return nil
+	}
+	// With "Keep chats archived" off, a new Message unarchives its Chat. The live bit stops a later History Sync from archiving it again.
+	if _, err := tx.Exec(`UPDATE chats SET archived = 0, live_flags = live_flags | ? WHERE jid = ? AND archived = 1
+		AND (SELECT value FROM app_state_settings WHERE name = ?) = 1`, flagArchive, ev.Chat, settingUnarchiveChats); err != nil {
+		return err
+	}
+	if !p.MarkUnread {
 		return nil
 	}
 	if _, err := tx.Exec(`UPDATE messages SET read_pending = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {

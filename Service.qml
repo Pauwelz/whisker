@@ -40,16 +40,24 @@ Item {
 
   // The text of the search field. It filters every Chat list request.
   property string chatQuery: ""
+  // True while the "archived" filter shows. The Daemon then lists only the archived Chats.
+  property bool chatArchived: false
 
   // Called by the "Load more" button of the Chat list.
   function loadMoreChats() {
-    send(State.chatListRequest, view.chats ? view.chats.length : 0, chatQuery)
+    send(State.chatListRequest, view.chats ? view.chats.length : 0, chatQuery, chatArchived)
   }
 
   // Called when the search field changes.
   function searchChats(text) {
     chatQuery = text
-    send(State.chatListRequest, 0, chatQuery)
+    send(State.chatListRequest, 0, chatQuery, chatArchived)
+  }
+
+  // Called when the user picks or leaves the "archived" filter.
+  function showArchived(on) {
+    chatArchived = on
+    send(State.chatListRequest, 0, chatQuery, chatArchived)
   }
 
   // The new Chat view: the people that match the search field, and the pick of one of them.
@@ -85,6 +93,13 @@ Item {
     syncAttention()
     send(State.messagesRequest, chat.jid, 0)
     send(State.draftGetRequest, chat.jid)
+    requestPicture()
+  }
+
+  // Asks for the Profile picture of the open Chat when the view has no answer for it yet.
+  function requestPicture() {
+    var jid = State.pictureToRequest(view)
+    if (jid !== "") send(State.chatPictureRequest, jid)
   }
 
   // Called when the user changes the Draft: the composer text, or a Quote or Edit target. The Daemon stores it.
@@ -111,7 +126,7 @@ Item {
     leaveChat()
     view = State.closeChat(view)
     syncAttention()
-    send(State.chatListRequest, 0, chatQuery) // a Draft can list a Chat
+    send(State.chatListRequest, 0, chatQuery, chatArchived) // a Draft can list a Chat
   }
 
   // Outgoing Composing. The Daemon drops it when "send typing" is off.
@@ -371,8 +386,10 @@ Item {
           root.send(State.messagesRequest, root.view.openChat.jid, 0)
           root.send(State.draftGetRequest, root.view.openChat.jid)
         }
+        // A merge changes the JID of the open Chat, and a changed picture drops its entry. Both need a new request.
+        if (State.reloadsOpenChat(root.view, frame) || frame.method === "pictureChanged") root.requestPicture()
         if (State.requestsSettings(frame)) root.send(State.settingsGetRequest)
-        if (State.refreshesChats(frame)) root.send(State.chatListRequest, 0, root.chatQuery)
+        if (State.refreshesChats(frame)) root.send(State.chatListRequest, 0, root.chatQuery, root.chatArchived)
       }
     }
     stderr: SplitParser {

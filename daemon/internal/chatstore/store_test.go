@@ -37,7 +37,7 @@ func apply(t *testing.T, s *chatstore.Store, ev whatsapp.Event) {
 
 func list(t *testing.T, s *chatstore.Store, offset, limit int) chatstore.Page {
 	t.Helper()
-	page, err := s.List(offset, limit, "")
+	page, err := s.List(offset, limit, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestSearchMatchesChatNameAndParticipantName(t *testing.T) {
 	apply(t, s, whatsapp.ContactName{JID: "1@s.whatsapp.net", Name: "Ann Contact"})
 	search := func(q string) []string {
 		t.Helper()
-		page, err := s.List(0, 50, q)
+		page, err := s.List(0, 50, q, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -264,7 +264,7 @@ func TestSearchMatchesChatNameAndParticipantName(t *testing.T) {
 			t.Errorf("search %q = %v, want %v", tc.query, got, tc.want)
 		}
 	}
-	page, _ := s.List(1, 1, "c") // "Ann Contact" and "Chess Club" both hold "c"
+	page, _ := s.List(1, 1, "c", false) // "Ann Contact" and "Chess Club" both hold "c"
 	if len(page.Chats) != 1 || page.Chats[0].Name != "Chess Club" || page.More {
 		t.Errorf("paged search = %+v", page)
 	}
@@ -474,5 +474,89 @@ func TestALiveMessageSetsTheKindOfAChatThatAPinStored(t *testing.T) {
 	}
 	if c, err := s.Chat(g); err != nil || c.Kind != whatsapp.KindGroup {
 		t.Errorf("Kind = %q, %v; want group", c.Kind, err)
+	}
+}
+
+func listArchived(t *testing.T, s *chatstore.Store, query string, archived bool) []string {
+	t.Helper()
+	page, err := s.List(0, 50, query, archived)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jids := []string{}
+	for _, c := range page.Chats {
+		jids = append(jids, c.JID)
+	}
+	return jids
+}
+
+func TestArchivedChatsLeaveTheMainListButSearchFindsThem(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{
+		{JID: "a@s.whatsapp.net", LastActive: 2, Unread: true},
+		{JID: "b@s.whatsapp.net", LastActive: 1, Unread: true, Archived: true},
+	}})
+	if got := listArchived(t, s, "", false); !slices.Equal(got, []string{"a@s.whatsapp.net"}) {
+		t.Errorf("main list = %v", got)
+	}
+	if got := listArchived(t, s, "", true); !slices.Equal(got, []string{"b@s.whatsapp.net"}) {
+		t.Errorf("archived list = %v", got)
+	}
+	if got := listArchived(t, s, "+", false); len(got) != 2 {
+		t.Errorf("search = %v; want both Chats", got)
+	}
+	if got := listArchived(t, s, "+", true); !slices.Equal(got, []string{"b@s.whatsapp.net"}) {
+		t.Errorf("archived search = %v", got)
+	}
+	if n, err := s.UnreadChats(); err != nil || n != 1 {
+		t.Errorf("UnreadChats = %d, %v; want 1 (archived Chats do not count)", n, err)
+	}
+	apply(t, s, whatsapp.Archive{JID: "b@s.whatsapp.net", Archived: false})
+	if got := listArchived(t, s, "", false); len(got) != 2 {
+		t.Errorf("main list after unarchive = %v", got)
+	}
+}
+
+func TestALiveArchiveSurvivesALateHistorySync(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "a@s.whatsapp.net", LastActive: 1, Archived: true}}})
+	apply(t, s, whatsapp.Archive{JID: "a@s.whatsapp.net", Archived: false})
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "a@s.whatsapp.net", LastActive: 1, Archived: true}}})
+	if got := listArchived(t, s, "", false); len(got) != 1 {
+		t.Errorf("main list = %v; want the live unarchive to stay", got)
+	}
+}
+
+func TestANewMessageUnarchivesOnlyWhenTheSettingIsOn(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		setting []whatsapp.Event
+		want    bool // archived after the Message
+	}{
+		{"unknown", nil, true},
+		{"off", []whatsapp.Event{whatsapp.UnarchiveChats{On: false}}, true},
+		{"on", []whatsapp.Event{whatsapp.UnarchiveChats{On: true}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := newStore(t)
+			apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "a@s.whatsapp.net", LastActive: 1, Archived: true}}})
+			for _, ev := range tc.setting {
+				apply(t, s, ev)
+			}
+			ev := whatsapp.NewMessage{Chat: "a@s.whatsapp.net", Message: whatsapp.Message{ID: "1", Sender: "a@s.whatsapp.net", Time: 5, Text: "hi"}}
+			if err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+				t.Fatal(err)
+			}
+			c, err := s.Chat("a@s.whatsapp.net")
+			if err != nil || c.Archived != tc.want {
+				t.Errorf("archived = %v, %v; want %v", c.Archived, err, tc.want)
+			}
+			if !tc.want { // a late History Sync must not archive it again
+				apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "a@s.whatsapp.net", LastActive: 1, Archived: true}}})
+				if c, _ := s.Chat("a@s.whatsapp.net"); c.Archived {
+					t.Error("History Sync archived the Chat again")
+				}
+			}
+		})
 	}
 }

@@ -42,10 +42,16 @@ Item {
     id: line
     anchors.left: parent.left
     anchors.right: parent.right
+    anchors.leftMargin: Style.space(8)
     spacing: Style.space(6)
 
-    Mark { text: State.chatSign(row.chat); opacity: 0.6 }
-    Mark { text: "▲"; visible: row.chat.pinned === true; opacity: 0.8 } // Pinned
+    // The sign slot has the size and place of the icon slot in the top bars, so the name does not move when the Chat opens.
+    Item {
+      Layout.preferredWidth: Style.space(16)
+      Layout.preferredHeight: Style.space(16)
+      Layout.rightMargin: Style.space(2) // with the spacing, the 8 of the top bars
+      Mark { anchors.centerIn: parent; text: State.chatSign(row.chat); opacity: 0.6 }
+    }
     Mark {
       Layout.maximumWidth: parent.width * 0.5
       elide: Text.ElideRight
@@ -53,6 +59,7 @@ Item {
       text: row.chat.name
       font.bold: row.chat.unread
     }
+    Mark { text: "▲"; visible: row.chat.pinned === true; opacity: 0.8 } // Pinned: after the name, so names line up
     Mark { text: "󰝟"; visible: row.chat.muted === true; opacity: 0.6 } // Muted
     Mark { text: "@"; visible: row.chat.mention === true; font.bold: true } // the Chat mentions the user
     Mark {

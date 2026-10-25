@@ -13,6 +13,7 @@ test("filterChats keeps all, the unread Chats or the Group Chats", () => {
   assert.deepEqual(State.filterChats(chats, "all").map((c) => c.name), ["Ann", "Family", "You"]);
   assert.deepEqual(State.filterChats(chats, "unread").map((c) => c.name), ["Ann"]);
   assert.deepEqual(State.filterChats(chats, "groups").map((c) => c.name), ["Family"]);
+  assert.deepEqual(State.filterChats(chats, "archived").map((c) => c.name), ["Ann", "Family", "You"]); // the Daemon filtered
 });
 
 test("chatSign tells Direct, Group and Self Chats apart", () => {
@@ -47,5 +48,6 @@ test("emptyChatsText tells why no Chat shows", () => {
   assert.equal(State.emptyChatsText("all", ""), "No chats yet.");
   assert.equal(State.emptyChatsText("unread", ""), "No unread chats.");
   assert.equal(State.emptyChatsText("groups", ""), "No group chats.");
+  assert.equal(State.emptyChatsText("archived", ""), "No archived chats.");
   assert.equal(State.emptyChatsText("all", "zed"), "No chat matches “zed”.");
 });

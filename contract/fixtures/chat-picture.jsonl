@@ -1,0 +1,27 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","lastActive":20},{"jid":"2@s.whatsapp.net","lastActive":10}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","pictures":{"1@s.whatsapp.net":"p1|JPEG1"}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.picture","params":{"chat":"1@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","data":"SlBFRzE="}}}
+{"dir":"view","expect":{"pictures":{"1@s.whatsapp.net":"SlBFRzE="}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.picture","params":{"chat":"1@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chat":"1@s.whatsapp.net","data":"SlBFRzE="}}}
+{"dir":"pictured","requests":["1@s.whatsapp.net:"]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.picture","params":{"chat":"2@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chat":"2@s.whatsapp.net","data":""}}}
+{"dir":"view","expect":{"pictures":{"1@s.whatsapp.net":"SlBFRzE=","2@s.whatsapp.net":""}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.picture","params":{"chat":"2@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"chat":"2@s.whatsapp.net","data":""}}}
+{"dir":"pictured","requests":["1@s.whatsapp.net:","2@s.whatsapp.net:"]}
+{"dir":"whatsapp","pictures":{"1@s.whatsapp.net":"p2|JPEG2"}}
+{"dir":"whatsapp","event":{"kind":"pictureChanged","jid":"1@s.whatsapp.net"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"pictureChanged","params":{"chat":"1@s.whatsapp.net"}}}
+{"dir":"view","expect":{"pictures":{"2@s.whatsapp.net":""}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chat.picture","params":{"chat":"1@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chat":"1@s.whatsapp.net","data":"SlBFRzI="}}}
+{"dir":"pictured","requests":["1@s.whatsapp.net:","2@s.whatsapp.net:","1@s.whatsapp.net:"]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":6,"method":"chat.picture","params":{"chat":"9@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":6,"error":{"code":-32010,"message":"invalid chat"}}}

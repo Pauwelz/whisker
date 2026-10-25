@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ type Chat struct {
 	Name       string `json:"name"`
 	LastActive int64  `json:"lastActive"`
 	Pinned     bool   `json:"pinned"`
+	Archived   bool   `json:"archived,omitempty"`
 	Muted      bool   `json:"muted"`
 	// MutedUntil is the end of the Mute in Unix seconds, -1 for ever. It is absent when the Chat is not Muted.
 	MutedUntil int64 `json:"mutedUntil,omitempty"`
@@ -78,7 +80,7 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 			}
 			return nil
 		})
-	case whatsapp.Pin, whatsapp.Mute, whatsapp.ReadMarker:
+	case whatsapp.Pin, whatsapp.Archive, whatsapp.UnarchiveChats, whatsapp.Mute, whatsapp.ReadMarker:
 		err = applyFlag(s.db, ev)
 	case whatsapp.AppStateBatch:
 		err = s.inTx(func(tx *sql.Tx) error {
@@ -98,17 +100,23 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 }
 
 // List returns Chats: Pinned first, then newest first. A Chat with no Message and no Draft is not listed.
+// Without a query it lists the archived Chats if archived is true, else the others.
 // A non-blank query keeps the Chats whose name, or the name of a Participant who wrote in them, contains it. Case does not matter.
-func (s *Store) List(offset, limit int, query string) (Page, error) {
+// A query searches the archived Chats too, unless archived is true: then it searches only them.
+func (s *Store) List(offset, limit int, query string, archived bool) (Page, error) {
 	// shortcut: offset paging can skip or repeat a Chat when the list changes between pages, upgrade to a keyset cursor if that shows.
 	// shortcut: a search reads every Chat and filters in Go, so the name rule stays in one place; upgrade if a profile holds tens of thousands of Chats.
 	query = strings.ToLower(strings.TrimSpace(query))
 	sqlLimit, sqlOffset := limit+1, offset
+	where := listed + ` AND c.archived = ` + strconv.Itoa(int(boolInt(archived)))
 	if query != "" {
 		sqlLimit, sqlOffset = -1, 0
+		if !archived {
+			where = listed
+		}
 	}
 	rows, err := s.db.Query(selectChat+`
-		WHERE `+listed+`
+		WHERE `+where+`
 		ORDER BY c.pinned DESC, c.last_active DESC, c.jid
 		LIMIT ? OFFSET ?`, s.now().Unix(), sqlLimit, sqlOffset)
 	if err != nil {
@@ -140,11 +148,11 @@ func (s *Store) List(offset, limit int, query string) (Page, error) {
 	return page, nil
 }
 
-// UnreadChats counts the unread Chats that are not Muted, over the whole chat store. The bar shows it.
+// UnreadChats counts the unread Chats that are not Muted or archived, over the whole chat store. The bar shows it.
 // It counts the Chats that List shows, so the bar and the list agree.
 func (s *Store) UnreadChats() (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM chats c WHERE `+listed+` AND c.unread AND NOT `+mutedNow, s.now().Unix()).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM chats c WHERE `+listed+` AND c.unread AND NOT c.archived AND NOT `+mutedNow, s.now().Unix()).Scan(&n)
 	return n, err
 }
 
@@ -168,7 +176,7 @@ const (
 )
 
 const selectChat = `
-	SELECT c.jid, c.kind, c.pinned, c.unread, c.last_active,
+	SELECT c.jid, c.kind, c.pinned, c.archived, c.unread, c.last_active,
 	       CASE WHEN ` + mutedNow + ` THEN c.muted_until ELSE 0 END, c.timer,
 	       CASE WHEN c.unread THEN (SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.read_pending = 1) ELSE 0 END,
 	       c.unread AND EXISTS (SELECT 1 FROM messages m WHERE m.chat_jid = c.jid AND m.read_pending = 1 AND m.mentions_me),
@@ -178,7 +186,7 @@ const selectChat = `
 func scanChat(rows *sql.Rows) (Chat, error) {
 	var c Chat
 	var subject, contact, push string
-	if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.MutedUntil, &c.Timer, &c.UnreadCount, &c.Mention, &subject, &contact, &push); err != nil {
+	if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Archived, &c.Unread, &c.LastActive, &c.MutedUntil, &c.Timer, &c.UnreadCount, &c.Mention, &subject, &contact, &push); err != nil {
 		return Chat{}, err
 	}
 	c.Muted = c.MutedUntil != 0
@@ -306,19 +314,28 @@ func setName(db execer, column, jid, name string) error {
 	return err
 }
 
+// settingUnarchiveChats is the app_state_settings row of "Keep chats archived" (1: a new Message unarchives its Chat).
+const settingUnarchiveChats = "unarchive_chats"
+
 // The bits of chats.live_flags. A bit is set once a live event has set that flag.
 const (
 	flagPin = 1 << iota
 	flagMute
 	flagUnread
 	flagTimer
+	flagArchive
 )
 
-// applyFlag stores a Pin, Mute or ReadMarker event. Other events change nothing.
+// applyFlag stores a Pin, Archive, UnarchiveChats, Mute or ReadMarker event. Other events change nothing.
 func applyFlag(db execer, ev whatsapp.Event) error {
 	switch ev := ev.(type) {
 	case whatsapp.Pin:
 		return setFlag(db, "pinned", flagPin, ev.JID, boolInt(ev.Pinned))
+	case whatsapp.Archive:
+		return setFlag(db, "archived", flagArchive, ev.JID, boolInt(ev.Archived))
+	case whatsapp.UnarchiveChats:
+		_, err := db.Exec(`INSERT INTO app_state_settings (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value`, settingUnarchiveChats, boolInt(ev.On))
+		return err
 	case whatsapp.Mute:
 		return setFlag(db, "muted_until", flagMute, ev.JID, ev.Until)
 	case whatsapp.ReadMarker:
@@ -343,16 +360,17 @@ func putChat(tx *sql.Tx, c whatsapp.HistoryChat) error {
 		last = max(last, m.Time)
 	}
 	_, err := tx.Exec(`
-		INSERT INTO chats (jid, kind, subject, last_active, pinned, muted_until, unread, timer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO chats (jid, kind, subject, last_active, pinned, archived, muted_until, unread, timer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(jid) DO UPDATE SET kind = excluded.kind,
 		  subject = CASE WHEN excluded.subject = '' THEN subject ELSE excluded.subject END,
 		  last_active = MAX(last_active, excluded.last_active),
 		  pinned = CASE WHEN live_flags & :pin THEN pinned ELSE excluded.pinned END,
+		  archived = CASE WHEN live_flags & :archive THEN archived ELSE excluded.archived END,
 		  muted_until = CASE WHEN live_flags & :mute THEN muted_until ELSE excluded.muted_until END,
 		  unread = CASE WHEN live_flags & :unread THEN unread ELSE excluded.unread END,
 		  timer = CASE WHEN live_flags & :timer THEN timer ELSE excluded.timer END`, // a flag that a live event set stays: live App State is newer than a History Sync batch
-		c.JID, kindOrDirect(c.Kind), c.Subject, last, boolInt(c.Pinned), c.MutedUntil, boolInt(c.Unread), c.Timer,
-		sql.Named("pin", flagPin), sql.Named("mute", flagMute), sql.Named("unread", flagUnread), sql.Named("timer", flagTimer))
+		c.JID, kindOrDirect(c.Kind), c.Subject, last, boolInt(c.Pinned), boolInt(c.Archived), c.MutedUntil, boolInt(c.Unread), c.Timer,
+		sql.Named("pin", flagPin), sql.Named("archive", flagArchive), sql.Named("mute", flagMute), sql.Named("unread", flagUnread), sql.Named("timer", flagTimer))
 	if err != nil {
 		return err
 	}

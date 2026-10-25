@@ -28,17 +28,19 @@ func (s *Store) MergeChat(lid, phone string) (changed bool, err error) {
 		}
 		changed = true
 		pin := strconv.Itoa(flagPin) // a live pin is newer than a History Sync pin, so it wins the merge
+		archive := strconv.Itoa(flagArchive)
 		steps := []string{
 			// Two Drafts keep the phone targets (Quote, Edit, file) and join the texts, so no typed text is lost. A lone Draft just moves below.
 			`UPDATE drafts SET text = CASE WHEN drafts.text = '' THEN l.text WHEN l.text = '' THEN drafts.text ELSE drafts.text || char(10) || l.text END
 				FROM (SELECT text FROM drafts WHERE chat_jid = :lid) AS l WHERE drafts.chat_jid = :phone`,
 			// Copy the LID Chat under the phone JID when the phone Chat is absent, then merge the flags. -1 (muted for ever) beats any end time.
-			`INSERT OR IGNORE INTO chats (jid, kind, subject, last_active, pinned, muted_until, unread, timer, live_flags)
-				SELECT :phone, kind, subject, last_active, pinned, muted_until, unread, timer, live_flags FROM chats WHERE jid = :lid`,
+			`INSERT OR IGNORE INTO chats (jid, kind, subject, last_active, pinned, archived, muted_until, unread, timer, live_flags)
+				SELECT :phone, kind, subject, last_active, pinned, archived, muted_until, unread, timer, live_flags FROM chats WHERE jid = :lid`,
 			`UPDATE chats SET
 				live_flags = chats.live_flags | l.live_flags,
 				last_active = MAX(chats.last_active, l.last_active), unread = chats.unread OR l.unread,
 				pinned = CASE WHEN chats.live_flags & ` + pin + ` THEN chats.pinned WHEN l.live_flags & ` + pin + ` THEN l.pinned ELSE chats.pinned OR l.pinned END,
+				archived = CASE WHEN chats.live_flags & ` + archive + ` THEN chats.archived WHEN l.live_flags & ` + archive + ` THEN l.archived ELSE chats.archived AND l.archived END,
 				muted_until = CASE WHEN chats.muted_until = -1 OR l.muted_until = -1 THEN -1 ELSE MAX(chats.muted_until, l.muted_until) END,
 				timer = CASE WHEN chats.timer <> 0 THEN chats.timer ELSE l.timer END
 				FROM (SELECT * FROM chats WHERE jid = :lid) AS l WHERE chats.jid = :phone`,

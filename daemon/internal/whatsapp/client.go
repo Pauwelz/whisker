@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"go.mau.fi/whatsmeow/proto/waWeb"
+	"io"
+	"net/http"
 	"os"
 	"slices"
 	"strings"
@@ -68,7 +70,7 @@ func NewClient(container *sqlstore.Container) (*Client, error) {
 		return nil, err
 	}
 	c := &Client{cli: whatsmeow.NewClient(dev, waLog.Noop), events: make(chan Event, 64)}
-	// The first App State sync after a link is a full sync. Without this, its Pin, Mute and Read Marker events are lost.
+	// The first App State sync after a link is a full sync. Without this, its Pin, Archive, Mute and Read Marker events are lost.
 	c.cli.EmitAppStateEventsOnFullSync = true
 	c.cli.AddEventHandler(c.handle)
 	return c, nil
@@ -177,6 +179,47 @@ func (c *Client) Lookup(phone string) (string, string, error) {
 		}
 	}
 	return digits, "", nil
+}
+
+// maxPictureBytes caps the preview download. A preview is a few KiB, so a larger body is not one.
+const maxPictureBytes = 512 << 10
+
+func (c *Client) ProfilePicture(chat, knownID string) (string, []byte, error) {
+	jid, err := types.ParseJID(chat)
+	if err != nil {
+		return "", nil, err
+	}
+	if !c.cli.IsConnected() {
+		return "", nil, ErrOffline
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	info, err := c.cli.GetProfilePictureInfo(ctx, jid, &whatsmeow.GetProfilePictureParams{Preview: true, ExistingID: knownID})
+	switch {
+	case errors.Is(err, whatsmeow.ErrProfilePictureNotSet), errors.Is(err, whatsmeow.ErrProfilePictureUnauthorized):
+		return "", nil, nil
+	case err != nil:
+		return "", nil, offline(err)
+	case info == nil: // the known picture is still current
+		return knownID, nil, nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, info.URL, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", nil, errors.New("picture download failed") // the error text holds the URL
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", nil, errors.New("picture download failed")
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxPictureBytes+1))
+	if err != nil || len(data) > maxPictureBytes {
+		return "", nil, errors.New("picture download failed")
+	}
+	return info.ID, data, nil
 }
 
 func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
@@ -490,8 +533,14 @@ func (c *Client) handle(evt any) {
 		if !evt.FromFullSync { // a full sync ends with one ContactBook, not a frame per contact
 			c.events <- ContactName{JID: c.phone(evt.JID).String(), Name: evt.Action.GetFullName()}
 		}
+	case *events.Picture:
+		c.events <- PictureChanged{JID: c.phone(evt.JID).String()}
 	case *events.Pin:
 		c.emitFlag(Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}, evt.FromFullSync)
+	case *events.Archive:
+		c.emitFlag(Archive{JID: c.phone(evt.JID).String(), Archived: evt.Action.GetArchived()}, evt.FromFullSync)
+	case *events.UnarchiveChatsSetting:
+		c.emitFlag(UnarchiveChats{On: evt.Action.GetUnarchiveChats()}, evt.FromFullSync)
 	case *events.Mute:
 		until := int64(0)
 		if evt.Action.GetMuted() {
@@ -708,6 +757,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 			Kind:       c.kindOf(jid),
 			LastActive: int64(max(conv.GetConversationTimestamp(), conv.GetLastMsgTimestamp())),
 			Pinned:     conv.GetPinned() != 0,
+			Archived:   conv.GetArchived(),
 			Unread:     conv.GetUnreadCount() > 0 || conv.GetMarkedAsUnread(),
 			Timer:      int64(conv.GetEphemeralExpiration()),
 		}
