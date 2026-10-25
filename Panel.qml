@@ -49,15 +49,41 @@ Panel {
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   // One on/off Profile Setting. `key` is its wire name; State.SETTING_TOGGLES holds its texts.
+  // Smaller than the shell's Toggle (at least 54 px), so all settings fit the pop-out without a scroll.
   component SettingToggle: Toggle {
     required property string key
     width: parent.width
+    implicitHeight: Style.space(46)
+    titleSize: Style.font.body
     label: State.SETTING_TOGGLES[key].label
     description: State.SETTING_TOGGLES[key].description
     checked: !!root.settings && root.settings[key]
     foreground: root.contentForeground
     fontFamily: root.contentFontFamily
     onClicked: root.whiskerService.changeSettings({ [key]: !root.settings[key] })
+  }
+
+  // A setting with a few choices: its label and the buttons on one line.
+  component SettingChoice: Row {
+    property alias label: choiceLabel.text
+    property alias options: choices.options
+    property alias value: choices.value
+    signal changed(string choice)
+    spacing: Style.space(12)
+    Text {
+      id: choiceLabel
+      anchors.verticalCenter: parent.verticalCenter
+      color: root.contentForeground
+      font.family: root.contentFontFamily
+      font.pixelSize: Style.font.body
+      font.bold: true
+    }
+    ButtonGroup {
+      id: choices
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      onChanged: function(choice) { parent.changed(choice) }
+    }
   }
 
   // Runs a fixed shortcut. The decision is State.shortcutAction.
@@ -584,20 +610,13 @@ Panel {
           Column {
             id: settingsColumn
             width: settingsView.width
-            spacing: Style.space(10)
+            spacing: Style.space(6)
 
             PanelSectionHeader { text: "Privacy"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
-            Text {
-              text: "Read Receipts"
-              color: root.contentForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.subtitle
-            }
-            ButtonGroup {
+            SettingChoice {
+              label: "Read Receipts"
               options: State.READ_RECEIPT_MODES
               value: root.settings ? root.settings.readReceipts : ""
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
               onChanged: function(mode) { root.whiskerService.changeSettings({ readReceipts: mode }) }
             }
             Text {
@@ -619,19 +638,11 @@ Panel {
             PanelSeparator { width: parent.width; foreground: root.contentForeground }
             PanelSectionHeader { text: "Media"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
             SettingToggle { key: "autoDownload" }
-            Text {
+            SettingChoice {
               visible: !!root.settings && root.settings.autoDownload
-              text: "Up to"
-              color: root.contentForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.subtitle
-            }
-            ButtonGroup {
-              visible: !!root.settings && root.settings.autoDownload
+              label: "Up to"
               options: State.AUTO_DOWNLOAD_LIMITS
               value: root.settings ? root.settings.autoDownloadLimit : ""
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
               onChanged: function(limit) { root.whiskerService.changeSettings({ autoDownloadLimit: limit }) }
             }
 
