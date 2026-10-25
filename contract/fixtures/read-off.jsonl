@@ -6,7 +6,7 @@
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"settings.set","params":{"readReceipts":"off"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"off","sendOnline":true,"sendTyping":true,"notifications":true}}}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"in1","sender":"1@s.whatsapp.net","time":50,"text":"tin1","pushName":"Ann"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"tin1","state":"","edited":false,"revoked":false}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"tin1","state":"","edited":false,"revoked":false,"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"notify","params":{"chat":"1@s.whatsapp.net","kind":"direct","name":"Ann","senderName":"Ann","text":"tin1"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"attention.set","params":{"open":true,"chat":"1@s.whatsapp.net"}}}
@@ -16,6 +16,6 @@
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chats.list"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":50,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0,"unreadChats":0}}}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"in2","sender":"1@s.whatsapp.net","time":60,"text":"tin2","pushName":"Ann"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":60,"text":"tin2","state":"","edited":false,"revoked":false}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":60,"text":"tin2","state":"","edited":false,"revoked":false,"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"read","receipts":[],"markers":["1@s.whatsapp.net","1@s.whatsapp.net"]}

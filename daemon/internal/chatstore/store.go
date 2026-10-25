@@ -30,8 +30,15 @@ type Chat struct {
 	LastActive int64  `json:"lastActive"`
 	Pinned     bool   `json:"pinned"`
 	Muted      bool   `json:"muted"`
-	Unread     bool   `json:"unread"`
-	Timer      int64  `json:"timer,omitempty"` // the Disappearing timer in seconds, absent when off
+	// MutedUntil is the end of the Mute in Unix seconds, -1 for ever. It is absent when the Chat is not Muted.
+	MutedUntil int64 `json:"mutedUntil,omitempty"`
+	Unread     bool  `json:"unread"`
+	// UnreadCount is the number of live Messages that wait for a Read Receipt. It is 0 for a read Chat.
+	// A Chat that the phone marked unread has none, so the Plugin shows a dot.
+	UnreadCount int `json:"unreadCount,omitempty"`
+	// Mention is true when one of those Messages mentions the user.
+	Mention bool  `json:"mention,omitempty"`
+	Timer   int64 `json:"timer,omitempty"` // the Disappearing timer in seconds, absent when off
 }
 
 // Page is a page of the Chat list. More tells whether another page follows.
@@ -62,6 +69,15 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 		err = setName(s.db, "push_name", ev.JID, ev.Name)
 	case whatsapp.ContactName:
 		err = setName(s.db, "contact_name", ev.JID, ev.Name)
+	case whatsapp.ContactBook:
+		err = s.inTx(func(tx *sql.Tx) error {
+			for _, c := range ev.Names {
+				if err := setName(tx, "contact_name", c.JID, c.Name); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	case whatsapp.Pin:
 		err = s.setFlag("pinned", flagPin, ev.JID, boolInt(ev.Pinned))
 	case whatsapp.Mute:
@@ -76,7 +92,7 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 	return true, err
 }
 
-// List returns Chats: Pinned first, then newest first. A Chat with no activity is not listed.
+// List returns Chats: Pinned first, then newest first. A Chat with no Message and no Draft is not listed.
 // A non-blank query keeps the Chats whose name, or the name of a Participant who wrote in them, contains it. Case does not matter.
 func (s *Store) List(offset, limit int, query string) (Page, error) {
 	// shortcut: offset paging can skip or repeat a Chat when the list changes between pages, upgrade to a keyset cursor if that shows.
@@ -134,24 +150,33 @@ func (s *Store) NextMuteEnd() (until int64, ok bool, err error) {
 	return end.Int64, end.Valid, err
 }
 
+// PinnedCount counts the Pinned Chats of the whole chat store, listed or not. WhatsApp counts them all.
+func (s *Store) PinnedCount() (n int, err error) {
+	err = s.db.QueryRow(`SELECT COUNT(*) FROM chats WHERE pinned = 1`).Scan(&n)
+	return n, err
+}
+
 // listed is the SQL condition of a Chat that List shows. mutedNow is the condition of a Muted Chat, with one time parameter.
 const (
-	listed   = `c.last_active > 0`
+	listed   = `(c.last_active > 0 OR EXISTS (SELECT 1 FROM drafts d WHERE d.chat_jid = c.jid))`
 	mutedNow = `(c.muted_until = -1 OR c.muted_until > ?)`
 )
 
 const selectChat = `
 	SELECT c.jid, c.kind, c.pinned, c.unread, c.last_active,
-	       ` + mutedNow + `, c.timer,
+	       CASE WHEN ` + mutedNow + ` THEN c.muted_until ELSE 0 END, c.timer,
+	       CASE WHEN c.unread THEN (SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.read_pending = 1) ELSE 0 END,
+	       c.unread AND EXISTS (SELECT 1 FROM messages m WHERE m.chat_jid = c.jid AND m.read_pending = 1 AND m.mentions_me),
 	       c.subject, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
 	FROM chats c LEFT JOIN names n ON n.jid = c.jid `
 
 func scanChat(rows *sql.Rows) (Chat, error) {
 	var c Chat
 	var subject, contact, push string
-	if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.Muted, &c.Timer, &subject, &contact, &push); err != nil {
+	if err := rows.Scan(&c.JID, &c.Kind, &c.Pinned, &c.Unread, &c.LastActive, &c.MutedUntil, &c.Timer, &c.UnreadCount, &c.Mention, &subject, &contact, &push); err != nil {
 		return Chat{}, err
 	}
+	c.Muted = c.MutedUntil != 0
 	c.Name = chatName(c.Kind, subject, contact, push, c.JID)
 	return c, nil
 }
@@ -219,6 +244,27 @@ func (s *Store) ParticipantName(jid string) (string, error) {
 		return "", err
 	}
 	return participantName(contact, push, jid), nil
+}
+
+// LIDs lists every LID the store holds as a Chat, a name, an author, a quoted author or a Reaction sender.
+func (s *Store) LIDs() ([]string, error) {
+	rows, err := s.db.Query(`
+		SELECT jid FROM chats WHERE jid LIKE '%@lid' UNION SELECT jid FROM names WHERE jid LIKE '%@lid'
+		UNION SELECT sender_jid FROM messages WHERE sender_jid LIKE '%@lid' UNION SELECT quote_sender FROM messages WHERE quote_sender LIKE '%@lid'
+		UNION SELECT sender_jid FROM reactions WHERE sender_jid LIKE '%@lid'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var lids []string
+	for rows.Next() {
+		var lid string
+		if err := rows.Scan(&lid); err != nil {
+			return nil, err
+		}
+		lids = append(lids, lid)
+	}
+	return lids, rows.Err()
 }
 
 // participantName is the name rule for a Participant: contact name, Push Name, then phone number.

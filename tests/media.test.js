@@ -33,6 +33,8 @@ test("the Plugin asks for each image path once, and a media.open result stores i
 test("Media rows say what they are and what the user can do", () => {
   assert.equal(State.mediaLabel(pdf), "Document: a.pdf (3.0 MB)");
   assert.equal(State.mediaLabel(photo), "Image (2.0 KB)");
+  assert.equal(State.mediaLabel({ ...photo, media: { ...photo.media, kind: "voice", duration: 75 } }), "Voice note (1:15, 2.0 KB)");
+  assert.equal(State.mediaLabel({ ...photo, media: { ...photo.media, kind: "voice", duration: 9 } }), "Voice note (0:09, 2.0 KB)");
   assert.equal(State.canDownloadMedia(pdf), true);
   assert.equal(State.canDownloadMedia({ ...pdf, media: { ...pdf.media, state: "failed" } }), true);
   assert.equal(State.canDownloadMedia(photo), false);
@@ -63,4 +65,10 @@ test("a voice note shows Play or Stop, and playing sends media.played", () => {
   assert.equal(State.openLabel(pdf, ""), "Open");
   assert.equal(State.isPlaying("", voice), false);
   assert.deepEqual(plain(JSON.parse(State.playedRequest(3, voice))), { jsonrpc: "2.0", id: 3, method: "media.played", params: { chat: voice.chat, id: "v1" } });
+});
+
+test("Media is downloading only in that state", () => {
+  assert.equal(State.isDownloading({ ...pdf, media: { ...pdf.media, state: "downloading" } }), true);
+  assert.equal(State.isDownloading(pdf), false);
+  assert.equal(State.isDownloading({ id: "t", chat: "c" }), false);
 });

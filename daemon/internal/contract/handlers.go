@@ -11,29 +11,36 @@ import (
 )
 
 const (
-	methodKeyringRetry  = "keyring.retry"
-	methodLinkPairCode  = "link.pairCode"
-	methodLinkRetry     = "link.retry"
-	methodChatsList     = "chats.list"
-	methodChatMessages  = "chat.messages"
-	methodChatSend      = "chat.send"
-	methodChatRetry     = "chat.retry"
-	methodChatSendMedia = "chat.sendMedia"
-	methodAttentionSet  = "attention.set"
-	methodMediaDownload = "media.download"
-	methodMediaOpen     = "media.open"
-	methodMediaSave     = "media.save"
-	methodMediaRelease  = "media.release"
-	methodMediaPlayed   = "media.played"
-	methodChatEdit      = "chat.edit"
-	methodChatRevoke    = "chat.revoke"
-	methodChatReact     = "chat.react"
-	methodChatTyping    = "chat.typing"
-	methodDraftGet      = "draft.get"
-	methodDraftSet      = "draft.set"
-	methodSettingsGet   = "settings.get"
-	methodSettingsSet   = "settings.set"
-	methodLogout        = "profile.logout"
+	methodKeyringRetry    = "keyring.retry"
+	methodLinkPairCode    = "link.pairCode"
+	methodLinkRetry       = "link.retry"
+	methodChatsList       = "chats.list"
+	methodChatMessages    = "chat.messages"
+	methodChatStart       = "chat.start"
+	methodContactsSearch  = "contacts.search"
+	methodContactsLookup  = "contacts.lookup"
+	methodChatSend        = "chat.send"
+	methodChatRetry       = "chat.retry"
+	methodChatSendMedia   = "chat.sendMedia"
+	methodAttentionSet    = "attention.set"
+	methodMediaDownload   = "media.download"
+	methodMediaOpen       = "media.open"
+	methodMediaSave       = "media.save"
+	methodMediaRelease    = "media.release"
+	methodMediaPlayed     = "media.played"
+	methodChatEdit        = "chat.edit"
+	methodChatRevoke      = "chat.revoke"
+	methodChatReact       = "chat.react"
+	methodChatTyping      = "chat.typing"
+	methodChatPin         = "chat.pin"
+	methodChatMute        = "chat.mute"
+	methodChatMarkUnread  = "chat.markUnread"
+	methodChatDeleteForMe = "chat.deleteForMe"
+	methodDraftGet        = "draft.get"
+	methodDraftSet        = "draft.set"
+	methodSettingsGet     = "settings.get"
+	methodSettingsSet     = "settings.set"
+	methodLogout          = "profile.logout"
 )
 
 // request is one line from the Plugin. Params holds the union of the params of all methods.
@@ -46,9 +53,13 @@ type request struct {
 		Limit      int    `json:"limit"`
 		Query      string `json:"query"`
 		Chat       string `json:"chat"`
+		JID        string `json:"jid"`
 		Text       string `json:"text"`
 		Caption    string `json:"caption"`
 		Open       bool   `json:"open"`
+		Pinned     bool   `json:"pinned"`
+		Unread     bool   `json:"unread"`
+		Until      *int64 `json:"until"` // nil when the request has none
 		Typing     bool   `json:"typing"`
 		ID         string `json:"id"`
 		Emoji      string `json:"emoji"`
@@ -96,29 +107,36 @@ type handler struct {
 
 // handlers is the one table of methods. A new method is a new row and a new function.
 var handlers = map[string]handler{
-	methodKeyringRetry:  {whenWaitingForKeyring, (*session).keyringRetry},
-	methodLinkRetry:     {whenLinking, (*session).linkRetry},
-	methodLinkPairCode:  {whenLinking, (*session).linkPairCode},
-	methodChatsList:     {whenReady, (*session).chatsList},
-	methodChatMessages:  {whenReady, (*session).chatMessages},
-	methodDraftGet:      {whenReady, (*session).draftGet},
-	methodDraftSet:      {whenReady, (*session).draftSet},
-	methodChatSend:      {whenLinked, (*session).chatSend},
-	methodChatSendMedia: {whenLinked, (*session).chatSendMedia},
-	methodChatRetry:     {whenLinked, (*session).chatRetry},
-	methodMediaDownload: {whenLinked, (*session).mediaDownload},
-	methodMediaOpen:     {whenReady, (*session).mediaOpen},
-	methodMediaSave:     {whenReady, (*session).mediaSave},
-	methodMediaRelease:  {whenReady, (*session).mediaRelease},
-	methodMediaPlayed:   {whenReady, (*session).mediaPlayed},
-	methodAttentionSet:  {whenReady, (*session).attentionSet},
-	methodChatEdit:      {whenLinked, (*session).chatEdit},
-	methodChatRevoke:    {whenLinked, (*session).chatRevoke},
-	methodChatReact:     {whenLinked, (*session).chatReact},
-	methodChatTyping:    {whenLinked, (*session).chatTyping},
-	methodSettingsGet:   {whenReady, (*session).settingsGet},
-	methodSettingsSet:   {whenReady, (*session).settingsSet},
-	methodLogout:        {whenLinked, (*session).logout},
+	methodKeyringRetry:    {whenWaitingForKeyring, (*session).keyringRetry},
+	methodLinkRetry:       {whenLinking, (*session).linkRetry},
+	methodLinkPairCode:    {whenLinking, (*session).linkPairCode},
+	methodChatsList:       {whenReady, (*session).chatsList},
+	methodChatMessages:    {whenReady, (*session).chatMessages},
+	methodChatStart:       {whenReady, (*session).chatStart},
+	methodContactsSearch:  {whenReady, (*session).contactsSearch},
+	methodContactsLookup:  {whenLinked, (*session).contactsLookup},
+	methodDraftGet:        {whenReady, (*session).draftGet},
+	methodDraftSet:        {whenReady, (*session).draftSet},
+	methodChatSend:        {whenLinked, (*session).chatSend},
+	methodChatSendMedia:   {whenLinked, (*session).chatSendMedia},
+	methodChatRetry:       {whenLinked, (*session).chatRetry},
+	methodMediaDownload:   {whenLinked, (*session).mediaDownload},
+	methodMediaOpen:       {whenReady, (*session).mediaOpen},
+	methodMediaSave:       {whenReady, (*session).mediaSave},
+	methodMediaRelease:    {whenReady, (*session).mediaRelease},
+	methodMediaPlayed:     {whenReady, (*session).mediaPlayed},
+	methodAttentionSet:    {whenReady, (*session).attentionSet},
+	methodChatEdit:        {whenLinked, (*session).chatEdit},
+	methodChatRevoke:      {whenLinked, (*session).chatRevoke},
+	methodChatReact:       {whenLinked, (*session).chatReact},
+	methodChatTyping:      {whenLinked, (*session).chatTyping},
+	methodChatPin:         {whenLinked, (*session).chatPin},
+	methodChatMute:        {whenLinked, (*session).chatMute},
+	methodChatMarkUnread:  {whenLinked, (*session).chatMarkUnread},
+	methodChatDeleteForMe: {whenLinked, (*session).chatDeleteForMe},
+	methodSettingsGet:     {whenReady, (*session).settingsGet},
+	methodSettingsSet:     {whenReady, (*session).settingsSet},
+	methodLogout:          {whenLinked, (*session).logout},
 }
 
 // onLine answers one line from the Plugin. It returns an exit code, or keepGoing.
@@ -231,6 +249,43 @@ func (s *session) chatsList(req *request) outcome {
 	return outcome{reply: resultReply(req.ID, map[string]any{"chats": page.Chats, "more": page.More, "offset": offset, "unreadChats": unread})}
 }
 
+// contactsSearch lists the people the user can start a Chat with. The limit follows the paging rules, without an offset.
+func (s *session) contactsSearch(req *request) outcome {
+	p := req.Params
+	_, limit := pageParams(0, p.Limit)
+	contacts, err := s.chats.Contacts(p.Query, limit, s.port.OwnUsers())
+	if err != nil {
+		return outcome{reply: s.storeFailed(req)}
+	}
+	return outcome{reply: resultReply(req.ID, map[string]any{"contacts": contacts})}
+}
+
+// contactsLookup asks WhatsApp whether a phone number is on WhatsApp. The reply names the digits it answers for,
+// so the Plugin can drop a late reply for a number that the user has edited since.
+func (s *session) contactsLookup(req *request) outcome {
+	// shortcut: Lookup blocks the Daemon loop (up to 15 s), upgrade when another request must run meanwhile.
+	digits, jid, err := s.port.Lookup(req.Params.Phone)
+	switch {
+	case errors.Is(err, whatsapp.ErrInvalidPhone):
+		return outcome{reply: errorReply(req.ID, errInvalidPhone, msgInvalidPhone)}
+	case err != nil:
+		return outcome{reply: s.whatsappFailed(req.ID, err)}
+	}
+	return outcome{reply: resultReply(req.ID, map[string]any{"phone": digits, "jid": jid})}
+}
+
+// chatStart returns the Chat of a person, and stores an empty one when there is none. It makes no call to WhatsApp.
+func (s *session) chatStart(req *request) outcome {
+	if !chatstore.IsPerson(req.Params.JID) {
+		return outcome{reply: errorReply(req.ID, errInvalidChat, msgInvalidChat)}
+	}
+	chat, err := s.chats.StartChat(req.Params.JID)
+	if err != nil {
+		return outcome{reply: s.storeFailed(req)}
+	}
+	return outcome{reply: resultReply(req.ID, map[string]any{"chat": chat})}
+}
+
 func (s *session) chatMessages(req *request) outcome {
 	p := req.Params
 	offset, limit := pageParams(p.Offset, p.Limit)
@@ -315,7 +370,8 @@ func (s *session) mediaRelease(req *request) outcome {
 }
 
 func (s *session) mediaPlayed(req *request) outcome {
-	return outcome{reply: s.loader.playedReply(req.ID, req.Params.Chat, req.Params.ID, s.read)}
+	reply, played := s.loader.playedReply(req.ID, req.Params.Chat, req.Params.ID, s.read)
+	return s.followUp(reply, played, nil, s.announce, nil)
 }
 
 func (s *session) attentionSet(req *request) outcome {

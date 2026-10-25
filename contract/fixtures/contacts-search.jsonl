@@ -1,0 +1,34 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","own":["9999","8888"]}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1111@s.whatsapp.net","lastActive":40}],"pushNames":[{"jid":"3333@s.whatsapp.net","name":"Cy Push"},{"jid":"4444@lid","name":"Dee"},{"jid":"1111@s.whatsapp.net","name":"Ann push"}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"contactName","jid":"1111@s.whatsapp.net","name":"Ann"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"contactName","jid":"2222@s.whatsapp.net","name":"Bob"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"contactName","jid":"9999@s.whatsapp.net","name":"Me"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"pushName","jid":"8888@lid","name":"Me LID"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"contacts.search","params":{"query":"","limit":50}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"contacts":[{"jid":"1111@s.whatsapp.net","name":"Ann","phone":"+1111","pushNameOnly":false,"chat":"1111@s.whatsapp.net"},{"jid":"2222@s.whatsapp.net","name":"Bob","phone":"+2222","pushNameOnly":false,"chat":""},{"jid":"3333@s.whatsapp.net","name":"Cy Push","phone":"+3333","pushNameOnly":true,"chat":""},{"jid":"4444@lid","name":"Dee","phone":"","pushNameOnly":true,"chat":""}]}}}
+{"dir":"view","expect":{"contacts":[{"jid":"1111@s.whatsapp.net","name":"Ann","phone":"+1111","pushNameOnly":false,"chat":"1111@s.whatsapp.net"},{"jid":"2222@s.whatsapp.net","name":"Bob","phone":"+2222","pushNameOnly":false,"chat":""},{"jid":"3333@s.whatsapp.net","name":"Cy Push","phone":"+3333","pushNameOnly":true,"chat":""},{"jid":"4444@lid","name":"Dee","phone":"","pushNameOnly":true,"chat":""}]}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"contacts.search","params":{"query":"AN"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"contacts":[{"jid":"1111@s.whatsapp.net","name":"Ann","phone":"+1111","pushNameOnly":false,"chat":"1111@s.whatsapp.net"}]}}}
+{"dir":"view","expect":{"contacts":[{"jid":"1111@s.whatsapp.net","name":"Ann","phone":"+1111","pushNameOnly":false,"chat":"1111@s.whatsapp.net"}]}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"contacts.search","params":{"query":"+22 22"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"contacts":[{"jid":"2222@s.whatsapp.net","name":"Bob","phone":"+2222","pushNameOnly":false,"chat":""}]}}}
+{"dir":"view","expect":{"contacts":[{"jid":"2222@s.whatsapp.net","name":"Bob","phone":"+2222","pushNameOnly":false,"chat":""}]}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"contacts.search","params":{"query":"","limit":1}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"contacts":[{"jid":"1111@s.whatsapp.net","name":"Ann","phone":"+1111","pushNameOnly":false,"chat":"1111@s.whatsapp.net"}]}}}
+{"dir":"view","expect":{"contacts":[{"jid":"1111@s.whatsapp.net","name":"Ann","phone":"+1111","pushNameOnly":false,"chat":"1111@s.whatsapp.net"}]}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"contacts.search","params":{"query":"nobody"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"contacts":[]}}}
+{"dir":"view","expect":{"contacts":[]}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":6,"method":"chat.start","params":{"jid":"2222@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":6,"result":{"chat":{"jid":"2222@s.whatsapp.net","kind":"direct","name":"Bob","lastActive":0,"pinned":false,"muted":false,"unread":false}}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":7,"method":"contacts.search","params":{"query":"bob"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":7,"result":{"contacts":[{"jid":"2222@s.whatsapp.net","name":"Bob","phone":"+2222","pushNameOnly":false,"chat":"2222@s.whatsapp.net"}]}}}
+{"dir":"view","expect":{"contacts":[{"jid":"2222@s.whatsapp.net","name":"Bob","phone":"+2222","pushNameOnly":false,"chat":"2222@s.whatsapp.net"}]}}

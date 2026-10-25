@@ -6,10 +6,10 @@
 {"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
 {"dir":"whatsapp","download":"pixels"}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"m1","sender":"1@s.whatsapp.net","time":50,"text":"look","pushName":"Ann","media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","directPath":"/v/t/x","fileSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","fileEncSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"downloading"}}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"downloading"},"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"notify","params":{"chat":"1@s.whatsapp.net","kind":"direct","name":"Ann","senderName":"Ann","text":"look","media":"image"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"ready"}}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"ready"},"senderPush":true}}}}
 {"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg","missing":true}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"m1"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","id":"m1","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg"}}}
@@ -23,7 +23,7 @@
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"media.save","params":{"chat":"1@s.whatsapp.net","id":"m1","path":"relative.jpg"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"error":{"code":-32008,"message":"invalid media"}}}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"v1","sender":"1@s.whatsapp.net","time":60,"text":"","pushName":"Ann","media":{"kind":"video","mime":"video/mp4","name":"","size":9,"key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","directPath":"/v/t/x","fileSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","fileEncSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"v1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":60,"text":"","state":"","edited":false,"revoked":false,"media":{"kind":"video","mime":"video/mp4","name":"","size":9,"state":"none"}}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"v1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":60,"text":"","state":"","edited":false,"revoked":false,"media":{"kind":"video","mime":"video/mp4","name":"","size":9,"state":"none"},"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"notify","params":{"chat":"1@s.whatsapp.net","kind":"direct","name":"Ann","senderName":"Ann","text":"","media":"video"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"v1"}}}

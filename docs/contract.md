@@ -95,6 +95,8 @@ History Sync fills `pinned`, `muted`, `unread` and `timer` of a Chat only until 
 
 WhatsApp can name a contact by LID in one History Sync batch and give the phone JID in a later one. The Daemon then holds two Chats for one contact. When the port reports the pair (`ChatAlias`), the Daemon merges the LID Chat into the phone Chat and sends `chatMerged`, then `chatsChanged`. Nothing is sent when no LID Chat exists, so a repeated alias is silent.
 
+The port reports a pair from History Sync, from the Chat of a live event, and from the author of a live event and its alt ID. In a Group Chat the author pair renames the older Messages of that Participant. On each connect the Daemon also asks the local LID store for every stored LID, and merges each one it knows. This fixes Messages that arrived before WhatsApp gave the phone JID.
+
 The merge moves Messages (with their Read Receipt state), Reactions, Media rows and files, and the names of the LID. For a Message id that both Chats hold, the phone Chat copy stays. If both Chats hold a Draft, the merged Draft keeps the phone Quote, Edit and file, and joins the texts: phone text, a line break, LID text. A lone Draft moves over. The merge runs when the LID shows in any stored row: Chat, name, Draft, Message (Chat, author or quoted author) or Reaction. Flags merge: latest `lastActive`, Pinned or unread if either was, the longest mute, and the timer of the phone Chat if it has one. With no phone Chat yet, the LID Chat takes the phone JID. The Attended Chat follows the merge. A send that began in the LID Chat and ends after the merge updates the Message in the phone Chat (fixture `chat-send-merge.jsonl`).
 
 The Plugin points the open Chat at `to` when it shows `from` or `to`, empties its Messages, and loads Messages and Draft again.
@@ -103,7 +105,7 @@ The Plugin points the open Chat at `to` when it shows `from` or `to`, empties it
 {"jsonrpc":"2.0","method":"chatMerged","params":{"from":"99@lid","to":"31600@s.whatsapp.net"}}
 ```
 
-Fixture: `contract/fixtures/chats-merge-lid.jsonl`.
+Fixtures: `contract/fixtures/chats-merge-lid.jsonl`, `contract/fixtures/chats-lid-sender-repair.jsonl`.
 
 ### Connection
 
@@ -133,7 +135,7 @@ A Reaction, whether the user or another Participant set or removed it, also send
 A Message can carry two more keys. Both are left out when empty:
 
 - `quote`: the Message that this one replies to, as a snapshot: `{id, sender, senderName, fromMe, text}`. `text` is the preview. `sender` and `senderName` are empty and `fromMe` is true when the quoted Message is the user's.
-- `reactions`: a list of `{sender, senderName, fromMe, emoji}`, one per Participant, in the order the Participants first reacted. `sender` is empty for the user.
+- `reactions`: a list of `{sender, senderName, fromMe, emoji}`, one per Participant, in the order the Participants first reacted. `sender` is empty for the user. History Sync carries the Reactions of older Messages; a Reaction that a live event set wins over a later History Sync batch. Fixture: `chats-history-reactions.jsonl`.
 
 Later tickets add keys to the Message and send `messageChanged` for each change.
 
@@ -141,7 +143,7 @@ Fixtures: `chat-receive.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-f
 
 ### `messageExpired`
 
-A Disappearing Message reached the end of its timer. The Daemon has deleted it from the chat store, with its Media. The Plugin takes it out of the open Chat. No `chatsChanged` follows.
+A Disappearing Message reached the end of its timer, or `chat.deleteForMe` deleted it. The Daemon has deleted it from the chat store, with its Media. The Plugin takes it out of the open Chat. No `chatsChanged` follows.
 
 ```json
 {"jsonrpc":"2.0","method":"messageExpired","params":{"chat":"1@s.whatsapp.net","id":"3EB0"}}
@@ -184,10 +186,12 @@ Params, all optional: `offset` (default 0), `limit` (default 50, at most 200) an
 {"chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":100,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0,"unreadChats":0}
 ```
 
-- Order: Pinned Chats first, then newest `lastActive` first (Unix seconds). A Chat with no activity is not listed.
+- Order: Pinned Chats first, then newest `lastActive` first (Unix seconds). A Chat with no Message and no Draft is not listed.
 - `kind` is `direct`, `group` or `self`.
 - `muted` is true for a Muted Chat whose mute has not ended. `unread` is the Read Marker. `pinned`, `muted` and `unread` come from App State.
-- `unreadChats` is the number of unread Chats that are not Muted and that the list shows (a Chat with no activity is not listed), over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
+- `mutedUntil` is the end of the mute in Unix seconds, `-1` for ever. It is present only when `muted` is true.
+- `unreadCount` is the number of live Messages that wait for a Read Receipt in an unread Chat. It is absent (0) for a read Chat. A Chat that the phone marked unread has none, so the Plugin shows a dot. `mention` is true when one of those Messages mentions the user. It is absent otherwise.
+- `unreadChats` is the number of unread Chats that are not Muted and that the list shows (a Chat with no Message and no Draft is not listed), over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
 - `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
 - `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
 - Error -32003 means the chat store failed.
@@ -199,7 +203,44 @@ Name rule, resolved by the Daemon at list time:
 3. Otherwise it shows the Push Name.
 4. Otherwise it shows the phone number with a leading `+`.
 
-Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chats-pages.jsonl`, `chats-search.jsonl`.
+The names of the phone contacts come from App State. whatsmeow sends no event for a full App State sync, so on each connect and after each full sync the Daemon reads every named contact from the device store and stores the names under the phone JID. This read never removes a name; a live App State change does.
+
+Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chats-pages.jsonl`, `chats-search.jsonl`, `chats-contact-book.jsonl`.
+
+### `contacts.search`
+
+Params, all optional: `query` and `limit` (default 50, at most 200; there is no paging). Valid once the Daemon is `ready`. The result lists people from the names that the chat store holds:
+
+```json
+{"contacts":[{"jid":"1111@s.whatsapp.net","name":"Ann","phone":"+1111","pushNameOnly":false,"chat":"1111@s.whatsapp.net"}]}
+```
+
+- Order: Phone Contacts by name (case does not matter), then Participants known only by a Push Name (`pushNameOnly` is true), by name.
+- `phone` is the phone number with a leading `+`. It is empty for a LID.
+- `chat` is the WhatsApp ID of the stored Chat with the person, also an empty Chat that `chat.start` made. It is empty when there is none.
+- `query` keeps the people whose `name` contains the text, or whose phone number holds its digits. A blank `query` keeps all, so it returns the first `limit` Phone Contacts.
+- The user's own IDs (phone and LID) are never returned.
+- Error -32003 means the chat store failed.
+
+Fixture: `contacts-search.jsonl`.
+
+### `contacts.lookup`
+
+Params: `phone`, a phone number in international form. Digits are kept, so `+1 555-123-4567` is fine. Valid once the Daemon is `linked`. The Daemon asks WhatsApp if the number is on WhatsApp. The result is `{"phone": "15551234567", "jid": "15551234567@s.whatsapp.net"}`, or `{"phone": "15551234567", "jid": ""}` when the number is not on WhatsApp. `phone` always holds the digits that the reply is for, as the Daemon cleaned them. This echo is on purpose: the Plugin ignores a reply whose `phone` is not the number in its row, so a late reply cannot change the row of a number the user has edited since.
+
+- Error -32001 means the number is too short (6 digits or fewer) or not international (it starts with 0). `link.pairCode` uses the same rule.
+- Error -32007 means WhatsApp could not be reached: no connection or a timeout. The call blocks the Daemon for up to 15 s.
+
+Fixtures: `contacts-lookup.jsonl`, `contacts-lookup-invalid.jsonl`, `contacts-lookup-offline.jsonl`.
+
+### `chat.start`
+
+Params: `jid`, a person's WhatsApp ID in phone (`digits@s.whatsapp.net`) or LID (`digits@lid`) form. Valid once the Daemon is `ready`. The result is `{"chat": <Chat>}`, a row as in `chats.list`. The Daemon returns the stored Chat, or stores a new empty one. It makes no call to WhatsApp. An empty Chat stays out of `chats.list` until it has a Message or a Draft.
+
+- Error -32010 means `jid` is not a person's ID: a Group Chat, a malformed ID or one with a device part.
+- Error -32003 means the chat store failed.
+
+Fixtures: `chat-start.jsonl`, `chat-start-invalid.jsonl`.
 
 ### `settings.get`
 
@@ -264,6 +305,8 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 - `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
 - Text that WhatsApp cannot show gets a one-line text, so no Message is blank: `Poll: <name>. Open it on your phone.`, `Event: ...`, `View-once media. ...`, `Contact: <name>, <number>` (one line per card), `Location: <place>` with a map link on the next line, and `Unsupported message. ...`. The port adapter makes these lines. Reactions, poll votes and protocol Messages show nothing. Fixture: `message-types.jsonl`.
 - `mentions` lists the mentioned names, each as `@name` (name rule). `text` already holds them: the Daemon replaces `@<number>`. Only Messages with a mention have the key.
+- `mentionsMe` is true when the Message mentions the user. Only such Messages have the key. Fixture: `notify-mention-muted.jsonl`.
+- `senderPush` is true when `senderName` is a Push Name: the user has no phone contact for the sender. Only such Messages have the key. The Plugin shows "~" and the phone number from `sender`.
 - `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
 - `media` is present only for a Message with Media, see Media below. It never holds a path or bytes.
 - Error -32003 means the chat store failed.
@@ -321,11 +364,36 @@ A Participant has one Reaction per Message, so a new `emoji` replaces the old on
 
 A Reaction from another device or another Participant arrives as `messageChanged` too. A Reaction on an unknown Message sends nothing. Error -32006 means an unknown or revoked Message or an emoji that is not allowed. Error -32007 means WhatsApp could not be reached: nothing changed. Fixtures: `chat-reaction.jsonl`, `read-reaction-quote.jsonl`.
 
+### `chat.markUnread`
+
+`chat.markUnread` takes `chat` and `unread` (boolean). It sets or clears the Read Marker of the Chat as an App State write. It sends no Read Receipt and no Played receipt. Valid once the Daemon is `ready` and linked.
+
+The store changes only after WhatsApp accepts the write. Then the Daemon answers `{}` and sends `chatsChanged`. Error -32010 means an unknown Chat. Error -32007 means WhatsApp could not be reached: nothing changes. The write does not change the Attended Chat. The Plugin leaves the open Chat before it marks it unread, so the mark stays. Fixture: `chat-mark-unread.jsonl`.
+
+### `chat.pin` and `chat.mute`
+
+`chat.pin` takes `chat` and `pinned` (boolean). `chat.mute` takes `chat` and `until`, in Unix seconds: `-1` mutes for ever, `0` unmutes, any other value must be in the future. Valid once the Daemon is `ready` and linked.
+
+The Daemon writes App State to WhatsApp, as the Read Marker write does. The store changes only after WhatsApp accepts the write. Then the Daemon answers `{}` and sends `chatsChanged`. Without a connection the call fails at once, nothing changes and nothing is queued.
+
+- Error -32010 means an unknown Chat. It comes before the other checks.
+- Error -32011 means `chat.pin` would make a 4th Pinned Chat. Pinning a Chat that is already pinned is allowed.
+- Error -32602 means `chat.mute` got no `until`, or one that is not `-1`, `0` or in the future.
+- Error -32007 means WhatsApp could not be reached. Nothing changed.
+
+The Plugin turns a mute choice into an absolute `until`. Fixtures: `chat-pin.jsonl`, `chat-mute.jsonl`, `chat-options-offline.jsonl`.
+
 ### `chat.revoke`
 
 Params: `chat` and `id`. Same rules as `chat.edit`, without the 15 minute limit. The Daemon revokes the Message for everyone. It becomes a Tombstone: the store empties the text (and, with Media, the cached Media) and keeps the position. The Daemon answers `{"message": {...}}` and sends `messageChanged` with `revoked: true`.
 
 A revoke from the phone or from the other Participant arrives as `messageChanged` with `revoked: true`. A revoke of an unknown or revoked Message sends nothing. Errors as for `chat.edit`. Fixture: `chat-revoke.jsonl`.
+
+### `chat.deleteForMe`
+
+Params: `chat` and `id`. Valid once the Daemon is `ready` and linked. It deletes one Message on the user's devices only, also a Tombstone, as an App State write (`deleteMessageForMe`). Other Participants keep the Message.
+
+The store changes only after WhatsApp accepts the write: the Message goes with its Media file and its Reactions. Then the Daemon answers `{}` and sends `messageExpired` for it, which takes it out of the open Chat. Error -32010 means an unknown Chat. Error -32006 means an unknown Message. Error -32007 means WhatsApp could not be reached: nothing changes. Fixture: `chat-delete-for-me.jsonl`.
 
 ### `draft.get`
 
@@ -359,7 +427,7 @@ Fixtures: `presence-incoming.jsonl`, `presence-online.jsonl`, `presence-typing.j
 
 ### Media
 
-A Message with Media has a `media` object: `{"kind","mime","name","size","state"}`. `text` holds the caption. `size` is in bytes. `name` is the file name of a document, else empty.
+A Message with Media has a `media` object: `{"kind","mime","name","size","state"}` and, when they apply, `"thumbnail"`, `"duration"` and `"played"`. `text` holds the caption. `size` is in bytes. `name` is the file name of a document, else empty. `thumbnail` is the small JPEG that WhatsApp sends with image, video and document Messages, as base64, passed on as it arrives. The Daemon makes no thumbnails. The key is absent when WhatsApp sent none. `duration` is the length in seconds of audio, voice and video, absent when WhatsApp sent none. `played` is true once the user played the voice note in whisker, absent before. Fixtures: `media-thumbnail.jsonl`, `played-on-open.jsonl`.
 
 | `kind` | Download |
 |---|---|
@@ -393,7 +461,7 @@ Params: `chat`, `id` and `path` (absolute). The Daemon writes a plain copy to `p
 
 #### `media.played`
 
-Params: `chat` and `id`. The Plugin sends it when a voice note starts to play. Valid for a `ready` voice note of another Participant. Error -32008 means anything else. The Daemon answers an empty `result` and the policy (`receiptpolicy.Played`) decides what goes out:
+Params: `chat` and `id`. The Plugin sends it when a voice note starts to play. Valid for a `ready` voice note of another Participant. Error -32008 means anything else. The Daemon stores `played` on the Media, whatever the policy says. The first play sends `messageChanged` for the Message, a repeat sends nothing. The Daemon answers an empty `result` and the policy (`receiptpolicy.Played`) decides what goes out:
 
 | Read Receipts | Sent |
 |---|---|
@@ -431,14 +499,17 @@ The Daemon answers a request with an `error` object. Application codes will join
 |---|---|---|
 | -32700 | parse error | The line is not a JSON-RPC object. The `id` is `null`. |
 | -32601 | method not found | The method does not exist, or is not valid now (for example `link.pairCode` on a linked Profile). |
-| -32001 | invalid phone number | `link.pairCode` got a number that is too short or not international. |
+| -32602 | invalid params | `chat.mute` got an `until` that is not `-1`, `0` or in the future. |
+| -32001 | invalid phone number | `link.pairCode` or `contacts.lookup` got a number that is too short or not international. |
 | -32002 | pair code failed | WhatsApp did not give a Pair Code. |
-| -32003 | chat store failed | `chats.list`, `chat.messages`, `chat.send` or `chat.retry` could not use the chat store. |
+| -32003 | chat store failed | `chats.list`, `contacts.search`, `chat.start`, `chat.messages`, `chat.send`, `chat.retry`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` could not use the chat store. |
 | -32004 | invalid setting | `settings.set` got a value that is not allowed, or the settings file could not be read or written. |
-| -32006 | invalid message | `chat.send` or `chat.sendMedia` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.react` got an unknown or revoked Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown or revoked. |
-| -32007 | send failed | `chat.edit`, `chat.revoke` or `chat.react` could not reach WhatsApp. The Message is unchanged. |
+| -32006 | invalid message | `chat.send` or `chat.sendMedia` got a blank or too long text or an unknown Chat. `chat.retry` found no failed Message. `chat.edit` or `chat.revoke` cannot change that Message. `chat.deleteForMe` got an unknown Message. `chat.react` got an unknown or revoked Message or an emoji that is not allowed. `chat.send` got a `quote` that is unknown or revoked. |
+| -32007 | could not reach WhatsApp (was "send failed") | `chat.edit`, `chat.revoke`, `chat.react`, `contacts.lookup`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got no answer from WhatsApp: no connection or a timeout. Nothing changed. |
 | -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
+| -32010 | invalid chat | `chat.start` got a `jid` that is not a person's WhatsApp ID. `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got an unknown Chat. |
+| -32011 | pin limit | `chat.pin` would make a 4th Pinned Chat. Nothing changed. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 
@@ -471,6 +542,8 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |
 | `reacted` | `reactions` | The Go test checks the Reactions that the fake port has sent so far, in order, as `"id:emoji"`. An empty emoji is a removal. |
 | `quoted` | `quotes` | The Go test checks the replies that the fake port has sent with a Quote so far, in order, as `"id:quotedID"`. |
+| `pinned` | `pins` | The Go test checks the pin writes that the fake port accepted so far, in order, as `"chat:true"` or `"chat:false"`. The fake port fails them with the `sendError`. |
+| `muted` | `mutes` | The Go test checks the mute writes that the fake port accepted so far, in order, as `"chat:until"`. The fake port fails them with the `sendError`. |
 | `revoked` | `ids` | The Go test checks the Message IDs that the fake port has revoked so far, in order. |
 | `uploaded` | `uploads` | The Go test checks the Media that the fake port has uploaded and sent so far, in order, as `"id\|kind\|mime\|name\|caption\|content"`. |
 | `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest timer of the Daemon clock. That is the sweep of Disappearing Messages, then a Mute end, in the order the Daemon set them. Without it, the line fires the keyring timeout as above. |
@@ -486,7 +559,9 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `linked` | `true` or `false`: the Profile is linked at start-up. Put the line before the first `out`. |
 | `pairCode` | The code that the next `link.pairCode` returns. |
 | `pairError` | `invalid-phone`, or any text: the next `link.pairCode` fails. |
-| `sendError` | `offline`, any other text, or empty: the fake port fails every send, edit and revoke with that error, or works again (empty). |
+| `sendError` | `offline`, any other text, or empty: the fake port fails every send, edit, revoke, pin and mute with that error, or works again (empty). |
+| `lookups` | An object of digits to WhatsApp ID: the answers of `contacts.lookup`. A number that is not in it is not on WhatsApp. `sendError` makes the lookup fail. |
+| `phones` | An object of LID to phone JID: what the local LID store holds. The Daemon reads it on `connected`. |
 | `hold` | `true` makes the fake port hold every `chat.send` until a `hold` line with `false`. A fixture uses it to end a send after other events. |
 | `download` | The plain Media that the next downloads write. |
 | `downloadError` | Any text, or empty: the fake port fails every download with that error, or works again (empty). |

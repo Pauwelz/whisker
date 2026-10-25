@@ -140,14 +140,24 @@ func (l *mediaLoader) saveReply(id json.RawMessage, chat, msgID, dst string) map
 }
 
 // playedReply handles `media.played`: the user started a voice note. Only a ready voice note of another Participant counts.
-func (l *mediaLoader) playedReply(id json.RawMessage, chat, msgID string, read *reader) map[string]any {
+// The first play stores the mark. The Message comes back so the caller can tell the Plugin; it is nil for a repeat.
+func (l *mediaLoader) playedReply(id json.RawMessage, chat, msgID string, read *reader) (map[string]any, *chatstore.Message) {
 	ref, ok := l.ready(chat, msgID)
 	m, err := l.chats.Message(chat, msgID)
 	if !ok || err != nil || ref.Kind != media.Voice || m.FromMe {
-		return errorReply(id, errMedia, msgInvalidMedia)
+		return errorReply(id, errMedia, msgInvalidMedia), nil
 	}
 	read.playedNote(chat, m.Sender, msgID)
-	return resultReply(id, map[string]any{})
+	fresh, err := l.chats.SetPlayed(chat, msgID)
+	if err != nil {
+		fmt.Fprintln(l.logOut, "media write failed")
+		return errorReply(id, errChatStore, msgChatStore), nil
+	}
+	if !fresh {
+		return resultReply(id, map[string]any{}), nil
+	}
+	m.Media.Played = true
+	return resultReply(id, map[string]any{}), &m
 }
 
 func (l *mediaLoader) failed(id json.RawMessage, err error) map[string]any {

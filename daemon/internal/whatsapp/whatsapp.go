@@ -7,6 +7,7 @@ package whatsapp
 import (
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 )
@@ -21,6 +22,12 @@ type Port interface {
 	// PairCode asks for a Pair Code for the phone number (digits, international, no "+").
 	// Call it after Connect on an unlinked Profile. It returns ErrInvalidPhone for a bad number.
 	PairCode(phone string) (string, error)
+	// Lookup asks WhatsApp whether the phone number (international, any separators) is on WhatsApp.
+	// It returns the digits and the person's WhatsApp ID, or "" for a number that is not on WhatsApp.
+	// It returns ErrInvalidPhone for a bad number, and ErrOffline when there is no connection.
+	Lookup(phone string) (digits, jid string, err error)
+	// PhoneOf is the phone JID that the local LID store holds for a LID, or "". It makes no network call.
+	PhoneOf(lid string) string
 	// Logout tells WhatsApp to remove this Companion Device, so the phone no longer lists it.
 	// It needs a connection. On error the device stays linked.
 	Logout() error
@@ -50,21 +57,54 @@ type Port interface {
 	MarkPlayed(chat, sender, id string) error
 	// MarkChatRead clears the Read Marker of a Chat on the user's devices (App State). It needs a connection.
 	MarkChatRead(chat string) error
+	// SetPinned pins or unpins a Chat on the user's devices (App State). It returns ErrOffline when there is no connection.
+	SetPinned(chat string, pinned bool) error
+	// SetMuted mutes a Chat until the Unix second until (App State): -1 for ever, 0 unmutes.
+	// It returns ErrOffline when there is no connection.
+	SetMuted(chat string, until int64) error
+	// SetUnread sets or clears the Read Marker of a Chat on the user's devices (App State). It sends no Read Receipt.
+	// It returns ErrOffline when there is no connection.
+	SetUnread(chat string, unread bool) error
 	// Edit replaces the text of a Message of the user. It returns ErrOffline when there is no connection.
 	Edit(chat, id, text string) error
 	// Revoke takes back a Message of the user for everyone. It returns ErrOffline when there is no connection.
 	Revoke(chat, id string) error
+	// DeleteForMe deletes a Message on the user's devices only (App State). sender is the author, "" for the user.
+	// time is the Unix second of the Message. It returns ErrOffline when there is no connection.
+	DeleteForMe(chat, id, sender string, fromMe bool, time int64) error
 	// SendPresence tells WhatsApp that the user is online (true) or not. WhatsApp only sends Presence after it.
 	SendPresence(online bool) error
 	// SubscribePresence asks WhatsApp for the Presence of a Participant.
 	SubscribePresence(jid string) error
 	// SendTyping tells a Chat that the user is composing (true) or has paused (false).
 	SendTyping(chat string, composing bool) error
+	// OwnUsers lists the user parts of the user's own IDs (phone number and LID). It is empty while unlinked.
+	OwnUsers() []string
 	// Events delivers events in order. The channel stays open until the process ends.
 	Events() <-chan Event
 }
 
 var ErrInvalidPhone = errors.New("invalid phone number")
+
+// Digits keeps the digits of a phone number, whatever the separators. It is the one digit rule of the Daemon.
+func Digits(phone string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, phone)
+}
+
+// cleanPhone keeps the digits of a phone number. It returns ErrInvalidPhone for a number that is too short
+// or not international. The rule is the one of whatsmeow's PairPhone. WhiskerState.js mirrors it (isLookupPhone).
+func cleanPhone(phone string) (string, error) {
+	digits := Digits(phone)
+	if len(digits) <= 6 || strings.HasPrefix(digits, "0") {
+		return "", ErrInvalidPhone
+	}
+	return digits, nil
+}
 
 // ErrOffline means Send found no connection. The Message is not sent.
 var ErrOffline = errors.New("not connected")
@@ -111,6 +151,8 @@ type Media struct {
 	DirectPath    string     `json:"directPath"`
 	FileSHA256    []byte     `json:"fileSha256"`
 	FileEncSHA256 []byte     `json:"fileEncSha256"`
+	Thumbnail     []byte     `json:"thumbnail"` // the JPEG thumbnail WhatsApp sent with the Message, empty when none
+	Duration      int64      `json:"duration"`  // seconds of audio, voice and video, 0 when WhatsApp sent none
 }
 
 // Message is one Message of a History Sync batch. Times are Unix seconds.
@@ -128,6 +170,15 @@ type Message struct {
 	Mentions   []string `json:"mentions"`
 	MentionsMe bool     `json:"mentionsMe"`
 	Timer      int64    `json:"timer"` // the Disappearing timer in seconds that the Message carries, 0 for none
+	// Reactions are the Reactions that History Sync carries on the Message. Live Reactions come as Reaction events.
+	Reactions []HistoryReaction `json:"reactions"`
+}
+
+// HistoryReaction is one Reaction on a Message of History Sync. Sender is the reactor, empty when FromMe.
+type HistoryReaction struct {
+	Sender string `json:"sender"`
+	FromMe bool   `json:"fromMe"`
+	Emoji  string `json:"emoji"`
 }
 
 // Quote is the Message that a reply quotes. Sender is its author, empty for the user. Text is the preview.
@@ -161,6 +212,12 @@ type HistorySync struct {
 type PushName struct {
 	JID  string `json:"jid"`
 	Name string `json:"name"`
+}
+
+// ContactBook is every name that the phone contacts hold, as whatsmeow stored them. It never removes a name.
+// whatsmeow sends no ContactName events for a full App State sync, so the port reads its store instead.
+type ContactBook struct {
+	Names []ContactName `json:"names"`
 }
 
 // ContactName is the name that the phone contacts hold for a Participant. An empty Name removes it.
@@ -286,6 +343,7 @@ func (LoggedOut) isEvent()      {}
 func (HistorySync) isEvent()    {}
 func (PushName) isEvent()       {}
 func (ContactName) isEvent()    {}
+func (ContactBook) isEvent()    {}
 func (Pin) isEvent()            {}
 func (Mute) isEvent()           {}
 func (ReadMarker) isEvent()     {}

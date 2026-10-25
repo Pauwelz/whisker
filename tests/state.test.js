@@ -17,6 +17,7 @@ for (const name of fs.readdirSync(fixtureDir).filter((f) => f.endsWith(".jsonl")
       const line = JSON.parse(text);
       if (line.dir === "out") state = State.applyFrame(state, line.frame);
       if (line.dir === "plugin" && line.openChat) state = State.openChat(state, line.openChat);
+      if (line.dir === "plugin" && line.lookup) state = State.lookupStarted(state, line.lookup);
       if (line.dir === "view") {
         // The JSON round trip drops the prototypes of the vm context, so deep equality works.
         for (const [key, value] of Object.entries(line.expect)) assert.deepEqual(JSON.parse(JSON.stringify(state[key] ?? null)), value, key);
@@ -271,16 +272,19 @@ test("Enter sends, Shift+Enter adds a line, an empty Enter does nothing", () => 
   assert.equal(State.composerAction(State.KEY_RETURN, false, " ", false), "swallow");
 });
 
-test("a Group Chat shows the sender name on each Message of others", () => {
-  assert.equal(State.senderLabel(group, theirs), "Bob");
-  assert.equal(State.senderLabel(group, mine), "");
-  assert.equal(State.senderLabel(direct, { fromMe: false, senderName: "Ann" }), "");
+test("the send button works when Enter would send", () => {
+  assert.equal(State.canSend("hi", false), true);
+  assert.equal(State.canSend(" \n ", false), false);
+  assert.equal(State.canSend("", true), true);
 });
 
-test("the Delivery State shows for the Messages of the user only, and Failed has Retry", () => {
-  const labels = ["pending", "sent", "delivered", "read", "played", "failed"].map((state) => State.deliveryLabel({ fromMe: true, state }));
-  assert.deepEqual(labels, ["Sending…", "Sent", "Delivered", "Read", "Played", "Failed"]);
-  assert.equal(State.deliveryLabel(theirs), "");
+test("a line shows the sender name of others and You for the user", () => {
+  assert.equal(State.senderLabel(theirs), "Bob");
+  assert.equal(State.senderLabel(mine), "You");
+  assert.equal(State.senderLabel({ fromMe: false, senderName: "Ann" }), "Ann");
+});
+
+test("Failed has Retry, other states do not", () => {
   assert.equal(State.canRetryMessage({ fromMe: true, state: "failed" }), true);
   assert.equal(State.canRetryMessage({ fromMe: true, state: "sent" }), false);
 });
@@ -361,10 +365,10 @@ test("only a map link opens", () => {
   assert.equal(State.linkCommand(url + " ; rm").length, 0);
 });
 
-test("a Tombstone shows a fixed text, an edited Message shows Edited", () => {
+test("a Tombstone shows a fixed text, an edited Message shows (edited)", () => {
   assert.equal(State.messageBody(sentMessage({ revoked: true, text: "" })), "This message was deleted");
   assert.equal(State.messageBody(sentMessage()), "hi");
-  assert.equal(State.editedLabel(sentMessage({ edited: true })), "Edited");
+  assert.equal(State.editedLabel(sentMessage({ edited: true })), "(edited)");
   assert.equal(State.editedLabel(sentMessage()), "");
   assert.equal(State.editedLabel(sentMessage({ edited: true, revoked: true })), "");
 });
@@ -413,6 +417,7 @@ test("the composer sends an edit when a Message is under edit, otherwise a new M
   assert.deepEqual(JSON.parse(State.composerRequest(4, direct.jid, "m1", "fixed")), { jsonrpc: "2.0", id: 4, method: "chat.edit", params: { chat: direct.jid, id: "m1", text: "fixed" } });
   assert.deepEqual(JSON.parse(State.composerRequest(5, direct.jid, "", "hi")), { jsonrpc: "2.0", id: 5, method: "chat.send", params: { chat: direct.jid, text: "hi" } });
   assert.deepEqual(JSON.parse(State.revokeRequest(6, direct.jid, "m1")), { jsonrpc: "2.0", id: 6, method: "chat.revoke", params: { chat: direct.jid, id: "m1" } });
+  assert.deepEqual(JSON.parse(State.deleteForMeRequest(7, direct.jid, "m1")), { jsonrpc: "2.0", id: 7, method: "chat.deleteForMe", params: { chat: direct.jid, id: "m1" } });
 });
 
 test("filePath turns a file URL into a path, and sendMediaRequest sends it", () => {
@@ -426,7 +431,7 @@ test("Reactions: the user picks, replaces or removes one; chips count the emoji"
   assert.equal(State.reactionChoice(msg, "🙏"), "");
   assert.equal(State.reactionChoice(msg, "😂"), "😂");
   assert.equal(State.reactionChoice({ reactions: [] }, "😂"), "😂");
-  assert.deepEqual(JSON.parse(JSON.stringify(State.reactionChips(msg))), [{ emoji: "👍", count: 2 }, { emoji: "🙏", count: 1 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(State.reactionChips(msg))), [{ emoji: "👍", count: 2, mine: false, names: ", " }, { emoji: "🙏", count: 1, mine: true, names: "You" }]);
   assert.deepEqual(JSON.parse(JSON.stringify(State.reactionChips({ id: "m2" }))), []);
   assert.deepEqual(JSON.parse(JSON.stringify(State.reactionChips({ ...msg, revoked: true }))), []);
   assert.deepEqual(Array.from(State.REACTION_EMOJI), ["👍", "❤️", "😂", "😮", "😢", "🙏"]);
@@ -516,7 +521,7 @@ test("panelParts: each part shows on its screen only", () => {
   const linked = { screen: State.SCREEN.LINKED, connection: "offline", settings: { sendOnline: true }, moreChats: true };
   assert.deepEqual(plain(State.panelParts(linked, noLocal)), {
     error: false, banner: true, qr: false, pairForm: false, pairToggle: false,
-    chatList: true, loadMoreChats: true, settingsButton: true, settings: false, chat: false,
+    chatList: true, loadMoreChats: true, newChat: false, newChatButton: true, emptyChat: false, settingsButton: true, settings: false, chat: false,
   });
   assert.equal(State.panelParts(linked, { ...noLocal, showSettings: true }).settings, true);
   assert.equal(State.panelParts(linked, { ...noLocal, showSettings: true }).chatList, false);
@@ -586,4 +591,14 @@ test("mediaFrameStep launches Media the user clicked once its path arrives, and 
   assert.deepEqual(plain(first.load), [image]);
   const second = State.mediaFrameStep(first.state, {}, { method: "connected" });
   assert.deepEqual(plain(second.load), []);
+});
+
+test("the wheel scrolls a fixed step per notch, a touchpad by its pixels, inside the list", () => {
+  // contentY, angleDelta.y, pixelDelta.y, top, bottom
+  assert.equal(State.wheelScrollTarget(500, 120, 0, 0, 1000), 500 - State.WHEEL_STEP);
+  assert.equal(State.wheelScrollTarget(500, -240, 0, 0, 1000), 500 + 2 * State.WHEEL_STEP);
+  assert.equal(State.wheelScrollTarget(500, 120, 7, 0, 1000), 493);
+  assert.equal(State.wheelScrollTarget(10, 120, 0, 0, 1000), 0);
+  assert.equal(State.wheelScrollTarget(990, -120, 0, 0, 1000), 1000);
+  assert.equal(State.wheelScrollTarget(0, -120, 0, 0, -50), 0); // content shorter than the view: stay at the top
 });

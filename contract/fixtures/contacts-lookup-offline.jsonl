@@ -1,0 +1,9 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","lookups":{"15551234567":"15551234567@s.whatsapp.net"}}
+{"dir":"whatsapp","sendError":"offline"}
+{"dir":"plugin","lookup":"15551234567"}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"contacts.lookup","params":{"phone":"15551234567"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"error":{"code":-32007,"message":"could not reach WhatsApp"}}}
+{"dir":"view","expect":{"notice":"Could not reach WhatsApp","lookup":{"phone":"15551234567","status":"offline","jid":""}}}

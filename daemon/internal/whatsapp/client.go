@@ -1,10 +1,14 @@
 package whatsapp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"go.mau.fi/whatsmeow/proto/waWeb"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +17,7 @@ import (
 	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
+	"go.mau.fi/whatsmeow/proto/waSyncAction"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -24,7 +29,7 @@ import (
 )
 
 // pairTimeout bounds the PairPhone network call. sendTimeout bounds one Send.
-// editTimeout bounds one Edit or Revoke, which block the Daemon loop.
+// editTimeout bounds one Edit, Revoke or App State write, which block the Daemon loop.
 // storeTimeout bounds one call to the LID store.
 const (
 	pairTimeout = 30 * time.Second
@@ -66,6 +71,12 @@ func NewClient(container *sqlstore.Container) (*Client, error) {
 
 func (c *Client) Linked() bool         { return c.cli.Store.ID != nil }
 func (c *Client) Events() <-chan Event { return c.events }
+func (c *Client) OwnUsers() []string {
+	if c.cli.Store.ID == nil {
+		return nil
+	}
+	return []string{c.cli.Store.GetJID().User, c.cli.Store.GetLID().User}
+}
 func (c *Client) Logout() error {
 	ctx, cancel := context.WithTimeout(context.Background(), pairTimeout)
 	defer cancel()
@@ -117,13 +128,50 @@ func qrFailureReason(item whatsmeow.QRChannelItem) string {
 }
 
 func (c *Client) PairCode(phone string) (string, error) {
+	digits, err := cleanPhone(phone)
+	if err != nil {
+		return "", err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), pairTimeout)
 	defer cancel()
-	code, err := c.cli.PairPhone(ctx, phone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
-	if errors.Is(err, whatsmeow.ErrPhoneNumberTooShort) || errors.Is(err, whatsmeow.ErrPhoneNumberIsNotInternational) {
-		return "", ErrInvalidPhone
+	return c.cli.PairPhone(ctx, digits, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+}
+
+func (c *Client) PhoneOf(lid string) string {
+	jid, err := types.ParseJID(lid)
+	if err != nil || jid.Server != types.HiddenUserServer {
+		return ""
 	}
-	return code, err
+	pn, err := c.lookupPhone(jid)
+	if err != nil || pn.IsEmpty() {
+		return ""
+	}
+	return pn.ToNonAD().String()
+}
+
+func (c *Client) Lookup(phone string) (string, string, error) {
+	digits, err := cleanPhone(phone)
+	if err != nil {
+		return "", "", err
+	}
+	if !c.cli.IsConnected() {
+		return digits, "", ErrOffline
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	found, err := c.cli.IsOnWhatsApp(ctx, []string{digits})
+	if err != nil {
+		return digits, "", offline(err)
+	}
+	for _, r := range found {
+		if r.IsIn && r.Query == digits {
+			if !r.PhoneNumber.IsEmpty() { // a LID answer still names the phone ID, the key of the Chat
+				return digits, r.PhoneNumber.String(), nil
+			}
+			return digits, r.JID.String(), nil
+		}
+	}
+	return digits, "", nil
 }
 
 func (c *Client) NewMessageID() string { return c.cli.GenerateMessageID() }
@@ -261,17 +309,69 @@ func (c *Client) receipt(chat, sender string, ids []string, kind ...types.Receip
 }
 
 func (c *Client) MarkChatRead(chat string) error {
+	return c.appState(chat, func(jid types.JID) appstate.PatchInfo {
+		return appstate.BuildMarkChatAsRead(jid, true, time.Now(), nil)
+	})
+}
+
+func (c *Client) SetPinned(chat string, pinned bool) error {
+	return c.appState(chat, func(jid types.JID) appstate.PatchInfo { return appstate.BuildPin(jid, pinned) })
+}
+
+func (c *Client) SetMuted(chat string, until int64) error {
+	return c.appState(chat, func(jid types.JID) appstate.PatchInfo {
+		switch {
+		case until == 0:
+			return appstate.BuildMuteAbs(jid, false, nil)
+		case until < 0:
+			return appstate.BuildMuteAbs(jid, true, nil) // no end time: for ever
+		}
+		end := until * 1000 // WhatsApp counts the end in milliseconds
+		return appstate.BuildMuteAbs(jid, true, &end)
+	})
+}
+
+func (c *Client) SetUnread(chat string, unread bool) error {
+	return c.appState(chat, func(jid types.JID) appstate.PatchInfo {
+		return appstate.BuildMarkChatAsRead(jid, !unread, time.Now(), nil)
+	})
+}
+
+// deleteForMePatch is the App State patch that deletes a Message on the user's devices only.
+// The index ends with the author: "0" for the user and for the other person of a Direct Chat.
+func deleteForMePatch(chat types.JID, id, sender string, fromMe bool, ts int64) appstate.PatchInfo {
+	own, author := "0", "0"
+	if fromMe {
+		own = "1"
+	} else if jid, err := types.ParseJID(sender); err == nil && jid.User != chat.User {
+		author = jid.String()
+	}
+	return appstate.PatchInfo{
+		Type: appstate.WAPatchRegularHigh,
+		Mutations: []appstate.MutationInfo{{
+			Index:   []string{appstate.IndexDeleteMessageForMe, chat.String(), id, own, author},
+			Version: 3,
+			Value: &waSyncAction.SyncActionValue{
+				DeleteMessageForMeAction: &waSyncAction.DeleteMessageForMeAction{DeleteMedia: proto.Bool(true), MessageTimestamp: proto.Int64(ts)},
+			},
+		}},
+	}
+}
+
+func (c *Client) DeleteForMe(chat, id, sender string, fromMe bool, ts int64) error {
+	return c.appState(chat, func(jid types.JID) appstate.PatchInfo { return deleteForMePatch(jid, id, sender, fromMe, ts) })
+}
+
+// appState sends the App State patch that build makes for a Chat.
+// shortcut: the call blocks the Daemon loop (up to 15 s), upgrade when another request must run meanwhile.
+func (c *Client) appState(chat string, build func(types.JID) appstate.PatchInfo) error {
 	jid, err := types.ParseJID(chat)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
 	defer cancel()
-	err = c.cli.SendAppState(ctx, appstate.BuildMarkChatAsRead(jid, true, time.Now(), nil))
-	if errors.Is(err, whatsmeow.ErrNotConnected) {
-		return ErrOffline
-	}
-	return err
+	return offline(c.cli.SendAppState(ctx, build(jid)))
 }
 
 func (c *Client) SendPresence(online bool) error {
@@ -335,6 +435,7 @@ func (c *Client) handle(evt any) {
 		c.events <- ChatPresence{Chat: c.chatOf(evt.MessageSource).String(), Sender: c.senderOf(evt.MessageSource).String(), State: state}
 	case *events.Connected:
 		c.events <- Connected{}
+		c.emitContactBook()
 	case *events.Disconnected:
 		c.events <- Disconnected{}
 	case *events.Message:
@@ -377,6 +478,8 @@ func (c *Client) handle(evt any) {
 		}
 	case *events.PushName:
 		c.events <- PushName{JID: c.phone(evt.JID).String(), Name: evt.NewPushName}
+	case *events.AppStateSyncComplete:
+		c.emitContactBook()
 	case *events.Contact:
 		c.events <- ContactName{JID: c.phone(evt.JID).String(), Name: evt.Action.GetFullName()}
 	case *events.Pin:
@@ -384,7 +487,7 @@ func (c *Client) handle(evt any) {
 	case *events.Mute:
 		until := int64(0)
 		if evt.Action.GetMuted() {
-			until = muteUntil(evt.Action.GetMuteEndTimestamp())
+			until = muteUntil(appStateMuteSeconds(evt.Action.GetMuteEndTimestamp()))
 		}
 		c.events <- Mute{JID: c.phone(evt.JID).String(), Until: until}
 	case *events.MarkChatAsRead:
@@ -454,6 +557,15 @@ func muteUntil(end int64) int64 {
 	return end
 }
 
+// appStateMuteSeconds converts a mute end of App State (Unix milliseconds, like whatsmeow's time.UnixMilli) to seconds.
+// A negative value (for ever) stays negative.
+func appStateMuteSeconds(ms int64) int64 {
+	if ms < 0 {
+		return ms
+	}
+	return ms / 1000
+}
+
 // aliasOf is the alias of a LID and a phone JID, or false when they are not such a pair.
 func aliasOf(lid, phone types.JID) (ChatAlias, bool) {
 	if lid.Server != types.HiddenUserServer || phone.Server != types.DefaultUserServer {
@@ -484,11 +596,51 @@ func historyAliases(data *waHistorySync.HistorySync) []ChatAlias {
 	return out
 }
 
+// emitContactBook sends the contact names of whatsmeow's store. A failed read only delays the names to the next connect.
+func (c *Client) emitContactBook() {
+	if c.cli.Store.Contacts == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
+	defer cancel()
+	contacts, err := c.cli.Store.Contacts.GetAllContacts(ctx)
+	if err != nil {
+		return
+	}
+	if book := contactBook(contacts, func(j types.JID) types.JID { return c.phone(j) }); len(book.Names) > 0 {
+		c.events <- book
+	}
+}
+
+// contactBook keeps the contacts that have a full name, under their phone JID, sorted by JID.
+func contactBook(contacts map[types.JID]types.ContactInfo, phone func(types.JID) types.JID) ContactBook {
+	var book ContactBook
+	for jid, info := range contacts {
+		if info.FullName != "" {
+			book.Names = append(book.Names, ContactName{JID: phone(jid).String(), Name: info.FullName})
+		}
+	}
+	slices.SortFunc(book.Names, func(a, b ContactName) int { return strings.Compare(a.JID, b.JID) })
+	return book
+}
+
 // emitLiveAlias tells the chat store that the LID of a live event and the phone JID it resolved to are one Chat.
 func (c *Client) emitLiveAlias(src types.MessageSource) {
-	if a, ok := aliasOf(src.Chat, c.chatOf(src)); ok {
+	for _, a := range liveAliases(src, c.chatOf(src)) {
 		c.events <- a
 	}
+}
+
+// liveAliases are the LID to phone pairs that a live event teaches: its Chat, given its resolved phone JID, and its sender and sender alt in either order.
+// The sender pair lets group Messages stored under a LID take the name of the phone JID.
+func liveAliases(src types.MessageSource, chat types.JID) []ChatAlias {
+	var out []ChatAlias
+	for _, pair := range [][2]types.JID{{src.Chat, chat}, {src.Sender, src.SenderAlt}, {src.SenderAlt, src.Sender}} {
+		if a, ok := aliasOf(pair[0], pair[1]); ok && !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // historySync maps one History Sync batch, and lists the aliases that the batch taught. Chats that do not parse are dropped.
@@ -527,12 +679,32 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 				continue
 			}
 			if body, ok := contentOf(parsed.Message, parsed.IsViewOnce); ok {
-				chat.Messages = append(chat.Messages, c.messageOf(parsed.Info, parsed.Message, body))
+				m := c.messageOf(parsed.Info, parsed.Message, body)
+				m.Reactions = historyReactions(hm.GetMessage().GetReactions(), c.phoneString)
+				chat.Messages = append(chat.Messages, m)
 			}
 		}
 		batch.Chats = append(batch.Chats, chat)
 	}
 	return batch, historyAliases(data)
+}
+
+// historyReactions maps the Reactions that History Sync carries on a Message. The reactor is the participant of the
+// Reaction key in a Group Chat, else the Chat; the user's own Reaction has no sender. An empty emoji is a removed Reaction.
+func historyReactions(rs []*waWeb.Reaction, phone func(string) string) []HistoryReaction {
+	var out []HistoryReaction
+	for _, r := range rs {
+		if r.GetText() == "" {
+			continue
+		}
+		key := r.GetKey()
+		if key.GetFromMe() {
+			out = append(out, HistoryReaction{FromMe: true, Emoji: r.GetText()})
+			continue
+		}
+		out = append(out, HistoryReaction{Sender: phone(cmp.Or(key.GetParticipant(), key.GetRemoteJID())), Emoji: r.GetText()})
+	}
+	return out
 }
 
 func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {
@@ -588,7 +760,7 @@ func mediaOf(m *waE2E.Message) *Media {
 	switch {
 	case m.GetImageMessage() != nil:
 		im := m.GetImageMessage()
-		return &Media{Kind: media.Image, Mime: im.GetMimetype(), Size: int64(im.GetFileLength()), Key: im.GetMediaKey(), DirectPath: im.GetDirectPath(), FileSHA256: im.GetFileSHA256(), FileEncSHA256: im.GetFileEncSHA256()}
+		return &Media{Kind: media.Image, Mime: im.GetMimetype(), Size: int64(im.GetFileLength()), Key: im.GetMediaKey(), DirectPath: im.GetDirectPath(), FileSHA256: im.GetFileSHA256(), FileEncSHA256: im.GetFileEncSHA256(), Thumbnail: im.GetJPEGThumbnail()}
 	case m.GetStickerMessage() != nil:
 		sm := m.GetStickerMessage()
 		return &Media{Kind: media.Sticker, Mime: sm.GetMimetype(), Size: int64(sm.GetFileLength()), Key: sm.GetMediaKey(), DirectPath: sm.GetDirectPath(), FileSHA256: sm.GetFileSHA256(), FileEncSHA256: sm.GetFileEncSHA256()}
@@ -598,13 +770,13 @@ func mediaOf(m *waE2E.Message) *Media {
 		if am.GetPTT() {
 			kind = media.Voice
 		}
-		return &Media{Kind: kind, Mime: am.GetMimetype(), Size: int64(am.GetFileLength()), Key: am.GetMediaKey(), DirectPath: am.GetDirectPath(), FileSHA256: am.GetFileSHA256(), FileEncSHA256: am.GetFileEncSHA256()}
+		return &Media{Kind: kind, Mime: am.GetMimetype(), Size: int64(am.GetFileLength()), Key: am.GetMediaKey(), DirectPath: am.GetDirectPath(), FileSHA256: am.GetFileSHA256(), FileEncSHA256: am.GetFileEncSHA256(), Duration: int64(am.GetSeconds())}
 	case m.GetVideoMessage() != nil:
 		vm := m.GetVideoMessage()
-		return &Media{Kind: media.Video, Mime: vm.GetMimetype(), Size: int64(vm.GetFileLength()), Key: vm.GetMediaKey(), DirectPath: vm.GetDirectPath(), FileSHA256: vm.GetFileSHA256(), FileEncSHA256: vm.GetFileEncSHA256()}
+		return &Media{Kind: media.Video, Mime: vm.GetMimetype(), Size: int64(vm.GetFileLength()), Key: vm.GetMediaKey(), DirectPath: vm.GetDirectPath(), FileSHA256: vm.GetFileSHA256(), FileEncSHA256: vm.GetFileEncSHA256(), Thumbnail: vm.GetJPEGThumbnail(), Duration: int64(vm.GetSeconds())}
 	case m.GetDocumentMessage() != nil:
 		dm := m.GetDocumentMessage()
-		return &Media{Kind: media.Document, Mime: dm.GetMimetype(), Name: dm.GetFileName(), Size: int64(dm.GetFileLength()), Key: dm.GetMediaKey(), DirectPath: dm.GetDirectPath(), FileSHA256: dm.GetFileSHA256(), FileEncSHA256: dm.GetFileEncSHA256()}
+		return &Media{Kind: media.Document, Mime: dm.GetMimetype(), Name: dm.GetFileName(), Size: int64(dm.GetFileLength()), Key: dm.GetMediaKey(), DirectPath: dm.GetDirectPath(), FileSHA256: dm.GetFileSHA256(), FileEncSHA256: dm.GetFileEncSHA256(), Thumbnail: dm.GetJPEGThumbnail()}
 	}
 	return nil
 }

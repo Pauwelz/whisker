@@ -7,7 +7,7 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
 {"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"in1","sender":"1@s.whatsapp.net","time":50,"text":"teh","pushName":"Ann"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"teh","state":"","edited":false,"revoked":false}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"teh","state":"","edited":false,"revoked":false,"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"notify","params":{"chat":"1@s.whatsapp.net","kind":"direct","name":"Ann","senderName":"Ann","text":"teh"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.send","params":{"chat":"1@s.whatsapp.net","text":"hi"}}}
@@ -17,14 +17,14 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hello","state":"sent","edited":true,"revoked":false}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hello","state":"sent","edited":true,"revoked":false}}}}
 {"dir":"edited","edits":["fake-1:hello"]}
-{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"teh","state":"","edited":false,"revoked":false},{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hello","state":"sent","edited":true,"revoked":false}],"moreMessages":false}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"teh","state":"","edited":false,"revoked":false,"senderPush":true},{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hello","state":"sent","edited":true,"revoked":false}],"moreMessages":false}}}
 {"dir":"whatsapp","event":{"kind":"messageEdited","chat":"1@s.whatsapp.net","id":"in1","sender":"1@s.whatsapp.net","text":"the"}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"the","state":"","edited":true,"revoked":false}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"the","state":"","edited":true,"revoked":false,"senderPush":true}}}}
 {"dir":"whatsapp","event":{"kind":"messageEdited","chat":"1@s.whatsapp.net","id":"in1","sender":"2@s.whatsapp.net","text":"hacked"}}
 {"dir":"whatsapp","event":{"kind":"messageEdited","chat":"1@s.whatsapp.net","id":"nope","sender":"1@s.whatsapp.net","text":"x"}}
 {"dir":"whatsapp","event":{"kind":"messageEdited","chat":"1@s.whatsapp.net","id":"fake-1","fromMe":true,"text":"hello!"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hello!","state":"sent","edited":true,"revoked":false}}}}
-{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"the","state":"","edited":true,"revoked":false},{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hello!","state":"sent","edited":true,"revoked":false}],"moreMessages":false}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"the","state":"","edited":true,"revoked":false,"senderPush":true},{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"hello!","state":"sent","edited":true,"revoked":false}],"moreMessages":false}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.edit","params":{"chat":"1@s.whatsapp.net","id":"in1","text":"mine now"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"error":{"code":-32006,"message":"invalid message"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.edit","params":{"chat":"1@s.whatsapp.net","id":"fake-1","text":"  "}}}
@@ -45,5 +45,5 @@
 {"dir":"clock","now":1000}
 {"dir":"whatsapp","sendError":"offline"}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":7,"method":"chat.edit","params":{"chat":"1@s.whatsapp.net","id":"fake-1","text":"later"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":7,"error":{"code":-32007,"message":"not connected"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":7,"error":{"code":-32007,"message":"could not reach WhatsApp"}}}
 {"dir":"edited","edits":["fake-1:hello","fake-1:on time"]}

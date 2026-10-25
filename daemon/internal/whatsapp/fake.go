@@ -32,6 +32,10 @@ type Fake struct {
 	readErr    error
 	reads      []Read
 	chatReads  []string
+	pins       []string
+	mutes      []string
+	unreads    []string
+	deletes    []string
 	plays      []Read
 	edits      []string
 	revokes    []string
@@ -40,7 +44,37 @@ type Fake struct {
 	online     []bool
 	subscribed []string
 	typing     []string
-	gate       chan struct{} // while set, Send waits
+	own        []string
+	lookups    map[string]string // digits -> WhatsApp ID; a missing number is not on WhatsApp
+	phones     map[string]string // LID -> phone JID, as the local LID store holds them
+	gate       chan struct{}     // while set, Send waits
+}
+
+// SetOwn sets the user parts of the user's own IDs.
+func (f *Fake) SetOwn(users ...string) { f.mu.Lock(); f.own = users; f.mu.Unlock() }
+
+func (f *Fake) OwnUsers() []string { f.mu.Lock(); defer f.mu.Unlock(); return f.own }
+
+// SetPhones presets the local LID store: LID to phone JID.
+func (f *Fake) SetPhones(phones map[string]string) { f.mu.Lock(); f.phones = phones; f.mu.Unlock() }
+
+func (f *Fake) PhoneOf(lid string) string { f.mu.Lock(); defer f.mu.Unlock(); return f.phones[lid] }
+
+// SetLookups presets the answers of Lookup: digits to WhatsApp ID. A number that is not in the map is not on WhatsApp.
+func (f *Fake) SetLookups(lookups map[string]string) { f.mu.Lock(); f.lookups = lookups; f.mu.Unlock() }
+
+// Lookup validates like the real port, fails with the send error, then answers from the preset.
+func (f *Fake) Lookup(phone string) (string, string, error) {
+	digits, err := cleanPhone(phone)
+	if err != nil {
+		return "", "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return digits, "", f.sendErr
+	}
+	return digits, f.lookups[digits], nil
 }
 
 func NewFake() *Fake { return &Fake{events: make(chan Event, 64)} }
@@ -246,6 +280,64 @@ func (f *Fake) MarkChatRead(chat string) error {
 	defer f.mu.Unlock()
 	f.chatReads = append(f.chatReads, chat)
 	return nil
+}
+
+// SetPinned and SetMuted fail with the send error, like Send. A good call is recorded as "chat:true" and "chat:until".
+// #57 records Read Marker writes the same way.
+func (f *Fake) SetPinned(chat string, pinned bool) error {
+	return f.record(&f.pins, fmt.Sprintf("%s:%t", chat, pinned))
+}
+
+func (f *Fake) SetMuted(chat string, until int64) error {
+	return f.record(&f.mutes, fmt.Sprintf("%s:%d", chat, until))
+}
+
+// SetUnread records "chat:true" or "chat:false". It is not a Read Receipt and not a MarkChatRead.
+func (f *Fake) SetUnread(chat string, unread bool) error {
+	return f.record(&f.unreads, fmt.Sprintf("%s:%t", chat, unread))
+}
+
+// DeleteForMe records "chat:id".
+func (f *Fake) DeleteForMe(chat, id, _ string, _ bool, _ int64) error {
+	return f.record(&f.deletes, chat+":"+id)
+}
+
+// Deletes lists the "delete for me" writes that worked, in order.
+func (f *Fake) Deletes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.deletes...)
+}
+
+// Unreads lists the Read Marker writes that worked, in order.
+func (f *Fake) Unreads() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.unreads...)
+}
+
+// record adds an App State write to list, or fails with the send error and records nothing.
+func (f *Fake) record(list *[]string, entry string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	*list = append(*list, entry)
+	return nil
+}
+
+// Pins and Mutes list the App State writes that worked, in order.
+func (f *Fake) Pins() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.pins...)
+}
+
+func (f *Fake) Mutes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.mutes...)
 }
 
 // Edit and Revoke fail with the send error, like Send. A good call is recorded.

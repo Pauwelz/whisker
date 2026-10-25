@@ -1,0 +1,13 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.start","params":{"jid":"1234-5@g.us"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"error":{"code":-32010,"message":"invalid chat"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.start","params":{"jid":"nonsense"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"error":{"code":-32010,"message":"invalid chat"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.start","params":{"jid":"1111:7@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"error":{"code":-32010,"message":"invalid chat"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.start","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"error":{"code":-32010,"message":"invalid chat"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chats":[],"more":false,"offset":0,"unreadChats":0}}}

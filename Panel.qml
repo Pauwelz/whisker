@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Effects
+import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
 import "WhiskerState.js" as State
@@ -17,35 +19,56 @@ Panel {
   // Settings view and Log out confirmation: the user picks them, so they are view state only.
   property bool showSettings: false
   property bool confirmLogout: false
+  property bool showNewChat: false // the new Chat view: the user picks it, so it is view state only
+  property string chatFilter: "all" // the Chat list filter the user picked: all, unread or groups
+  readonly property var shownChats: State.filterChats(root.view.chats || [], root.chatFilter)
   property string savingId: "" // the Message whose Save as path is being typed, or empty
   // The Draft of the open Chat comes from the Daemon state. The Plugin changes it through Service.changeDraft.
   readonly property var draft: State.draftOf(root.view)
   readonly property string editingId: root.draft.edit // the Message under edit in the composer, or empty
   readonly property var quoting: State.draftTarget(root.view, "quote") // the Message that the next send quotes, or null
   property string reactingId: "" // the Message whose Reaction picker is open, or empty
+  property string optionsFor: "" // the jid of the Chat whose Chat menu is open, or empty
+  // The open Chat as the Chat list holds it, for the pin and mute state of its menu. Null when a search hides it.
+  readonly property var openChatRow: root.openChat ? State.chatRow(root.view, root.openChat.jid) : null
+  property string menuId: "" // the Message whose action menu is open, or empty
   readonly property var settings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
   readonly property var openChat: root.view.openChat || null
+  readonly property var timeline: root.openChat ? State.timelineRows(root.openChat.messages) : [] // oldest first
   // Which parts show. The decision is State.panelParts.
-  readonly property var parts: State.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings })
+  readonly property var parts: State.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings, showNewChat: root.showNewChat })
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+  // The bars: the foreground colour at low opacity over the pop-out background.
+  readonly property color surfaceColor: Qt.rgba(contentForeground.r, contentForeground.g, contentForeground.b, 0.06)
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   // Runs a fixed shortcut. The decision is State.shortcutAction.
   function runShortcut(shortcut) {
-    var action = State.shortcutAction(shortcut, root.view, { showSettings: root.showSettings })
+    var action = State.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat })
     if (action === "closeChat") {
       root.reactingId = ""
       root.whiskerService.closeChat()
     } else if (action === "closeSettings") {
       root.showSettings = false
       root.confirmLogout = false
+    } else if (action === "closeNewChat") {
+      root.showNewChat = false
     } else if (action === "closePopout") {
       root.close()
     } else if (action === "focusSearch") {
       searchInput.forceActiveFocus()
     }
+  }
+
+  // Called by MessageLine, which cannot reach the composer.
+  function focusComposer() { composer.forceActiveFocus() }
+
+  // A click on a Quote: scroll the timeline to the quoted Message. The model is newest first, so the row index flips.
+  function jumpToMessage(id) {
+    var index = State.rowIndexOf(root.timeline, id)
+    if (index >= 0) timelineView.positionViewAtIndex(root.timeline.length - 1 - index, ListView.Center)
   }
 
   Shortcut {
@@ -77,7 +100,19 @@ Panel {
     labelText: State.unreadLabel(root.view)
     anchors.fill: parent
     bar: root.bar
-    text: ""
+    // One-colour cat. MultiEffect paints it in the bar foreground, so it follows the theme.
+    iconComponent: Component {
+      Image {
+        source: Qt.resolvedUrl("assets/whisker-bar.svg")
+        sourceSize.height: button.opticalSize * Screen.devicePixelRatio
+        fillMode: Image.PreserveAspectFit
+        layer.enabled: true
+        layer.effect: MultiEffect {
+          colorization: 1.0
+          colorizationColor: button.foreground
+        }
+      }
+    }
     dimmed: State.barDimmed(root.view)
     tooltipText: root.view.message
     onPressed: function(b) { root.toggle() }
@@ -89,9 +124,9 @@ Panel {
     owner: root
     bar: root.bar
     open: root.opened
-    centerOnBar: true
+    centerOnBar: false // open under the bar button, as other plugins do
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(380))
+    contentWidth: panel.fittedContentWidth(Style.space(480))
     contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
     PanelKeyCatcher {
@@ -108,8 +143,52 @@ Panel {
         anchors.top: parent.top
         spacing: Style.space(8)
 
+        // Top bar: the small logo, the name, the unread count and "+ new chat". The Chat view and the new Chat view have their own bar.
+        Rectangle {
+          visible: !root.parts.chat && !root.parts.newChat
+          width: parent.width
+          height: headerRow.implicitHeight + Style.space(8)
+          color: root.surfaceColor
+          RowLayout {
+            id: headerRow
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(4)
+            spacing: Style.space(8)
+            Image {
+              source: Qt.resolvedUrl("assets/whisker.svg")
+              Layout.preferredWidth: Style.space(16)
+              Layout.preferredHeight: Style.space(16)
+              sourceSize.width: Style.space(16) * Screen.devicePixelRatio
+              sourceSize.height: Style.space(16) * Screen.devicePixelRatio
+            }
+            Text {
+              text: "whisker"
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+              font.bold: true
+            }
+            Text {
+              Layout.fillWidth: true
+              textFormat: Text.PlainText
+              text: State.unreadSuffix(root.view)
+              opacity: 0.5
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+            Button {
+              visible: root.parts.newChatButton
+              text: "+ new chat"
+              onClicked: root.showNewChat = true
+            }
+          }
+        }
+
         Text {
           id: message
+          visible: State.statusLineShown(root.view)
           width: parent.width
           wrapMode: Text.Wrap
           textFormat: Text.PlainText
@@ -117,6 +196,24 @@ Panel {
           color: root.parts.error ? Color.urgent : root.contentForeground
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
+        }
+
+        // The notice of an error code, for example "Could not reach WhatsApp". It goes away by itself.
+        Text {
+          visible: text !== ""
+          width: parent.width
+          wrapMode: Text.Wrap
+          textFormat: Text.PlainText
+          text: root.view.notice || ""
+          color: Color.urgent
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+          onTextChanged: if (text !== "") noticeTimer.restart()
+        }
+        Timer {
+          id: noticeTimer
+          interval: 4000
+          onTriggered: root.whiskerService.dismissNotice()
         }
 
         // "Connecting…" or "Offline" while the connection is not up.
@@ -173,15 +270,188 @@ Panel {
           onClicked: root.pairMode = !root.pairMode
         }
 
-        TextInput {
-          id: searchInput
+        // The search row: a glyph, the search field and the filters. A line below it.
+        RowLayout {
+          visible: root.parts.chatList
+          width: parent.width - Style.space(16)
+          x: Style.space(8)
+          spacing: Style.space(8)
+          Text {
+            text: "󰍉"
+            opacity: 0.6
+            color: Color.accent
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.body
+          }
+          TextInput {
+            id: searchInput
+            Layout.fillWidth: true
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.body
+            onTextChanged: root.whiskerService.searchChats(text)
+            Keys.onEscapePressed: root.runShortcut("Escape")
+            Text {
+              visible: searchInput.text === ""
+              text: "search chats"
+              opacity: 0.5
+              color: searchInput.color
+              font: searchInput.font
+            }
+          }
+          Repeater {
+            model: State.CHAT_FILTERS
+            Button {
+              text: modelData.label
+              selected: root.chatFilter === modelData.value
+              onClicked: root.chatFilter = modelData.value
+            }
+          }
+        }
+        Rectangle {
           visible: root.parts.chatList
           width: parent.width
-          color: root.contentForeground
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-          onTextChanged: root.whiskerService.searchChats(text)
-          Keys.onEscapePressed: root.runShortcut("Escape")
+          height: 1
+          color: Color.muted
+        }
+
+        // The new Chat view: search the people, pick one to open the Chat.
+        Column {
+          visible: root.parts.newChat
+          width: parent.width
+          spacing: Style.space(8)
+          onVisibleChanged: if (visible) {
+            newChatInput.text = ""
+            newChatInput.forceActiveFocus()
+            root.whiskerService.searchContacts("")
+          }
+
+          Rectangle {
+            width: parent.width
+            height: newChatBar.implicitHeight + Style.space(8)
+            color: root.surfaceColor
+            RowLayout {
+              id: newChatBar
+              anchors.fill: parent
+              anchors.leftMargin: Style.space(4)
+              anchors.rightMargin: Style.space(8)
+              spacing: Style.space(4)
+              Button {
+                text: "←"
+                tooltipText: "Back to Chats"
+                onClicked: root.showNewChat = false
+              }
+              Text {
+                Layout.fillWidth: true
+                text: "new chat"
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+              }
+            }
+          }
+
+          RowLayout {
+            width: parent.width - Style.space(16)
+            x: Style.space(8)
+            spacing: Style.space(8)
+            Text {
+              text: "󰍉"
+              opacity: 0.6
+              color: Color.accent
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+            TextInput {
+              id: newChatInput
+              Layout.fillWidth: true
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+              onTextChanged: if (parent.visible) root.whiskerService.searchContacts(text)
+              Keys.onEscapePressed: root.runShortcut("Escape")
+              Text {
+                visible: newChatInput.text === ""
+                text: "name or phone number, e.g. +32 470 …"
+                opacity: 0.5
+                color: newChatInput.color
+                font: newChatInput.font
+              }
+            }
+          }
+          Rectangle {
+            width: parent.width
+            height: 1
+            color: Color.muted
+          }
+          Text {
+            x: Style.space(8)
+            text: "contacts"
+            opacity: 0.5
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          ListView {
+            id: newChatList
+            WheelScroll { view: newChatList }
+            width: parent.width
+            height: Style.space(420)
+            clip: true
+            model: State.newChatRows(root.view.contacts, newChatInput.text, root.view.lookup)
+            delegate: Item {
+              required property var modelData
+              readonly property bool note: modelData.kind === "note"
+              width: ListView.view.width
+              implicitHeight: rowLine.implicitHeight
+              height: implicitHeight
+              TapHandler {
+                enabled: modelData.kind === "contact" || modelData.status === "found"
+                onTapped: {
+                  root.showNewChat = false
+                  root.whiskerService.startChat(modelData.kind === "phone" ? { jid: modelData.jid, name: modelData.phone } : modelData)
+                }
+              }
+              // Contact row: "@ name    +phone  open|new". A phone row shows the number and its status. The note is a dim footer line.
+              RowLayout {
+                id: rowLine
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Style.space(8)
+                anchors.rightMargin: Style.space(8)
+                spacing: Style.space(8)
+                Text {
+                  visible: !note
+                  text: "@"
+                  opacity: 0.6
+                  color: root.contentForeground
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.body
+                }
+                Text {
+                  Layout.fillWidth: true
+                  wrapMode: Text.Wrap
+                  textFormat: Text.PlainText
+                  text: note ? modelData.text : (modelData.kind === "phone" ? modelData.phone : modelData.name)
+                  color: root.contentForeground
+                  opacity: note || modelData.pushNameOnly ? 0.6 : 1
+                  font.family: root.contentFontFamily
+                  font.pixelSize: note ? Style.font.caption : Style.font.body
+                }
+                Text {
+                  visible: !note
+                  textFormat: Text.PlainText
+                  text: (modelData.kind === "contact" ? modelData.phone + "  " : "") + modelData.label
+                  opacity: 0.6
+                  color: root.contentForeground
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.body
+                }
+              }
+            }
+          }
         }
 
         Button {
@@ -256,347 +526,224 @@ Panel {
           }
         }
 
-        // The open Chat: its timeline, newest at the bottom, and the composer. Enter sends, Shift+Enter adds a line.
-        Column {
+        // The open Chat: its top bar, its timeline (newest at the bottom) and the composer. Enter sends, Shift+Enter adds a line.
+        // The Chat view has a fixed height; the timeline takes what the bar and the composer leave.
+        ColumnLayout {
           visible: root.parts.chat
           width: parent.width
-          spacing: Style.space(8)
+          height: Style.space(560)
+          spacing: Style.space(4)
           onVisibleChanged: if (visible) composer.forceActiveFocus()
 
-          Button {
-            text: "Back: " + (root.openChat ? root.openChat.name : "")
-            bordered: true
-            onClicked: {
-              root.reactingId = ""
-              root.whiskerService.closeChat()
-            }
-          }
-
-          // Presence of the other side: Online or Last Seen, and "typing…" or "recording…".
-          Text {
-            visible: text !== ""
-            width: parent.width
-            textFormat: Text.PlainText
-            text: State.chatStatusLabel(root.view, Math.floor(Date.now() / 1000))
-            color: root.contentForeground
-            opacity: 0.6
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-          }
-
-          Button {
-            visible: !!root.openChat && root.openChat.moreMessages === true
-            text: "Load older"
-            bordered: true
-            onClicked: root.whiskerService.loadOlderMessages()
-          }
-
-          ListView {
-            width: parent.width
-            height: Style.space(260)
-            clip: true
-            verticalLayoutDirection: ListView.BottomToTop
-            model: root.openChat ? root.openChat.messages.slice().reverse() : []
-            delegate: Column {
-              id: messageItem
-              readonly property var message: modelData
-              width: ListView.view.width
-              spacing: Style.space(2)
+          // Top bar: "← # name · status" on the left; the pin and mute marks of the Chat and "⋯" on the right.
+          Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: chatBar.implicitHeight + Style.space(8)
+            color: root.surfaceColor
+            RowLayout {
+              id: chatBar
+              anchors.fill: parent
+              anchors.leftMargin: Style.space(4)
+              anchors.rightMargin: Style.space(4)
+              spacing: Style.space(4)
+              Button {
+                text: "←"
+                tooltipText: "Back to Chats"
+                onClicked: {
+                  root.reactingId = ""
+                  root.menuId = ""
+                  root.optionsFor = ""
+                  root.whiskerService.closeChat()
+                }
+              }
               Text {
-                visible: text !== ""
-                text: State.senderLabel(root.openChat, modelData)
+                Layout.maximumWidth: parent.width * 0.6
+                elide: Text.ElideRight
                 textFormat: Text.PlainText
+                text: root.openChat ? State.chatSign(root.openChat) + " " + root.openChat.name : ""
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
                 font.bold: true
               }
-              // The Quote of a reply: the quoted author and a one-line preview.
+              // Presence of the other side: Online or Last Seen, and "typing…" or "recording…" in the accent colour.
               Text {
-                readonly property var quote: State.quoteView(modelData)
-                visible: quote !== null
-                width: parent.width
+                Layout.fillWidth: true
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
-                text: quote ? quote.sender + ": " + quote.text : ""
-                opacity: 0.6
-                color: root.contentForeground
+                readonly property string status: State.chatStatusLabel(root.view, Math.floor(Date.now() / 1000))
+                text: status !== "" ? " · " + status : ""
+                color: State.activityLabel(root.view) !== "" ? Color.accent : root.contentForeground
+                opacity: State.activityLabel(root.view) !== "" ? 1 : 0.6
                 font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.body
               }
               Text {
-                visible: text !== ""
-                width: parent.width
-                wrapMode: Text.Wrap
-                textFormat: Text.StyledText
-                text: State.messageHtml(modelData)
-                font.italic: modelData.revoked === true
+                visible: !!root.openChatRow && root.openChatRow.pinned === true
+                text: "▲"
+                opacity: 0.8
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+              }
+              Text {
+                visible: !!root.openChatRow && root.openChatRow.muted === true
+                text: "󰝟"
+                opacity: 0.6
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
               }
               Button {
-                readonly property var map: State.mapView(modelData)
-                visible: map !== null
-                text: "Open map"
-                bordered: true
-                onClicked: root.whiskerService.openLink(map.url)
-              }
-              // Media: an image or sticker shows here once the Daemon holds it. The path comes from media.open, never bytes.
-              Image {
-                readonly property string file: State.mediaPath(root.view, modelData)
-                visible: file !== "" && State.showsInline(modelData)
-                source: visible ? "file://" + file : ""
-                width: Math.min(parent.width, Style.space(240))
-                fillMode: Image.PreserveAspectFit
-                asynchronous: true
-                TapHandler { onTapped: root.whiskerService.openMedia(modelData) }
-              }
-              Row {
-                visible: !!modelData.media
-                spacing: Style.space(8)
-                Text {
-                  text: State.mediaLabel(modelData) + (State.mediaStatus(modelData) !== "" ? " - " + State.mediaStatus(modelData) : "")
-                  textFormat: Text.PlainText
-                  color: State.mediaFailed(modelData) ? Color.urgent : root.contentForeground
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.caption
-                }
-                Button {
-                  visible: State.canDownloadMedia(modelData)
-                  text: State.downloadLabel(modelData)
-                  bordered: true
-                  onClicked: root.whiskerService.downloadMedia(modelData)
-                }
-                Button {
-                  visible: State.canOpenMedia(modelData)
-                  text: State.openLabel(modelData, root.whiskerService.playingKey)
-                  bordered: true
-                  onClicked: root.whiskerService.openMedia(modelData)
-                }
-                Button {
-                  visible: State.canOpenMedia(modelData)
-                  text: "Save as"
-                  bordered: true
-                  onClicked: root.savingId = modelData.id
-                }
-              }
-              // Save as: type an absolute path, then press Enter. Escape cancels.
-              TextEdit {
-                visible: root.savingId === modelData.id
-                width: parent.width
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-                onVisibleChanged: if (visible) forceActiveFocus()
-                Keys.onPressed: function(event) {
-                  if (event.key === Qt.Key_Escape) {
-                    root.savingId = ""
-                  } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    root.whiskerService.saveMedia(modelData, text.trim())
-                    root.savingId = ""
-                    text = ""
-                  } else {
-                    return
-                  }
-                  event.accepted = true
-                }
-              }
-              Text {
-                visible: text !== ""
-                text: State.reactionChips(modelData).map(function (c) { return c.emoji + " " + c.count }).join("  ")
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-              }
-              // The Reaction picker: the six default emoji. Picking your current Reaction removes it.
-              Row {
-                visible: root.reactingId === modelData.id
-                spacing: Style.space(4)
-                Repeater {
-                  model: State.REACTION_EMOJI
-                  Button {
-                    text: modelData
-                    bordered: State.myReaction(messageItem.message) === modelData
-                    onClicked: {
-                      root.whiskerService.reactToMessage(messageItem.message, modelData)
-                      root.reactingId = ""
-                    }
-                  }
-                }
-              }
-              Row {
-                spacing: Style.space(8)
-                Text {
-                  visible: text !== ""
-                  text: State.deliveryLabel(modelData)
-                  color: State.canRetryMessage(modelData) ? Color.urgent : root.contentForeground
-                  opacity: 0.6
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.caption
-                }
-                Text {
-                  visible: text !== ""
-                  text: State.editedLabel(modelData)
-                  color: root.contentForeground
-                  opacity: 0.6
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.caption
-                }
-                Button {
-                  visible: State.canReactToMessage(modelData)
-                  text: "React"
-                  bordered: true
-                  onClicked: root.reactingId = root.reactingId === modelData.id ? "" : modelData.id
-                }
-                Button {
-                  visible: State.canQuoteMessage(modelData)
-                  text: "Quote"
-                  bordered: true
-                  onClicked: {
-                    root.whiskerService.changeDraft({ quote: modelData.id })
-                    composer.forceActiveFocus()
-                  }
-                }
-                Button {
-                  visible: State.canEditMessage(modelData, Math.floor(Date.now() / 1000))
-                  text: "Edit"
-                  bordered: true
-                  onClicked: {
-                    root.whiskerService.changeDraft({ edit: modelData.id, text: modelData.text })
-                    composer.forceActiveFocus()
-                  }
-                }
-                Button {
-                  visible: State.canRevokeMessage(modelData)
-                  text: "Delete"
-                  bordered: true
-                  onClicked: root.whiskerService.revokeMessage(modelData.id)
-                }
-                Button {
-                  visible: State.canRetryMessage(modelData)
-                  text: "Retry"
-                  bordered: true
-                  onClicked: root.whiskerService.retryMessage(modelData.id)
-                }
+                visible: root.openChatRow !== null
+                text: "⋯"
+                tooltipText: "Chat menu"
+                onClicked: root.optionsFor = root.optionsFor === root.openChat.jid ? "" : root.openChat.jid
               }
             }
           }
-
-          Button {
-            visible: root.editingId !== ""
-            text: "Cancel edit"
-            bordered: true
-            onClicked: root.whiskerService.changeDraft({ edit: "", text: "" })
-          }
-
-          // The picker loads on demand, see MediaPicker.qml. The picked file waits in the Draft; the composer text becomes its caption.
           Loader {
-            id: picker
-            active: false
-            source: "MediaPicker.qml"
-            onLoaded: item.picked.connect(function(file) { root.whiskerService.stageAttachment(file) })
+            Layout.fillWidth: true
+            active: root.openChatRow !== null && root.optionsFor === root.openChat.jid
+            visible: active
+            sourceComponent: ChatOptions { chat: root.openChatRow; panel: root }
           }
-          Button {
-            visible: State.canAttach(root.editingId)
-            text: "Attach"
-            bordered: true
-            onClicked: { picker.active = false; picker.active = true }
+
+          ListView {
+            WheelScroll { view: timelineView }
+            id: timelineView
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            verticalLayoutDirection: ListView.BottomToTop
+            model: root.timeline.slice().reverse()
+            // BottomToTop puts the footer at the top of the timeline: a quiet link that loads the older Messages.
+            footer: Item {
+              visible: !!root.openChat && root.openChat.moreMessages === true
+              width: ListView.view.width
+              height: visible ? olderText.implicitHeight + Style.space(4) : 0
+              Text {
+                id: olderText
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "load older"
+                opacity: 0.5
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+                TapHandler { onTapped: root.whiskerService.loadOlderMessages() }
+              }
+            }
+            // A click on empty space closes the quick emoji bar and the menu.
+            MouseArea {
+              anchors.fill: parent
+              z: -1
+              enabled: root.reactingId !== "" || root.menuId !== ""
+              onClicked: { root.reactingId = ""; root.menuId = "" }
+            }
+            delegate: MessageLine {
+              required property var modelData
+              row: modelData
+              panel: root
+              width: ListView.view.width
+            }
           }
 
           Text {
-            visible: State.hasAttachment(root.draft)
-            width: parent.width - Style.space(40)
-            elide: Text.ElideMiddle
-            textFormat: Text.PlainText
-            text: "Attached: " + State.attachmentName(root.draft)
+            visible: root.parts.emptyChat
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: State.EMPTY_CHAT_TEXT
             color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-          }
-
-          Button {
-            visible: State.hasAttachment(root.draft)
-            text: "✕"
-            bordered: true
-            onClicked: root.whiskerService.changeDraft({ attachment: "" })
-          }
-
-          Text {
-            readonly property var quote: State.composerQuoteView(root.quoting)
-            visible: quote !== null
-            width: parent.width
-            elide: Text.ElideRight
-            textFormat: Text.PlainText
-            text: quote ? "Replying to " + quote.sender + ": " + quote.text : ""
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-          }
-
-          Button {
-            visible: root.quoting !== null
-            text: "Cancel quote"
-            bordered: true
-            onClicked: root.whiskerService.changeDraft({ quote: "" })
-          }
-
-          TextEdit {
-            id: composer
-            width: parent.width
-            wrapMode: TextEdit.Wrap
-            color: root.contentForeground
+            opacity: 0.6
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.body
-            onTextChanged: root.whiskerService.composerChanged(text)
-            readonly property string draftText: root.draft.text
-            onDraftTextChanged: if (text !== draftText) text = draftText
-            Keys.onEscapePressed: root.runShortcut("Escape")
-            Keys.onPressed: function(event) {
-              var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text, root.draft.attachment !== "")
-              if (action === "default") return
-              event.accepted = true
-              if (action === "send") {
-                root.whiskerService.submitComposer(text)
-              }
+          }
+
+          RowLayout {
+            visible: State.hasAttachment(root.draft)
+            Layout.fillWidth: true
+            Text {
+              Layout.fillWidth: true
+              elide: Text.ElideMiddle
+              textFormat: Text.PlainText
+              text: "Attached: " + State.attachmentName(root.draft)
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
             }
+            Button {
+              text: "✕"
+              onClicked: root.whiskerService.changeDraft({ attachment: "" })
+            }
+          }
+
+          // The target of the next send: the Message under Quote or Edit, with a ✕ that cancels it.
+          RowLayout {
+            readonly property var quote: State.composerQuoteView(root.quoting)
+            visible: quote !== null || root.editingId !== ""
+            Layout.fillWidth: true
+            Text {
+              Layout.fillWidth: true
+              elide: Text.ElideRight
+              textFormat: Text.PlainText
+              text: parent.quote ? "Replying to " + parent.quote.sender + ": " + parent.quote.text : (root.editingId !== "" ? "Editing a Message" : "")
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Button {
+              text: "✕"
+              onClicked: root.whiskerService.changeDraft(root.editingId !== "" ? { edit: "", text: "" } : { quote: "" })
+            }
+          }
+
+          Composer {
+            id: composer
+            Layout.fillWidth: true
+            panel: root
           }
         }
 
         // The Chat list: the Daemon sends the Chats in order, with the name and the marks.
         ListView {
-          visible: root.parts.chatList
+          id: chatListView
+          WheelScroll { view: chatListView }
+          visible: root.parts.chatList && root.shownChats.length > 0
           width: parent.width
           height: visible ? Style.space(320) : 0
           clip: true
-          model: root.view.chats || []
-          delegate: Row {
+          model: root.shownChats
+          delegate: ChatRow {
+            required property var modelData
+            chat: modelData
+            panel: root
             width: ListView.view.width
-            spacing: Style.space(8)
-            TapHandler { onTapped: root.whiskerService.openChat(modelData) }
-            Text {
-              text: modelData.unread ? "●" : " "
-              color: root.contentForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.body
-            }
-            Text {
-              width: parent.width - Style.space(100)
-              elide: Text.ElideRight
-              textFormat: Text.PlainText
-              text: modelData.name
-              color: root.contentForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.body
-              font.bold: modelData.unread
-            }
-            Text {
-              text: (modelData.pinned ? "pinned " : "") + (modelData.muted ? "muted" : "")
-              color: root.contentForeground
-              opacity: 0.6
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.body
-            }
+          }
+        }
+
+        // No Chat matches: the faded logo and a short text.
+        Column {
+          visible: root.parts.chatList && root.shownChats.length === 0
+          width: parent.width
+          spacing: Style.space(8)
+          Image {
+            anchors.horizontalCenter: parent.horizontalCenter
+            source: Qt.resolvedUrl("assets/whisker.svg")
+            width: Style.space(96)
+            height: width
+            opacity: 0.2
+            sourceSize.width: width * Screen.devicePixelRatio
+            sourceSize.height: height * Screen.devicePixelRatio
+          }
+          Text {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            textFormat: Text.PlainText
+            text: State.emptyChatsText(root.chatFilter, searchInput.text)
+            color: root.contentForeground
+            opacity: 0.6
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.body
           }
         }
 

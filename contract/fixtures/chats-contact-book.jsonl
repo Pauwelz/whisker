@@ -1,0 +1,11 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"De Gazetten","lastActive":10,"messages":[{"id":"m1","sender":"32470@s.whatsapp.net","time":10,"text":"Mogguh"}]}],"pushNames":[{"jid":"32470@s.whatsapp.net","name":"Jef"}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.messages","params":{"chat":"g1@g.us"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"g1@g.us","messages":[{"id":"m1","chat":"g1@g.us","sender":"32470@s.whatsapp.net","senderName":"Jef","senderPush":true,"fromMe":false,"time":10,"text":"Mogguh","state":"","edited":false,"revoked":false}],"more":false,"offset":0}}}
+{"dir":"whatsapp","event":{"kind":"contactBook","names":[{"jid":"32470@s.whatsapp.net","name":"Jef Cools"}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.messages","params":{"chat":"g1@g.us"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chat":"g1@g.us","messages":[{"id":"m1","chat":"g1@g.us","sender":"32470@s.whatsapp.net","senderName":"Jef Cools","fromMe":false,"time":10,"text":"Mogguh","state":"","edited":false,"revoked":false}],"more":false,"offset":0}}}

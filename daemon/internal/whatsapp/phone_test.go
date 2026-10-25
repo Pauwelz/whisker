@@ -60,3 +60,17 @@ func TestPhoneOfConversation(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanPhone(t *testing.T) {
+	// newchat.test.js ("a lookup starts only for a full phone number") holds the same cases.
+	for in, want := range map[string]string{"+1 (555) 123-4567": "15551234567", "32470123456": "32470123456", "1234567": "1234567"} {
+		if got, err := cleanPhone(in); err != nil || got != want {
+			t.Errorf("cleanPhone(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "123456", "0470123456", "abc", "+0 32 470"} {
+		if _, err := cleanPhone(in); !errors.Is(err, ErrInvalidPhone) {
+			t.Errorf("cleanPhone(%q) err = %v, want ErrInvalidPhone", in, err)
+		}
+	}
+}

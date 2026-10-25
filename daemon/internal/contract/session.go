@@ -185,7 +185,7 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		return s.unlink("")
 	case whatsapp.Connected:
 		s.pres.connected() // before the `connected` frame
-		ok = s.box.connected()
+		ok = s.box.connected() && s.mergeKnownLIDs()
 	case whatsapp.Disconnected:
 		ok = s.box.disconnected()
 	case whatsapp.NewMessage:
@@ -220,6 +220,22 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		}
 	}
 	return exitIf(ok)
+}
+
+// mergeKnownLIDs merges every stored LID whose phone JID the LID store learned since, such as a group author
+// whose Messages arrived before the mapping. It runs on each connect.
+func (s *session) mergeKnownLIDs() bool {
+	lids, err := s.chats.LIDs()
+	if err != nil {
+		fmt.Fprintln(s.logOut, "chat store read failed")
+		return true
+	}
+	for _, lid := range lids {
+		if phone := s.port.PhoneOf(lid); phone != "" && !s.merge(whatsapp.ChatAlias{LID: lid, Phone: phone}) {
+			return false
+		}
+	}
+	return true
 }
 
 // merge folds the LID Chat of an alias into the phone Chat. The Plugin hears of it when something merged.

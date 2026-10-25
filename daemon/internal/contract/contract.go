@@ -53,31 +53,36 @@ func whatsappQuote(id, sender, text string) *whatsapp.Quote {
 const (
 	errParse          = -32700
 	errMethodNotFound = -32601
+	errInvalidParams  = -32602
 	errInvalidPhone   = -32001
 	errPairCode       = -32002
 	errChatStore      = -32003
 	errSetting        = -32004
 	errMessage        = -32006
-	errSendFailed     = -32007
+	errNoWhatsApp     = -32007
 	errMedia          = -32008
 	errMediaFailed    = -32009
+	errInvalidChat    = -32010
+	errPinLimit       = -32011
 )
 
 // The message of each application error. A code that has two messages has two constants.
 const (
 	msgParse          = "parse error"
 	msgMethodNotFound = "method not found"
+	msgInvalidParams  = "invalid params"
 	msgInvalidPhone   = "invalid phone number"
 	msgPairCode       = "pair code failed"
 	msgChatStore      = "chat store failed"
 	msgInvalidSetting = "invalid setting"
 	msgSettingsFailed = "settings failed"
 	msgInvalidMessage = "invalid message"
-	msgNotConnected   = "not connected"
-	msgSendFailed     = "send failed"
+	msgNoWhatsApp     = "could not reach WhatsApp"
 	msgInvalidMedia   = "invalid media"
 	msgMediaIntegrity = "media failed the integrity check"
 	msgMediaCopy      = "media copy failed"
+	msgInvalidChat    = "invalid chat"
+	msgPinLimit       = "pin limit"
 )
 
 // qrScale is the pixel size of one QR module.

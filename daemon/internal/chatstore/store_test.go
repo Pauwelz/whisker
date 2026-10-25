@@ -369,3 +369,26 @@ func TestLiveMessageUnreadStaysOverALateHistorySync(t *testing.T) {
 		t.Error("a live unread Chat turned read by a late History Sync")
 	}
 }
+
+func TestListCountsWaitingMessagesAndFlagsMentions(t *testing.T) {
+	s, _ := newStore(t)
+	live := func(id string, mentionsMe bool) {
+		t.Helper()
+		ev := whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: id, Sender: "b@s.whatsapp.net", Time: 5, Text: "hi", MentionsMe: mentionsMe}}
+		if err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone, MarkUnread: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	live("1", false)
+	live("2", true)
+	live("3", false)
+	if c := list(t, s, 0, 10).Chats[0]; c.UnreadCount != 3 || !c.Mention {
+		t.Errorf("unreadCount = %d, mention = %v, want 3, true", c.UnreadCount, c.Mention)
+	}
+	if _, err := s.ClearUnread("g@g.us"); err != nil {
+		t.Fatal(err)
+	}
+	if c := list(t, s, 0, 10).Chats[0]; c.UnreadCount != 0 || c.Mention {
+		t.Errorf("a read Chat has unreadCount = %d, mention = %v", c.UnreadCount, c.Mention)
+	}
+}

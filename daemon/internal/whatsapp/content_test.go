@@ -63,3 +63,11 @@ func TestMentions(t *testing.T) {
 		t.Error("a device suffix is ignored")
 	}
 }
+
+func TestMediaOfKeepsTheDurationOfAudioAndVideo(t *testing.T) {
+	voice := mediaOf(&waE2E.Message{AudioMessage: &waE2E.AudioMessage{PTT: proto.Bool(true), Seconds: proto.Uint32(12)}})
+	video := mediaOf(&waE2E.Message{VideoMessage: &waE2E.VideoMessage{Seconds: proto.Uint32(95)}})
+	if voice.Duration != 12 || video.Duration != 95 {
+		t.Errorf("durations = %d, %d; want 12, 95", voice.Duration, video.Duration)
+	}
+}

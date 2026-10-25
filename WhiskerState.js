@@ -33,6 +33,16 @@ var PAIR_CODE_ERRORS = {
   "-32002": "WhatsApp gave no Pair Code. Try again."
 }
 
+// The notice for each error code that a request can get, from docs/contract.md. The view shows a notice for it.
+// The Plugin depends on the code, never on the message text of the Daemon.
+var NO_WHATSAPP = "Could not reach WhatsApp"
+
+var ERROR_NOTICES = {
+  "-32007": NO_WHATSAPP,
+  "-32010": "That chat is not in your chat list",
+  "-32011": "You can pin up to 3 chats"
+}
+
 // The screens of the pop-out, and the states of Media. The Daemon sends the Media states (docs/contract.md).
 var SCREEN = {
   STARTING: "starting",
@@ -171,7 +181,14 @@ function foldFrame(state, frame) {
     return linking(state, { pairCode: frame.result.code, message: "Enter this code in WhatsApp: Linked devices, Link with phone number." })
   if (frame && frame.error && PAIR_CODE_ERRORS[frame.error.code])
     return linking(state, { message: PAIR_CODE_ERRORS[frame.error.code] })
+  if (frame && frame.error && ERROR_NOTICES[frame.error.code])
+    return withChanges(state, markLookupOffline(state, frame.error.code, { notice: ERROR_NOTICES[frame.error.code] }))
   return state
+}
+
+// The state without the notice. The pop-out calls it when the notice has shown long enough.
+function clearNotice(state) {
+  return withChanges(state, { notice: "" })
 }
 
 // A chats.list result. Page 0 replaces the Chat list, a later page extends it.
@@ -273,16 +290,6 @@ var KEY_RETURN = 0x01000004
 
 var KEY_ENTER = 0x01000005
 
-// The Delivery State labels of the Messages of the user. Mirror of docs/contract.md.
-var DELIVERY_LABELS = {
-  pending: "Sending…",
-  sent: "Sent",
-  delivered: "Delivered",
-  read: "Read",
-  played: "Played",
-  failed: "Failed"
-}
-
 function withChanges(state, changes) {
   var next = {}
   for (var key in state) next[key] = state[key]
@@ -294,6 +301,8 @@ function withChanges(state, changes) {
 function foldChatResult(state, frame) {
   if (!frame) return null
   if (frame.result && frame.result.draft) return draftLoaded(state, frame.result)
+  if (frame.result && frame.result.phone !== undefined) return lookupAnswered(state, frame.result)
+  if (frame.result && frame.result.contacts) return withChanges(state, { contacts: frame.result.contacts })
   if (frame.result && frame.result.path) return withChanges(state, { mediaPaths: withChanges(state.mediaPaths || {}, mediaPathEntry(frame.result)) })
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
   if (frame.result && frame.result.message) return upsertMessage(state, frame.result.message)
@@ -321,6 +330,7 @@ function closeChat(state) {
   var next = withChanges(state, {})
   delete next.openChat
   delete next.mediaPaths
+  delete next.loadedChat
   return next
 }
 
@@ -368,7 +378,7 @@ function messagesPage(state, result) {
   var next = state
   // shortcut: a Message with the same second as one already shown can land after it, upgrade to a (time, order) key if that shows.
   for (var i = 0; i < result.messages.length; i++) next = upsertMessage(next, result.messages[i])
-  return withChanges(next, { openChat: withChanges(next.openChat, { moreMessages: result.more === true }) })
+  return withChanges(next, { loadedChat: result.chat, openChat: withChanges(next.openChat, { moreMessages: result.more === true }) })
 }
 
 // The Draft of the open Chat: { text, quote, edit, attachment }. The Daemon stores it.
@@ -421,6 +431,89 @@ function draftSetRequest(id, jid, draft) {
   return request(id, "draft.set", { chat: jid, text: draft.text, quote: draft.quote, edit: draft.edit, attachment: draft.attachment })
 }
 
+// The request for the people the new Chat view lists. The Daemon returns the first 50 that match the query.
+function contactsSearchRequest(id, query) {
+  return request(id, "contacts.search", { query: query })
+}
+
+// The request to store the Chat with a person, before the first Message or Draft.
+function chatStartRequest(id, jid) {
+  return request(id, "chat.start", { jid: jid })
+}
+
+// The request to ask WhatsApp if a phone number is on WhatsApp.
+function lookupRequest(id, phone) {
+  return request(id, "contacts.lookup", { phone: phone })
+}
+
+// The digits of the search text when it looks like a phone number (digits and + space - . ( )), else null.
+function phoneDigits(text) {
+  var t = String(text || "").trim()
+  if (!/^\+?[\d\s().-]+$/.test(t)) return null
+  var digits = t.replace(/\D/g, "")
+  return digits === "" ? null : digits
+}
+
+// Same rule as the Daemon (-32001): more than 6 digits, no leading 0. The Plugin sends a lookup only for these.
+function isLookupPhone(digits) {
+  return digits.length > 6 && digits.charAt(0) !== "0"
+}
+
+// The digits to look up for the search text, or "" when the text is no full phone number. A keystroke starts at most one lookup.
+function lookupPhone(text) {
+  var digits = phoneDigits(text)
+  return digits !== null && isLookupPhone(digits) ? digits : ""
+}
+
+// The lookup of `phone` is sent. Its row shows "checking" until the reply for that number comes.
+function lookupStarted(state, phone) {
+  return withChanges(state, { lookup: { phone: phone, status: "checking", jid: "" } })
+}
+
+// The reply names its number. A reply for another number than the one in the row is late and changes nothing.
+function lookupAnswered(state, result) {
+  if (!state.lookup || state.lookup.phone !== result.phone) return state
+  return withChanges(state, { lookup: { phone: result.phone, status: result.jid ? "found" : "none", jid: result.jid } })
+}
+
+// An error reply has no number. A "could not reach WhatsApp" while a lookup waits belongs to it.
+// shortcut: a late error of an older lookup can mark the new one offline, the next keystroke repeats the lookup.
+function markLookupOffline(state, code, changes) {
+  if (String(code) !== "-32007" || !state.lookup || state.lookup.status !== "checking") return changes
+  changes.lookup = { phone: state.lookup.phone, status: "offline", jid: "" }
+  return changes
+}
+
+var LOOKUP_LABELS = {
+  malformed: "Enter the full number with its country code",
+  checking: "checking WhatsApp…",
+  found: "on WhatsApp · message",
+  none: "not on WhatsApp",
+  offline: NO_WHATSAPP
+}
+
+var NEW_CHAT_NOTE = "New group chats are created on the phone."
+var EMPTY_CHAT_TEXT = "No messages yet. Your first message starts the chat."
+
+// The rows of the new Chat view for a contacts.search result: one row per person in the order of the Daemon
+// (Phone Contacts, then Push-Name-only Participants), then the note about Group Chats.
+// A person with a Chat shows "open", any other "new".
+// When the search text is a phone number, a "phone" row comes first: checking, found (it has the jid to start), none,
+// offline or malformed.
+function newChatRows(contacts, query, lookup) {
+  var rows = []
+  var digits = phoneDigits(query)
+  if (digits !== null) {
+    var status = !isLookupPhone(digits) ? "malformed" : lookup && lookup.phone === digits ? lookup.status : "checking"
+    rows.push({ kind: "phone", phone: "+" + digits, status: status, label: LOOKUP_LABELS[status], jid: status === "found" ? lookup.jid : "" })
+  }
+  rows = rows.concat((contacts || []).map(function (c) {
+    return { kind: "contact", jid: c.jid, name: c.name, phone: c.phone, pushNameOnly: c.pushNameOnly, label: c.chat ? "open" : "new" }
+  }))
+  rows.push({ kind: "note", text: NEW_CHAT_NOTE })
+  return rows
+}
+
 // The request for one page of the Chat timeline. The next page starts at the number of Messages shown.
 function messagesRequest(id, jid, offset) {
   return request(id, "chat.messages", { chat: jid, offset: offset })
@@ -468,7 +561,12 @@ function retryMessageRequest(id, jid, messageId) {
 function composerAction(key, shift, text, hasAttachment) {
   if (key !== KEY_RETURN && key !== KEY_ENTER) return "default"
   if (shift) return "default"
-  return String(text).trim() === "" && !hasAttachment ? "swallow" : "send"
+  return canSend(text, hasAttachment) ? "send" : "swallow"
+}
+
+// A send needs text or an attached file. Enter and the send button share this rule.
+function canSend(text, hasAttachment) {
+  return String(text).trim() !== "" || !!hasAttachment
 }
 
 // The fixed shortcuts of the pop-out. `shortcut` is "Escape" or "Ctrl+F"; `local` is { showSettings } as in panelParts.
@@ -477,20 +575,93 @@ function composerAction(key, shift, text, hasAttachment) {
 function shortcutAction(shortcut, state, local) {
   if (shortcut === "Escape") {
     if (state.openChat) return "closeChat"
+    if (local.showNewChat) return "closeNewChat"
     return local.showSettings ? "closeSettings" : "closePopout"
   }
-  var onList = panelParts(state, { pairMode: false, showSettings: local.showSettings }).chatList
+  var onList = panelParts(state, { pairMode: false, showSettings: local.showSettings, showNewChat: local.showNewChat }).chatList
   return shortcut === "Ctrl+F" && onList ? "focusSearch" : "none"
 }
 
-// The sender name shown on a Message: only on the Messages of others in a Group Chat.
-function senderLabel(chat, message) {
-  return chat.kind === "group" && !message.fromMe ? message.senderName : ""
+// The phone number of a JID (user[:device]@server) with a leading "+".
+function phoneOf(jid) {
+  return "+" + String(jid).split("@")[0].split(":")[0]
 }
 
-// The Delivery State label of a Message. Messages of others have none.
-function deliveryLabel(message) {
-  return message.fromMe ? DELIVERY_LABELS[message.state] || "" : ""
+// The sender shown on a line: "You", the name of the Participant, or "~ name +number" when only a Push Name is known.
+function senderLabel(message) {
+  if (message.fromMe) return "You"
+  return message.senderPush ? "~ " + message.senderName + " " + phoneOf(message.sender) : message.senderName
+}
+
+// Colours of the senders in a Group Chat. A Participant always gets the same one.
+var SENDER_COLORS = ["#7aa2f7", "#9ece6a", "#e0af68", "#bb9af7", "#7dcfff", "#ff9e64", "#f7768e", "#73daca"]
+
+function senderColor(jid) {
+  var hash = 0
+  for (var i = 0; i < jid.length; i++) hash = (hash * 31 + jid.charCodeAt(i)) | 0
+  return SENDER_COLORS[Math.abs(hash) % SENDER_COLORS.length]
+}
+
+function pad2(n) {
+  return (n < 10 ? "0" : "") + n
+}
+
+// "HH:MM" in local time.
+function timeLabel(seconds) {
+  var d = new Date(seconds * 1000)
+  return pad2(d.getHours()) + ":" + pad2(d.getMinutes())
+}
+
+// "YYYY-MM-DD" in local time: the label of a day separator.
+function dayLabel(seconds) {
+  var d = new Date(seconds * 1000)
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate())
+}
+
+// The rows of the timeline, oldest first. Messages arrive oldest first.
+// A "day" row opens each day. A "system" row is a line that is not a Message (`system: true`).
+// A "message" row is `continued` when the row before it is a Message of the same sender: the line then hides time and sender.
+function timelineRows(messages) {
+  var rows = []
+  var day = ""
+  messages.forEach(function (message) {
+    var label = dayLabel(message.time)
+    if (label !== day) {
+      day = label
+      rows.push({ kind: "day", label: label })
+    }
+    if (message.system) {
+      rows.push({ kind: "system", message: message })
+      return
+    }
+    var previous = rows[rows.length - 1]
+    var continued = previous.kind === "message" && previous.message.fromMe === message.fromMe && previous.message.sender === message.sender
+    rows.push({ kind: "message", message: message, continued: continued })
+  })
+  return rows
+}
+
+// The index of the row that holds the Message with this id, or -1. A Quote jumps there.
+function rowIndexOf(rows, id) {
+  for (var i = 0; i < rows.length; i++) if (rows[i].message && rows[i].message.id === id) return i
+  return -1
+}
+
+// The Delivery State column of a line: a mark and its tone. Messages of others have no mark.
+function deliveryMark(message) {
+  if (!message.fromMe) return { text: "", tone: "normal" }
+  switch (message.state) {
+    case "failed": return { text: "!", tone: "error" }
+    case "read": case "played": return { text: "✓✓", tone: "read" }
+    case "delivered": return { text: "✓✓", tone: "normal" }
+    case "sent": return { text: "✓", tone: "normal" }
+    default: return { text: "…", tone: "normal" }
+  }
+}
+
+// The line below a failed Message.
+function failedLine(message) {
+  return canRetryMessage(message) ? "not sent · retry" : ""
 }
 
 function canRetryMessage(message) {
@@ -562,7 +733,7 @@ function linkCommand(url) {
 }
 
 function editedLabel(message) {
-  return message.edited && !message.revoked ? "Edited" : ""
+  return message.edited && !message.revoked ? "(edited)" : ""
 }
 
 // A Message of the user that WhatsApp accepted and that is not a Tombstone.
@@ -580,6 +751,10 @@ function editRequest(id, jid, messageId, text) {
 
 function revokeRequest(id, jid, messageId) {
   return request(id, "chat.revoke", { chat: jid, id: messageId })
+}
+
+function deleteForMeRequest(id, jid, messageId) {
+  return request(id, "chat.deleteForMe", { chat: jid, id: messageId })
 }
 
 // The request for the composer text: an edit of `editingId`, or a new Message when `editingId` is empty.
@@ -609,15 +784,19 @@ function reactRequest(id, jid, messageId, emoji) {
 }
 
 // The Reactions of a Message as "👍 2" chips, in the order the emoji were first used. A Tombstone shows none.
+// `mine` marks the emoji that the user set. `names` lists who reacted, for the hover text.
 function reactionChips(message) {
   if (message.revoked) return []
   var order = []
-  var counts = {}
+  var chips = {}
   ;(message.reactions || []).forEach(function (r) {
-    if (!counts[r.emoji]) { counts[r.emoji] = 0; order.push(r.emoji) }
-    counts[r.emoji]++
+    if (!chips[r.emoji]) { chips[r.emoji] = { emoji: r.emoji, count: 0, mine: false, names: [] }; order.push(r.emoji) }
+    var chip = chips[r.emoji]
+    chip.count++
+    chip.mine = chip.mine || r.fromMe === true
+    chip.names.push(r.fromMe ? "You" : r.senderName)
   })
-  return order.map(function (emoji) { return { emoji: emoji, count: counts[emoji] } })
+  return order.map(function (emoji) { chips[emoji].names = chips[emoji].names.join(", "); return chips[emoji] })
 }
 
 // The Quote above a reply: who wrote the quoted Message and a one-line preview. Null when the Message has no Quote.
@@ -628,7 +807,7 @@ function quoteView(message) {
   if (!quote) return null
   var text = String(quote.text).replace(/\s+/g, " ").trim()
   if (text.length > QUOTE_PREVIEW_LENGTH) text = text.slice(0, QUOTE_PREVIEW_LENGTH - 1) + "…"
-  return { sender: quote.fromMe ? "You" : quote.senderName, text: text }
+  return { id: quote.id, sender: quote.fromMe ? "You" : quote.senderName, text: text }
 }
 
 // A Message can be quoted unless it is a Tombstone.
@@ -641,6 +820,42 @@ function canReactToMessage(message) {
   return !message.revoked && (!message.fromMe || ["sent", "delivered", "read", "played"].indexOf(message.state) >= 0)
 }
 
+// The one rule for "which actions does this Message allow". The toolbar, the menu and the Media links read it.
+// `m` is a Message as in docs/contract.md.
+function actionsFor(m) {
+  if (m.revoked) return ["deleteForMe"]
+  var own = m.fromMe === true
+  var kind = m.media ? m.media.kind : ""
+  var state = m.media ? m.media.state : ""
+  var a = ["reply", "react"]
+  if (m.text) a.push("copy")
+  if (own && m.text && !m.media && m.state !== "failed") a.push("edit")
+  if (m.state === "failed") a.push("retry")
+  if (m.media && kind !== "sticker") {
+    if (state === "none" || state === "failed") a.push("download")
+    if (state === "ready" && (kind === "voice" || kind === "audio")) a.push("play")
+    if (state === "ready" && kind !== "voice") a.push("open")
+    if (state === "ready") a.push("saveAs")
+  }
+  a.push(own ? "deleteForEveryone" : "deleteForMe")
+  return a
+}
+
+// The actions for the menu: the rule, minus react and edit when the Message cannot take them now.
+function menuActions(m, nowSeconds) {
+  return actionsFor(m).filter(function (name) {
+    if (name === "react") return canReactToMessage(m)
+    if (name === "edit") return canEditMessage(m, nowSeconds)
+    return true
+  })
+}
+
+var ACTION_LABELS = {
+  reply: "Reply", react: "React", copy: "Copy text", edit: "Edit", retry: "Retry send",
+  download: "Download", play: "Play", open: "Open", saveAs: "Save as…",
+  deleteForMe: "Delete for me", deleteForEveryone: "Delete for everyone"
+}
+
 // The number of unread Chats the bar shows. The Daemon counts them over the whole chat store, without Muted Chats.
 function unreadCount(state) {
   return state.unreadChats || 0
@@ -650,6 +865,17 @@ function unreadCount(state) {
 function unreadLabel(state) {
   var count = unreadCount(state)
   return count > 0 ? String(count) : ""
+}
+
+// The header text after the name: " · 3 unread", or "" when no Chat is unread.
+function unreadSuffix(state) {
+  var count = unreadCount(state)
+  return count > 0 ? " · " + count + " unread" : ""
+}
+
+// The status line shows the state text. A linked whisker has nothing to say; the header shows it.
+function statusLineShown(state) {
+  return state.screen !== SCREEN.LINKED
 }
 
 // What a notification says for a Message with Media and no text. Keys are the Media kinds of docs/contract.md.
@@ -701,10 +927,6 @@ function activityChanged(state, p) {
   return withChanges(state, { activity: activity })
 }
 
-function pad2(n) {
-  return (n < 10 ? "0" : "") + n
-}
-
 // The header line of a Direct Chat: "Online", "last seen at 14:05" (within a day), "last seen 2026-10-23", or "".
 function presenceLabel(state, nowSeconds) {
   var chat = state.openChat
@@ -712,19 +934,135 @@ function presenceLabel(state, nowSeconds) {
   if (!p) return ""
   if (p.online) return "Online"
   if (!p.lastSeen) return ""
-  var d = new Date(p.lastSeen * 1000)
-  if (nowSeconds - p.lastSeen < 24 * 3600) return "last seen at " + pad2(d.getHours()) + ":" + pad2(d.getMinutes())
-  return "last seen " + d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate())
+  if (nowSeconds - p.lastSeen < 24 * 3600) return "last seen at " + timeLabel(p.lastSeen)
+  return "last seen " + dayLabel(p.lastSeen)
 }
 
 // "typing…" or "recording…" in a Direct Chat; "Bob is typing…" in a Group Chat. Empty when nobody is active.
 function activityLabel(state) {
-  var chat = state.openChat
-  var list = chat && state.activity ? state.activity[chat.jid] || [] : []
+  return state.openChat ? chatActivityLabel(state, state.openChat) : ""
+}
+
+// The same label for any Chat (`chat` has jid and kind), for the Chat list.
+function chatActivityLabel(state, chat) {
+  var list = state.activity ? state.activity[chat.jid] || [] : []
   return list.map(function(a) {
     var verb = a.state === "recording" ? "recording…" : "typing…"
     return chat.kind === "group" ? a.name + " is " + verb : verb
   }).join(", ")
+}
+
+// The Chat list. The filters sit next to the search field. The Daemon sends the Chats Pinned first.
+var CHAT_FILTERS = [
+  { value: "all", label: "all" },
+  { value: "unread", label: "unread" },
+  { value: "groups", label: "groups" }
+]
+
+// shortcut: the filter works on the loaded pages only, upgrade to a Daemon param if "Load more" feels wrong with a filter.
+function filterChats(chats, filter) {
+  return chats.filter(function(chat) {
+    if (filter === "unread") return chat.unread === true
+    return filter !== "groups" || chat.kind === "group"
+  })
+}
+
+var CHAT_SIGNS = { direct: "◦", group: "#", self: "◈" }
+
+function chatSign(chat) {
+  return CHAT_SIGNS[chat.kind] || CHAT_SIGNS.direct
+}
+
+var MAX_COUNT = 99
+
+// The unread mark: the count, a dot when the phone marked the Chat unread without a count, or "".
+function chatCountLabel(chat) {
+  if (!chat.unread) return ""
+  if (!chat.unreadCount) return "●"
+  return chat.unreadCount > MAX_COUNT ? MAX_COUNT + "+" : String(chat.unreadCount)
+}
+
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+// The time of the last activity: the clock for today, the date before. "" when the Chat has none.
+function chatTimeLabel(lastActive, nowSeconds) {
+  if (!lastActive) return ""
+  var at = new Date(lastActive * 1000)
+  var now = new Date(nowSeconds * 1000)
+  if (at.toDateString() === now.toDateString()) return timeLabel(lastActive)
+  return at.getDate() + " " + MONTHS[at.getMonth()]
+}
+
+// The mute choices of the Chat menu. `seconds` is -1 for ever.
+var MUTE_CHOICES = [
+  { label: "8 hours", seconds: 8 * 3600 },
+  { label: "1 week", seconds: 7 * 86400 },
+  { label: "always", seconds: -1 }
+]
+
+// The mute end time of a choice, in Unix seconds as `chat.mute` takes it: -1 for ever.
+function muteEnd(choice, nowSeconds) {
+  return choice.seconds < 0 ? -1 : nowSeconds + choice.seconds
+}
+
+var UNMUTE = { until: 0 }
+
+// How long a Muted Chat stays muted: "for ever", "2d left", "3h left" or "1m left".
+function muteLeftLabel(chat, nowSeconds) {
+  if (chat.mutedUntil === -1) return "for ever"
+  var left = chat.mutedUntil - nowSeconds
+  if (left >= 86400) return Math.floor(left / 86400) + "d left"
+  if (left >= 3600) return Math.floor(left / 3600) + "h left"
+  return Math.max(1, Math.floor(left / 60)) + "m left"
+}
+
+// The Chat menu: Pin or Unpin, Mark as read or unread, then the mute choices or Unmute.
+// An option has `pinned`, `unread` or `until`.
+function chatOptions(chat, nowSeconds) {
+  var options = [
+    { label: chat.pinned ? "Unpin" : "Pin", pinned: !chat.pinned },
+    { label: chat.unread ? "Mark as read" : "Mark as unread", unread: !chat.unread }
+  ]
+  if (chat.muted)
+    return options.concat([{ label: "Unmute (" + muteLeftLabel(chat, nowSeconds) + ")", until: UNMUTE.until }])
+  return options.concat(MUTE_CHOICES.map(function(choice) {
+    return { label: "Mute " + choice.label, until: muteEnd(choice, nowSeconds) }
+  }))
+}
+
+// The hover buttons of a Chat line. `option` is what a click chooses.
+// Pin toggles. Mute on a Muted Chat unmutes; otherwise `option` is null and the click opens the Chat menu for the choices.
+function chatRowButtons(chat) {
+  return {
+    pin: { text: chat.pinned ? "unpin" : "pin", option: { pinned: !chat.pinned } },
+    mute: chat.muted ? { text: "unmute", option: UNMUTE } : { text: "mute", option: null }
+  }
+}
+
+// The request for a Chat menu option.
+function chatOptionRequest(id, jid, option) {
+  if (option.pinned !== undefined) return request(id, "chat.pin", { chat: jid, pinned: option.pinned })
+  if (option.unread !== undefined) return request(id, "chat.markUnread", { chat: jid, unread: option.unread })
+  return request(id, "chat.mute", { chat: jid, until: option.until })
+}
+
+// Marking the open Chat unread must close it: an open Chat is attended, and attending marks it read again.
+function leavesChatFor(state, jid, option) {
+  return option.unread === true && !!state.openChat && state.openChat.jid === jid
+}
+
+// The listed Chat of a jid, or null. The menu of the open Chat needs its pin and mute state.
+function chatRow(state, jid) {
+  var chats = state.chats || []
+  for (var i = 0; i < chats.length; i++) if (chats[i].jid === jid) return chats[i]
+  return null
+}
+
+// The text under the faded logo when no Chat shows.
+function emptyChatsText(filter, query) {
+  if (query) return "No chat matches “" + query + "”."
+  if (filter === "unread") return "No unread chats."
+  return filter === "groups" ? "No group chats." : "No chats yet."
 }
 
 // What the composer text means for the outgoing Composing: "start", "stop" or "" (no change).
@@ -785,7 +1123,13 @@ function mediaLabel(message) {
   if (!media) return ""
   var label = MEDIA_KIND_LABELS[media.kind] || "File"
   if (media.name) label += ": " + media.name
-  return label + " (" + formatSize(media.size) + ")"
+  return label + " (" + (media.duration ? formatDuration(media.duration) + ", " : "") + formatSize(media.size) + ")"
+}
+
+// Seconds as "m:ss", for the length of audio, voice and video.
+function formatDuration(seconds) {
+  var s = Math.round(seconds)
+  return Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60)
 }
 
 function formatSize(bytes) {
@@ -799,6 +1143,10 @@ function mediaStatus(message) {
   if (!message.media) return ""
   if (message.media.state === MEDIA_STATE.DOWNLOADING) return "Downloading…"
   return message.media.state === MEDIA_STATE.FAILED ? "Download failed" : ""
+}
+
+function isDownloading(message) {
+  return !!message.media && message.media.state === MEDIA_STATE.DOWNLOADING
 }
 
 function canDownloadMedia(message) {
@@ -866,11 +1214,14 @@ function panelParts(state, local) {
     qr: linking && !!state.qr && !local.pairMode,
     pairForm: linking && local.pairMode,
     pairToggle: linking,
-    chatList: linked && !local.showSettings && !chat,
-    loadMoreChats: linked && state.moreChats === true && !local.showSettings && !chat,
+    chatList: linked && !local.showSettings && !local.showNewChat && !chat,
+    loadMoreChats: linked && state.moreChats === true && !local.showSettings && !local.showNewChat && !chat,
+    newChat: linked && !!local.showNewChat && !local.showSettings && !chat,
+    newChatButton: linked && !local.showSettings && !local.showNewChat && !chat,
     settingsButton: linked && !!state.settings && !chat,
     settings: linked && local.showSettings && !!state.settings,
-    chat: linked && !local.showSettings && chat
+    chat: linked && !local.showSettings && chat,
+    emptyChat: linked && !local.showSettings && chat && state.loadedChat === state.openChat.jid && state.openChat.messages.length === 0
   }
 }
 
@@ -936,4 +1287,62 @@ function mediaFrameStep(state, pending, frame) {
   var load = mediaToLoad(state)
   if (load.length > 0) state = markMediaRequested(state, load)
   return { state: state, pending: pending, launch: launch, load: load }
+}
+
+// Media chips. A ready sticker shows as itself, so it gets no chip.
+function chipShown(m) {
+  return !!m.media && !(m.media.kind === "sticker" && m.media.state === MEDIA_STATE.READY)
+}
+
+// WhatsApp's thumbnail as a data URL, or "" when it sent none.
+function thumbnailSource(m) {
+  return m.media && m.media.thumbnail ? "data:image/jpeg;base64," + m.media.thumbnail : ""
+}
+
+// A video that is not downloaded shows its thumbnail blurred.
+function chipBlurred(m) {
+  return !!m.media && m.media.kind === "video" && m.media.state !== MEDIA_STATE.READY
+}
+
+var MIME_BADGES = { "application/pdf": "PDF", "audio/mpeg": "MP3", "audio/ogg": "OGG", "audio/mp4": "M4A", "audio/wav": "WAV", "audio/flac": "FLAC" }
+
+// The file-type badge of a document or audio chip without a thumbnail: the extension of the name, else the MIME type, else the kind.
+function fileBadge(m) {
+  var md = m.media
+  if (!md || (md.kind !== "document" && md.kind !== "audio") || md.thumbnail) return ""
+  var ext = /\.([A-Za-z0-9]{1,5})$/.exec(md.name || "")
+  if (ext) return ext[1].toUpperCase()
+  return MIME_BADGES[String(md.mime).split(";")[0]] || (md.kind === "audio" ? "AUDIO" : "FILE")
+}
+
+// The action of a click on the thumbnail or the name: download, play or open. "" while downloading and for a sticker.
+function chipMainAction(m) {
+  var a = actionsFor(m)
+  var main = ["download", "play", "open"].filter(function(x) { return a.indexOf(x) >= 0 })
+  return main.length > 0 ? main[0] : ""
+}
+
+var CHIP_LINKS = ["download", "play", "open", "saveAs"]
+
+// The links under the chip, from the actions rule. A voice note has a play button instead of a Play link.
+function chipLinks(m) {
+  var failed = !!m.media && m.media.state === MEDIA_STATE.FAILED
+  return actionsFor(m).filter(function(x) { return CHIP_LINKS.indexOf(x) >= 0 && !(x === "play" && m.media.kind === "voice") }).map(function(x) {
+    return { action: x, label: x === "download" && failed ? "retry" : ACTION_LABELS[x].toLowerCase() }
+  })
+}
+
+// A received voice note that is ready and not played yet. The Daemon sets `media.played` on the first play.
+function unplayedDot(m) {
+  return !!m.media && m.media.kind === "voice" && m.media.state === MEDIA_STATE.READY && m.fromMe !== true && m.media.played !== true
+}
+
+// One wheel notch scrolls a list this far. Qt's default wheel flick is slow in a long timeline.
+var WHEEL_STEP = 60
+
+// The contentY a list scrolls to on a wheel event: the touchpad's pixels when it sends them, else a fixed step per notch
+// (angleY is 120 per notch). It stays between top and bottom; a bottom above the top (short content) keeps it at the top.
+function wheelScrollTarget(contentY, angleY, pixelY, top, bottom) {
+  var delta = pixelY !== 0 ? pixelY : angleY / 120 * WHEEL_STEP
+  return Math.max(top, Math.min(Math.max(top, bottom), contentY - delta))
 }

@@ -1,0 +1,11 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"De Gazetten","lastActive":10,"messages":[{"id":"m1","sender":"31600@s.whatsapp.net","time":10,"text":"sup","reactions":[{"sender":"","fromMe":true,"emoji":"❤️"},{"sender":"32470@s.whatsapp.net","emoji":"😂"}]}]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"reaction","chat":"g1@g.us","id":"m1","sender":"32470@s.whatsapp.net","emoji":"👍"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"g1@g.us","sender":"31600@s.whatsapp.net","senderName":"+31600","fromMe":false,"time":10,"text":"sup","state":"","edited":false,"revoked":false,"reactions":[{"sender":"","senderName":"","fromMe":true,"emoji":"❤️"},{"sender":"32470@s.whatsapp.net","senderName":"+32470","fromMe":false,"emoji":"👍"}]}}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"De Gazetten","lastActive":10,"messages":[{"id":"m1","sender":"31600@s.whatsapp.net","time":10,"text":"sup","reactions":[{"sender":"32470@s.whatsapp.net","emoji":"😂"}]}]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.messages","params":{"chat":"g1@g.us"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"g1@g.us","messages":[{"id":"m1","chat":"g1@g.us","sender":"31600@s.whatsapp.net","senderName":"+31600","fromMe":false,"time":10,"text":"sup","state":"","edited":false,"revoked":false,"reactions":[{"sender":"","senderName":"","fromMe":true,"emoji":"❤️"},{"sender":"32470@s.whatsapp.net","senderName":"+32470","fromMe":false,"emoji":"👍"}]}],"more":false,"offset":0}}}

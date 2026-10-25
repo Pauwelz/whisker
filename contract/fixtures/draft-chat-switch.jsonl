@@ -7,7 +7,7 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
 {"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"in1","sender":"1@s.whatsapp.net","time":50,"text":"lunch?","pushName":"Ann"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"lunch?","state":"","edited":false,"revoked":false}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"lunch?","state":"","edited":false,"revoked":false,"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"notify","params":{"chat":"1@s.whatsapp.net","kind":"direct","name":"Ann","senderName":"Ann","text":"lunch?"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"yes, lunch","quote":"in1"}}}
@@ -16,7 +16,7 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chat":"2@s.whatsapp.net","draft":{"text":"","quote":"","edit":"","attachment":""}}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"yes, lunch","quote":"in1","edit":"","attachment":""}}}}
-{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"lunch?","state":"","edited":false,"revoked":false}],"moreMessages":false,"draft":{"text":"yes, lunch","quote":"in1","edit":"","attachment":""}}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"lunch?","state":"","edited":false,"revoked":false,"senderPush":true}],"moreMessages":false,"draft":{"text":"yes, lunch","quote":"in1","edit":"","attachment":""}}}}
 {"dir":"restart"}
 {"dir":"whatsapp","linked":true}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}

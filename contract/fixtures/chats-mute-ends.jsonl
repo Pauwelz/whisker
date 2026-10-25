@@ -4,7 +4,7 @@
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","lastActive":10,"unread":true,"mutedUntil":2000},{"jid":"2@s.whatsapp.net","lastActive":0,"unread":true}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chats.list","params":{}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":10,"pinned":false,"muted":true,"unread":true}],"more":false,"offset":0,"unreadChats":0}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":10,"pinned":false,"muted":true,"mutedUntil":2000,"unread":true}],"more":false,"offset":0,"unreadChats":0}}}
 {"dir":"clock","now":2001}
 {"dir":"clock","now":2001}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}

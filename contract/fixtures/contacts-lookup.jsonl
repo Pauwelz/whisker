@@ -1,0 +1,12 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","lookups":{"15551234567":"15551234567@s.whatsapp.net"}}
+{"dir":"plugin","lookup":"15551234567"}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"contacts.lookup","params":{"phone":"+1 555-123-4567"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"phone":"15551234567","jid":"15551234567@s.whatsapp.net"}}}
+{"dir":"view","expect":{"lookup":{"phone":"15551234567","status":"found","jid":"15551234567@s.whatsapp.net"}}}
+{"dir":"plugin","lookup":"15559999999"}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"contacts.lookup","params":{"phone":"15559999999"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"phone":"15559999999","jid":""}}}
+{"dir":"view","expect":{"lookup":{"phone":"15559999999","status":"none","jid":""}}}

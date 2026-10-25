@@ -1,0 +1,29 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","lastActive":40}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.markUnread","params":{"chat":"1@s.whatsapp.net","unread":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"unread","unreads":["1@s.whatsapp.net:true"]}
+{"dir":"read","receipts":[],"markers":[]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":40,"pinned":false,"muted":false,"unread":true}],"more":false,"offset":0,"unreadChats":1}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.markUnread","params":{"chat":"1@s.whatsapp.net","unread":false}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"unread","unreads":["1@s.whatsapp.net:true","1@s.whatsapp.net:false"]}
+{"dir":"read","receipts":[],"markers":[]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":40,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0,"unreadChats":0}}}
+{"dir":"whatsapp","sendError":"offline"}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chat.markUnread","params":{"chat":"1@s.whatsapp.net","unread":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"error":{"code":-32007,"message":"could not reach WhatsApp"}}}
+{"dir":"unread","unreads":["1@s.whatsapp.net:true","1@s.whatsapp.net:false"]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":6,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":6,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":40,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0,"unreadChats":0}}}
+{"dir":"whatsapp","sendError":""}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":7,"method":"chat.markUnread","params":{"chat":"nobody@s.whatsapp.net","unread":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":7,"error":{"code":-32010,"message":"invalid chat"}}}
+{"dir":"unread","unreads":["1@s.whatsapp.net:true","1@s.whatsapp.net:false"]}

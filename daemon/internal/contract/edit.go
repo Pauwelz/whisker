@@ -29,7 +29,7 @@ func (s *session) chatEdit(req *request) outcome {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
 	if err := s.port.Edit(p.Chat, p.ID, p.Text); err != nil {
-		return outcome{reply: s.sendFailed(req.ID, err)}
+		return outcome{reply: s.whatsappFailed(req.ID, err)}
 	}
 	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.Edit(p.Chat, p.ID, "", true, p.Text) }, func() { s.clearDraft(p.Chat) })
 }
@@ -42,7 +42,7 @@ func (s *session) chatRevoke(req *request) outcome {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
 	if err := s.port.Revoke(p.Chat, p.ID); err != nil {
-		return outcome{reply: s.sendFailed(req.ID, err)}
+		return outcome{reply: s.whatsappFailed(req.ID, err)}
 	}
 	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.Revoke(p.Chat, p.ID) }, nil)
 }
@@ -56,12 +56,10 @@ func (s *session) storeOrInvalid(id json.RawMessage, err error) map[string]any {
 	return errorReply(id, errMessage, msgInvalidMessage)
 }
 
-func (s *session) sendFailed(id json.RawMessage, err error) map[string]any {
-	fmt.Fprintln(s.logOut, "edit or revoke failed") // the error text could hold names
-	if errors.Is(err, whatsapp.ErrOffline) {
-		return errorReply(id, errSendFailed, msgNotConnected)
-	}
-	return errorReply(id, errSendFailed, msgSendFailed)
+// whatsappFailed answers a failed WhatsApp call: no connection, a timeout or any other refusal. Nothing changed.
+func (s *session) whatsappFailed(id json.RawMessage, err error) map[string]any {
+	fmt.Fprintln(s.logOut, "whatsapp call failed") // the error text could hold names
+	return errorReply(id, errNoWhatsApp, msgNoWhatsApp)
 }
 
 // changed stores the change and answers with the new Message. The follow-up runs before and then tells the Plugin it changed.

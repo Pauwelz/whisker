@@ -21,6 +21,8 @@ type Message struct {
 	Chat       string `json:"chat"`
 	Sender     string `json:"sender"`
 	SenderName string `json:"senderName"`
+	// SenderPush is true when SenderName is a Push Name: the user has no phone contact for the sender.
+	SenderPush bool   `json:"senderPush,omitempty"`
 	FromMe     bool   `json:"fromMe"`
 	Time       int64  `json:"time"`
 	Text       string `json:"text"`
@@ -33,6 +35,8 @@ type Message struct {
 	Reactions []Reaction `json:"reactions,omitempty"` // at most one per Participant, in the order they were first set
 	// Mentions are the names in Text that the Plugin highlights, each as "@name". Text already holds them.
 	Mentions []string `json:"mentions,omitempty"`
+	// MentionsMe is true when the Message mentions the user. The Plugin highlights the line.
+	MentionsMe bool `json:"mentionsMe,omitempty"`
 	// ExpiresAt is when a Disappearing Message goes (Unix seconds). It is 0 for a Message that stays.
 	ExpiresAt int64 `json:"expiresAt,omitempty"`
 }
@@ -62,6 +66,12 @@ type MediaInfo struct {
 	Name  string     `json:"name"`
 	Size  int64      `json:"size"`
 	State string     `json:"state"`
+	// Thumbnail is WhatsApp's JPEG thumbnail, base64 in JSON. Absent when WhatsApp sent none.
+	Thumbnail []byte `json:"thumbnail,omitempty"`
+	// Duration is the length in seconds of audio, voice and video. Absent when WhatsApp sent none.
+	Duration int64 `json:"duration,omitempty"`
+	// Played tells that the user played the voice note in whisker.
+	Played bool `json:"played,omitempty"`
 }
 
 // Media states.
@@ -85,7 +95,7 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 const selectMessage = `
 	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
 		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, ''),
-	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at
+	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at, m.mentions_me, COALESCE(md.thumbnail, x''), COALESCE(md.duration, 0), COALESCE(md.played, 0)
 	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN names q ON q.jid = m.quote_sender
 	LEFT JOIN media md ON md.chat_jid = m.chat_jid AND md.id = m.id `
 
@@ -208,7 +218,7 @@ func (s *Store) Edit(chat, id, sender string, fromMe bool, text string) (bool, e
 // Revoke turns a Message into a Tombstone: it empties the text and keeps the position. It reports whether the Message changed.
 // A Tombstone keeps no Media: the Media row goes, and so does the stored file (through RemoveMedia).
 func (s *Store) Revoke(chat, id string) (bool, error) {
-	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1, mentions = '' WHERE chat_jid = ? AND id = ? AND revoked = 0`, chat, id)
+	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1, mentions = '', mentions_me = 0 WHERE chat_jid = ? AND id = ? AND revoked = 0`, chat, id)
 	if err != nil || !changed {
 		return changed, err
 	}
@@ -250,17 +260,23 @@ func (s *Store) Expire(now int64) ([]Expired, error) {
 		return nil, err
 	}
 	for _, e := range gone {
-		if _, err := s.DeleteMedia(e.Chat, e.ID); err != nil {
-			return nil, err
-		}
-		if _, err := s.db.Exec(`DELETE FROM reactions WHERE chat_jid = ? AND message_id = ?`, e.Chat, e.ID); err != nil {
-			return nil, err
-		}
-		if _, err := s.db.Exec(`DELETE FROM messages WHERE chat_jid = ? AND id = ?`, e.Chat, e.ID); err != nil {
+		if err := s.DeleteMessage(e.Chat, e.ID); err != nil {
 			return nil, err
 		}
 	}
 	return gone, nil
+}
+
+// DeleteMessage deletes a Message with its Media and Reactions. Expire and "delete for me" use it.
+func (s *Store) DeleteMessage(chat, id string) error {
+	if _, err := s.DeleteMedia(chat, id); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec(`DELETE FROM reactions WHERE chat_jid = ? AND message_id = ?`, chat, id); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM messages WHERE chat_jid = ? AND id = ?`, chat, id)
+	return err
 }
 
 // DeleteMedia removes the Media row of a Message and calls RemoveMedia. It reports whether a row existed.
@@ -356,7 +372,7 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 		var q Quote
 		var mi MediaInfo
 		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push,
-			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt); err != nil {
+			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played); err != nil {
 			return nil, err
 		}
 		if mi.Kind != "" {
@@ -364,6 +380,7 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 		}
 		if !m.FromMe {
 			m.SenderName = participantName(contact, push, m.Sender)
+			m.SenderPush = contact == "" && push != ""
 		}
 		if q.ID != "" {
 			q.FromMe = q.Sender == ""
@@ -414,15 +431,26 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 	if m.Quote != nil {
 		q = *m.Quote
 	}
-	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, mentions, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text, strings.Join(m.Mentions, " "), expiry(m.Time, m.Timer)); err != nil {
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, mentions, mentions_me, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text, strings.Join(m.Mentions, " "), boolInt(m.MentionsMe), expiry(m.Time, m.Timer)); err != nil {
 		return err
 	}
 	if m.Media != nil {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState); err != nil {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state, thumbnail, duration)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState, m.Media.Thumbnail, m.Media.Duration); err != nil {
+			return err
+		}
+	}
+	// A Reaction that a live event already set wins over the one History Sync carries.
+	for _, r := range m.Reactions {
+		sender := r.Sender
+		if r.FromMe {
+			sender = ""
+		}
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO reactions (chat_jid, message_id, sender_jid, emoji) VALUES (?, ?, ?, ?)`,
+			chat, m.ID, sender, r.Emoji); err != nil {
 			return err
 		}
 	}
@@ -445,6 +473,11 @@ func (s *Store) MediaOf(chat, id string) (MediaRef, error) {
 		FROM media WHERE chat_jid = ? AND id = ?`, chat, id).
 		Scan(&r.Kind, &r.Mime, &r.Name, &r.Size, &r.Key, &r.DirectPath, &r.FileSHA256, &r.FileEncSHA256, &r.State)
 	return r, err
+}
+
+// SetPlayed marks a voice note as played by the user. It reports whether the mark is new.
+func (s *Store) SetPlayed(chat, id string) (bool, error) {
+	return s.change(`UPDATE media SET played = 1 WHERE chat_jid = ? AND id = ? AND played = 0`, chat, id)
 }
 
 // BeginDownload moves Media from none or failed to downloading. It reports whether it moved.

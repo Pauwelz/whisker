@@ -52,6 +52,32 @@ Item {
     send(State.chatListRequest, 0, chatQuery)
   }
 
+  // The new Chat view: the people that match the search field, and the pick of one of them.
+  function searchContacts(text) {
+    send(State.contactsSearchRequest, text)
+    var digits = State.lookupPhone(text)
+    if (digits === "") {
+      lookupTimer.stop()
+      return
+    }
+    view = State.lookupStarted(view, digits)
+    lookupTimer.digits = digits
+    lookupTimer.restart() // the lookup waits until the user stops typing
+  }
+
+  Timer {
+    id: lookupTimer
+    property string digits: ""
+    interval: 400
+    onTriggered: root.send(State.lookupRequest, digits)
+  }
+
+  // Called when the user picks a person. The Daemon stores the Chat first; the Messages and the Draft follow in order.
+  function startChat(contact) {
+    send(State.chatStartRequest, contact.jid)
+    openChat({ jid: contact.jid, name: contact.name, kind: "direct" })
+  }
+
   // Called when the user picks a Chat of the Chat list. `chat` is a row of the list.
   function openChat(chat) {
     if (view.openChat) leaveChat() // a notification click can open a Chat while another is open
@@ -85,6 +111,7 @@ Item {
     leaveChat()
     view = State.closeChat(view)
     syncAttention()
+    send(State.chatListRequest, 0, chatQuery) // a Draft can list a Chat
   }
 
   // Outgoing Composing. The Daemon drops it when "send typing" is off.
@@ -204,6 +231,11 @@ Item {
     linkOpener.startDetached()
   }
 
+  // Called by the Copy text action. The text goes to the clipboard.
+  function copyText(text) {
+    Quickshell.clipboardText = text
+  }
+
   // The child process of the voice note. Stop ends it. An exit that is not from a newer note clears playingKey.
   Process {
     id: player
@@ -223,6 +255,17 @@ Item {
     view = State.clearDraft(view)
   }
 
+  // Called by the Chat menu and the hover buttons of the Chat list. `option` is one of State.chatOptions.
+  function chooseChatOption(chat, option) {
+    if (State.leavesChatFor(view, chat.jid, option)) closeChat() // before the request: the Chat is no longer attended
+    send(State.chatOptionRequest, chat.jid, option)
+  }
+
+  // Called when the notice of an error has shown long enough.
+  function dismissNotice() {
+    view = State.clearNotice(view)
+  }
+
   // Called by the Reaction picker. `emoji` is the picked emoji; picking the current Reaction removes it.
   function reactToMessage(message, emoji) {
     send(State.reactRequest, view.openChat.jid, message.id, State.reactionChoice(message, emoji))
@@ -236,6 +279,11 @@ Item {
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.
   function revokeMessage(messageId) {
     send(State.revokeRequest, view.openChat.jid, messageId)
+  }
+
+  // Called by "Delete for me" in the Message menu. The Daemon sends messageExpired, which removes the Message.
+  function deleteMessageForMe(messageId) {
+    send(State.deleteForMeRequest, view.openChat.jid, messageId)
   }
 
   // Called by the Retry button of a failed Message.

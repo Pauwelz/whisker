@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 80 464 344" width="464" height="344">
+  <g fill="#fff">
+    <path fill-rule="evenodd" d="M208 146H304A96 96 0 0 1 400 242V260A96 96 0 0 1 304 356H208A96 96 0 0 1 112 260V242A96 96 0 0 1 208 146ZM221 252A15 15 0 1 0 191 252A15 15 0 1 0 221 252ZM321 252A15 15 0 1 0 291 252A15 15 0 1 0 321 252ZM242 282H270L256 298Z"/>
+    <path d="M134 240 L152 92 L246 154 L246 208 Z" stroke="#fff" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M378 240 L360 92 L266 154 L266 208 Z" stroke="#fff" stroke-width="14" stroke-linejoin="round"/>
+    <polygon points="150,336 130,412 218,352"/>
+  </g>
+  <g stroke="#fff" stroke-width="12" stroke-linecap="round" fill="none">
+    <line x1="136" y1="246" x2="40" y2="222"/>
+    <line x1="136" y1="272" x2="36" y2="272"/>
+    <line x1="136" y1="298" x2="40" y2="322"/>
+    <line x1="376" y1="246" x2="472" y2="222"/>
+    <line x1="376" y1="272" x2="476" y2="272"/>
+    <line x1="376" y1="298" x2="472" y2="322"/>
+  </g>
+</svg>

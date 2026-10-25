@@ -17,7 +17,7 @@ func (s *session) chatReact(req *request) outcome {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
 	if err := s.port.React(p.Chat, p.ID, m.Sender, p.Emoji); err != nil {
-		return outcome{reply: s.sendFailed(req.ID, err)}
+		return outcome{reply: s.whatsappFailed(req.ID, err)}
 	}
 	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.SetReaction(p.Chat, p.ID, "", true, p.Emoji) }, func() { s.read.interaction(p.Chat) })
 }
