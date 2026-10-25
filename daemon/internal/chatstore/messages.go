@@ -72,6 +72,8 @@ type MediaInfo struct {
 	Duration int64 `json:"duration,omitempty"`
 	// Played tells that the user played the voice note in whisker.
 	Played bool `json:"played,omitempty"`
+	// Gif tells that a video plays as a looping GIF.
+	Gif bool `json:"gif,omitempty"`
 }
 
 // Media states.
@@ -95,7 +97,7 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 const selectMessage = `
 	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
 		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, ''),
-	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at, m.mentions_me, COALESCE(md.thumbnail, x''), COALESCE(md.duration, 0), COALESCE(md.played, 0)
+	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at, m.mentions_me, COALESCE(md.thumbnail, x''), COALESCE(md.duration, 0), COALESCE(md.played, 0), COALESCE(md.gif, 0)
 	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN names q ON q.jid = m.quote_sender
 	LEFT JOIN media md ON md.chat_jid = m.chat_jid AND md.id = m.id `
 
@@ -381,7 +383,7 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 		var q Quote
 		var mi MediaInfo
 		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push,
-			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played); err != nil {
+			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played, &mi.Gif); err != nil {
 			return nil, err
 		}
 		if mi.Kind != "" {
@@ -456,9 +458,9 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 		}
 	}
 	if m.Media != nil {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state, thumbnail, duration)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState, m.Media.Thumbnail, m.Media.Duration); err != nil {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state, thumbnail, duration, gif)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState, m.Media.Thumbnail, m.Media.Duration, m.Media.Gif); err != nil {
 			return err
 		}
 	}

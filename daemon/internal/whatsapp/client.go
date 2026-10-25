@@ -870,7 +870,7 @@ func mediaOf(m *waE2E.Message) *Media {
 		return &Media{Kind: kind, Mime: am.GetMimetype(), Size: int64(am.GetFileLength()), Key: am.GetMediaKey(), DirectPath: am.GetDirectPath(), FileSHA256: am.GetFileSHA256(), FileEncSHA256: am.GetFileEncSHA256(), Duration: int64(am.GetSeconds())}
 	case m.GetVideoMessage() != nil:
 		vm := m.GetVideoMessage()
-		return &Media{Kind: media.Video, Mime: vm.GetMimetype(), Size: int64(vm.GetFileLength()), Key: vm.GetMediaKey(), DirectPath: vm.GetDirectPath(), FileSHA256: vm.GetFileSHA256(), FileEncSHA256: vm.GetFileEncSHA256(), Thumbnail: vm.GetJPEGThumbnail(), Duration: int64(vm.GetSeconds())}
+		return &Media{Kind: media.Video, Mime: vm.GetMimetype(), Size: int64(vm.GetFileLength()), Key: vm.GetMediaKey(), DirectPath: vm.GetDirectPath(), FileSHA256: vm.GetFileSHA256(), FileEncSHA256: vm.GetFileEncSHA256(), Thumbnail: vm.GetJPEGThumbnail(), Duration: int64(vm.GetSeconds()), Gif: vm.GetGifPlayback()}
 	case m.GetDocumentMessage() != nil:
 		dm := m.GetDocumentMessage()
 		return &Media{Kind: media.Document, Mime: dm.GetMimetype(), Name: dm.GetFileName(), Size: int64(dm.GetFileLength()), Key: dm.GetMediaKey(), DirectPath: dm.GetDirectPath(), FileSHA256: dm.GetFileSHA256(), FileEncSHA256: dm.GetFileEncSHA256(), Thumbnail: dm.GetJPEGThumbnail()}

@@ -1167,7 +1167,7 @@ var MEDIA_KIND_LABELS = { image: "Image", sticker: "Sticker", voice: "Voice note
 function mediaLabel(message) {
   var media = message.media
   if (!media) return ""
-  var label = MEDIA_KIND_LABELS[media.kind] || "File"
+  var label = media.gif ? "GIF" : MEDIA_KIND_LABELS[media.kind] || "File"
   if (media.name) label += ": " + media.name
   return label + " (" + (media.duration ? formatDuration(media.duration) + ", " : "") + formatSize(media.size) + ")"
 }
@@ -1203,9 +1203,11 @@ function canOpenMedia(message) {
   return !!message.media && message.media.state === MEDIA_STATE.READY
 }
 
-// The command that opens a plain copy: video in mpv, a voice note in mpv without a window, everything else in the default app.
+// The command that opens a plain copy: video in mpv, a GIF in mpv on a loop, a voice note in mpv without a window,
+// everything else in the default app.
 function openCommand(message, path) {
   if (message.media.kind === "voice") return ["mpv", "--no-video", path]
+  if (message.media.gif) return ["mpv", "--loop", path]
   return message.media.kind === "video" ? ["mpv", path] : ["xdg-open", path]
 }
 
@@ -1352,13 +1354,13 @@ function chipBlurred(m) {
 
 var MIME_BADGES = { "application/pdf": "PDF", "audio/mpeg": "MP3", "audio/ogg": "OGG", "audio/mp4": "M4A", "audio/wav": "WAV", "audio/flac": "FLAC" }
 
-// The file-type badge of a chip without a thumbnail. An image or video says IMG or VID.
+// The file-type badge of a chip without a thumbnail. An image, video or GIF says IMG, VID or GIF.
 // A document or audio file shows the extension of the name, else the MIME type, else the kind.
 function fileBadge(m) {
   var md = m.media
   if (!md || md.thumbnail) return ""
   if (md.kind === "image") return "IMG"
-  if (md.kind === "video") return "VID"
+  if (md.kind === "video") return md.gif ? "GIF" : "VID"
   if (md.kind !== "document" && md.kind !== "audio") return ""
   var ext = /\.([A-Za-z0-9]{1,5})$/.exec(md.name || "")
   if (ext) return ext[1].toUpperCase()

@@ -71,3 +71,11 @@ func TestMediaOfKeepsTheDurationOfAudioAndVideo(t *testing.T) {
 		t.Errorf("durations = %d, %d; want 12, 95", voice.Duration, video.Duration)
 	}
 }
+
+func TestMediaOfMarksAVideoThatPlaysAsAGif(t *testing.T) {
+	gif := mediaOf(&waE2E.Message{VideoMessage: &waE2E.VideoMessage{GifPlayback: proto.Bool(true)}})
+	video := mediaOf(&waE2E.Message{VideoMessage: &waE2E.VideoMessage{}})
+	if !gif.Gif || video.Gif {
+		t.Errorf("gif = %v, video = %v; want true, false", gif.Gif, video.Gif)
+	}
+}

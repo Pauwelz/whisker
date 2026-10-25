@@ -443,7 +443,7 @@ Fixtures: `presence-incoming.jsonl`, `presence-online.jsonl`, `presence-typing.j
 
 ### Media
 
-A Message with Media has a `media` object: `{"kind","mime","name","size","state"}` and, when they apply, `"thumbnail"`, `"duration"` and `"played"`. `text` holds the caption. `size` is in bytes. `name` is the file name of a document, else empty. `thumbnail` is the small JPEG that WhatsApp sends with image, video and document Messages, as base64, passed on as it arrives. The Daemon makes no thumbnails. The key is absent when WhatsApp sent none. `duration` is the length in seconds of audio, voice and video, absent when WhatsApp sent none. `played` is true once the user played the voice note in whisker, absent before. Fixtures: `media-thumbnail.jsonl`, `played-on-open.jsonl`.
+A Message with Media has a `media` object: `{"kind","mime","name","size","state"}` and, when they apply, `"thumbnail"`, `"duration"`, `"played"` and `"gif"`. `text` holds the caption. `size` is in bytes. `name` is the file name of a document, else empty. `thumbnail` is the small JPEG that WhatsApp sends with image, video and document Messages, as base64, passed on as it arrives. The Daemon makes no thumbnails. The key is absent when WhatsApp sent none. `duration` is the length in seconds of audio, voice and video, absent when WhatsApp sent none. `played` is true once the user played the voice note in whisker, absent before. `gif` is true for a video that WhatsApp plays as a looping GIF, absent otherwise. Its `kind` stays `video`. Fixtures: `media-thumbnail.jsonl`, `played-on-open.jsonl`.
 
 | `kind` | Download |
 |---|---|

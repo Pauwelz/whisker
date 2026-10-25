@@ -157,6 +157,7 @@ type Media struct {
 	FileEncSHA256 []byte     `json:"fileEncSha256"`
 	Thumbnail     []byte     `json:"thumbnail"` // the JPEG thumbnail WhatsApp sent with the Message, empty when none
 	Duration      int64      `json:"duration"`  // seconds of audio, voice and video, 0 when WhatsApp sent none
+	Gif           bool       `json:"gif"`       // a video that WhatsApp plays as a looping GIF
 }
 
 // Message is one Message of a History Sync batch. Times are Unix seconds.

@@ -46,6 +46,8 @@ test("Media rows say what they are and what the user can do", () => {
 
 test("video opens in mpv and everything else in the default app", () => {
   assert.deepEqual(plain(State.openCommand({ media: { kind: "video" } }, "/p/v.mp4")), ["mpv", "/p/v.mp4"]);
+  assert.deepEqual(plain(State.openCommand({ media: { kind: "video", gif: true } }, "/p/g.mp4")), ["mpv", "--loop", "/p/g.mp4"]);
+  assert.equal(State.mediaLabel({ media: { kind: "video", gif: true, size: 2048 } }), "GIF (2.0 KB)");
   assert.deepEqual(plain(State.openCommand({ media: { kind: "document" } }, "/p/a.pdf")), ["xdg-open", "/p/a.pdf"]);
   assert.deepEqual(plain(State.openCommand({ media: { kind: "voice" } }, "/p/v.ogg")), ["mpv", "--no-video", "/p/v.ogg"]);
 });

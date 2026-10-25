@@ -33,6 +33,7 @@ test("chips without a thumbnail show a file-type badge", () => {
   assert.equal(State.fileBadge(media("document", "none", { name: "a.pdf", thumbnail: "x" })), "");
   assert.equal(State.fileBadge(media("image", "none")), "IMG");
   assert.equal(State.fileBadge(media("video", "none")), "VID");
+  assert.equal(State.fileBadge(media("video", "none", { gif: true })), "GIF");
   assert.equal(State.fileBadge(media("image", "none", { thumbnail: "x" })), "");
 });
 
