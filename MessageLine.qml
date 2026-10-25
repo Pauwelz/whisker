@@ -27,15 +27,19 @@ Item {
   // A right click opens the menu.
   TapHandler {
     acceptedButtons: Qt.RightButton
-    onTapped: if (line.isMessage) line.panel.menuId = line.message.id
+    onTapped: if (line.isMessage) line.openMenu()
+  }
+
+  function openMenu() {
+    line.panel.closeOverlays()
+    line.panel.menuId = line.message.id
   }
 
   // Runs one action of Message.actionsFor. The toolbar and the menu call it.
   function run(name) {
     var service = line.panel.whiskerService
     var message = line.message
-    line.panel.menuId = ""
-    line.panel.reactingId = ""
+    line.panel.closeOverlays()
     switch (name) {
     case "reply":
       service.changeDraft({ quote: message.id })
@@ -343,7 +347,7 @@ Item {
           horizontalPadding: Style.space(4)
           verticalPadding: 0
           fontSize: Style.font.caption
-          onClicked: modelData.name === "more" ? line.panel.menuId = line.message.id : line.run(modelData.name)
+          onClicked: modelData.name === "more" ? line.openMenu() : line.run(modelData.name)
         }
       }
     }

@@ -165,9 +165,12 @@ function composerRequest(id, jid, editingId, text, quoteId, attachments) {
 }
 
 // What the composer text means for the outgoing Composing: "start", "stop" or "" (no change).
-function typingAction(wasTyping, text) {
+// `draftText` is the stored Draft text before this change. Text equal to it came from the Draft
+// (a load, a restore or an Edit), not from the user, so it never starts Composing.
+function typingAction(wasTyping, text, draftText) {
   var typing = String(text).trim() !== ""
   if (typing === wasTyping) return ""
+  if (typing && text === draftText) return ""
   return typing ? "start" : "stop"
 }
 

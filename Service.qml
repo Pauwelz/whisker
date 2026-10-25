@@ -144,8 +144,9 @@ Item {
   // Called by the composer when its text changes.
   function composerChanged(text) {
     if (!view.openChat) return
+    var draftText = Draft.draftOf(view).text
     changeDraft({ text: text })
-    var action = Draft.typingAction(typingChat !== "", text)
+    var action = Draft.typingAction(typingChat !== "", text, draftText)
     if (action === "start") {
       typingChat = view.openChat.jid
       send(Draft.typingRequest, typingChat, true)

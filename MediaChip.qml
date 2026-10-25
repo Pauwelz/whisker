@@ -20,6 +20,7 @@ Column {
 
   // Runs one action of Message.actionsFor. Reply, react and the rest of the rule belong to #53.
   function run(action) {
+    panel.closeOverlays()
     if (action === "saveAs") panel.savingId = message.id
     else if (action === "download") service.downloadMedia(message)
     else if (action === "open" || action === "play") service.openMedia(message)

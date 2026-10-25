@@ -27,6 +27,7 @@ Panel {
   property bool showNewChat: false // the new Chat view: the user picks it, so it is view state only
   property string chatFilter: "all" // the Chat list filter the user picked: all, unread, groups or archived
   readonly property var shownChats: ChatList.filterChats(root.view.chats || [], root.chatFilter)
+  onShownChatsChanged: chatListView.showChats()
   property string savingId: "" // the Message whose Save as path is being typed, or empty
   // The Draft of the open Chat comes from the Daemon state. The Plugin changes it through Service.changeDraft.
   readonly property var draft: Draft.draftOf(root.view)
@@ -37,11 +38,19 @@ Panel {
   // The open Chat as the Chat list holds it, for the pin and mute state of its links. Null when a search hides it.
   readonly property var openChatRow: root.openChat ? ChatList.chatRow(root.view, root.openChat.jid) : null
   property string menuId: "" // the Message whose action menu is open, or empty
-  readonly property var settings: root.view.settings || null
+  // Not `settings`: the base Panel owns that name, and the bar writes its shell.json settings into it.
+  readonly property var profileSettings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
   readonly property var openChat: root.view.openChat || null
-  onOpenChatChanged: chatLinksFor = "" // also after mark unread, which closes the Chat
-  readonly property var timeline: root.openChat ? Timeline.timelineRows(root.openChat.messages) : [] // oldest first
+  // Keyed on the jid: the Daemon replaces the openChat object on every Draft edit and Message.
+  readonly property string openJid: root.openChat ? root.openChat.jid : ""
+  onOpenJidChanged: { // also after mark unread, which closes the Chat
+    closeOverlays()
+    chatLinksFor = ""
+  }
+  // Only a new messages array rebuilds the timeline; a Draft edit keeps the same array.
+  readonly property var openMessages: root.openChat ? root.openChat.messages : null
+  readonly property var timeline: root.openMessages ? Timeline.timelineRows(root.openMessages) : [] // oldest first
   onTimelineChanged: timelineView.showTimeline()
   // Which parts show. The decision is Daemon.panelParts.
   readonly property var parts: Daemon.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings, showNewChat: root.showNewChat })
@@ -63,10 +72,10 @@ Panel {
     titleSize: Style.font.body
     label: Daemon.SETTING_TOGGLES[key].label
     description: Daemon.SETTING_TOGGLES[key].description
-    checked: !!root.settings && root.settings[key]
+    checked: !!root.profileSettings && root.profileSettings[key]
     foreground: root.contentForeground
     fontFamily: root.contentFontFamily
-    onClicked: root.whiskerService.changeSettings({ [key]: !root.settings[key] })
+    onClicked: root.whiskerService.changeSettings({ [key]: !root.profileSettings[key] })
   }
 
   // A setting with a few choices: its label and the buttons on one line.
@@ -96,7 +105,6 @@ Panel {
   function runShortcut(shortcut) {
     var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat })
     if (action === "closeChat") {
-      root.reactingId = ""
       root.whiskerService.closeChat()
     } else if (action === "closeSettings") {
       root.showSettings = false
@@ -108,6 +116,13 @@ Panel {
     } else if (action === "focusSearch") {
       searchInput.forceActiveFocus()
     }
+  }
+
+  // Closes the Message overlays: the Reaction picker, the menu and the Save as field. Open one only after this.
+  function closeOverlays() {
+    root.reactingId = ""
+    root.menuId = ""
+    root.savingId = ""
   }
 
   // Called by MessageLine, which cannot reach the composer.
@@ -622,14 +637,14 @@ Panel {
             SettingChoice {
               label: "Read Receipts"
               options: Daemon.READ_RECEIPT_MODES
-              value: root.settings ? root.settings.readReceipts : ""
+              value: root.profileSettings ? root.profileSettings.readReceipts : ""
               onChanged: function(mode) { root.whiskerService.changeSettings({ readReceipts: mode }) }
             }
             Text {
               width: parent.width
               wrapMode: Text.Wrap
               opacity: 0.6
-              text: Daemon.readReceiptDescription(root.settings)
+              text: Daemon.readReceiptDescription(root.profileSettings)
               color: root.contentForeground
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.caption
@@ -645,10 +660,10 @@ Panel {
             PanelSectionHeader { text: "Media"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
             SettingToggle { key: "autoDownload" }
             SettingChoice {
-              visible: !!root.settings && root.settings.autoDownload
+              visible: !!root.profileSettings && root.profileSettings.autoDownload
               label: "Up to"
               options: Daemon.AUTO_DOWNLOAD_LIMITS
-              value: root.settings ? root.settings.autoDownloadLimit : ""
+              value: root.profileSettings ? root.profileSettings.autoDownloadLimit : ""
               onChanged: function(limit) { root.whiskerService.changeSettings({ autoDownloadLimit: limit }) }
             }
 
@@ -805,11 +820,7 @@ Panel {
               Button {
                 text: "←"
                 tooltipText: "Back to Chats"
-                onClicked: {
-                  root.reactingId = ""
-                  root.menuId = ""
-                  root.whiskerService.closeChat()
-                }
+                onClicked: root.whiskerService.closeChat()
               }
             }
           }
@@ -828,28 +839,13 @@ Panel {
             onContentHeightChanged: if (atNewest) positionViewAtBeginning(); else atNewest = atYEnd
             // A new model array scrolls the list back to the newest row. So the rows live in a ListModel of keys that only gets edits.
             // Rows added above or below the view then leave the rows in view in place.
-            model: ListModel { id: timelineKeys }
-            property var rowsByKey: ({})
+            model: KeyedModel { id: timelineKeys }
             property string shownChat: ""
             Component.onCompleted: showTimeline()
             function showTimeline() {
-              var rows = root.timeline.slice().reverse() // newest first: BottomToTop puts row 0 at the bottom
-              var keys = rows.map(Timeline.rowKey)
-              var byKey = {}
-              rows.forEach(function (row, i) { byKey[keys[i]] = row })
-              var before = []
-              for (var i = 0; i < timelineKeys.count; i++) before.push(timelineKeys.get(i).key)
-              var chat = root.openChat ? root.openChat.jid : ""
-              var edits = chat === shownChat ? Timeline.listEdits(before, keys) : null
-              rowsByKey = Object.assign({}, rowsByKey, byKey) // removed and inserted rows both resolve during the edits
-              if (edits) {
-                edits.forEach(function (e) { if (e.key === undefined) timelineKeys.remove(e.remove); else timelineKeys.insert(e.insert, { key: e.key }) })
-              } else {
-                timelineKeys.clear() // another Chat opens at its newest row
-                keys.forEach(function (key) { timelineKeys.append({ key: key }) })
-              }
-              rowsByKey = byKey
-              shownChat = chat
+              // Newest first: BottomToTop puts row 0 at the bottom. Another Chat opens at its newest row.
+              timelineKeys.show(root.timeline.slice().reverse(), Timeline.rowKey, root.openJid !== shownChat)
+              shownChat = root.openJid
             }
             // BottomToTop puts the footer at the top of the timeline: a quiet link that loads the older Messages.
             footer: Item {
@@ -872,12 +868,12 @@ Panel {
               anchors.fill: parent
               z: -1
               enabled: root.reactingId !== "" || root.menuId !== ""
-              onClicked: { root.reactingId = ""; root.menuId = "" }
+              onClicked: root.closeOverlays()
             }
             delegate: MessageLine {
               required property string key
-              // A removed row's delegate lives until Qt destroys it, after its key left rowsByKey: it then draws nothing.
-              row: timelineView.rowsByKey[key] ?? ({ kind: "removed" })
+              // A removed row's delegate lives until Qt destroys it, after its key left the rows: it then draws nothing.
+              row: timelineKeys.rows[key] ?? ({ kind: "removed" })
               panel: root
               width: ListView.view.width
             }
@@ -958,10 +954,14 @@ Panel {
           width: parent.width
           height: visible ? Math.max(0, root.popoutHeight - y - (loadMoreButton.visible ? loadMoreButton.height + column.spacing : 0)) : 0
           clip: true
-          model: root.shownChats
+          // Presence and typing frames replace the Chats array; edits keep the scroll place and the hover links.
+          model: KeyedModel { id: chatKeys }
+          Component.onCompleted: showChats()
+          function showChats() { chatKeys.show(root.shownChats, function (chat) { return chat.jid }, false) }
           delegate: ChatRow {
-            required property var modelData
-            chat: modelData
+            required property string key
+            // A removed row's delegate lives until Qt destroys it, after its key left the rows.
+            chat: chatKeys.rows[key] ?? ({ jid: key, name: "" })
             panel: root
             width: ListView.view.width
           }

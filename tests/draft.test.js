@@ -21,6 +21,12 @@ test("changing the Draft keeps the pending Quote and Edit target", () => {
   assert.equal(Draft.draftTarget(state, "edit"), null);
 });
 
+// The Panel rebuilds its timeline only when the messages array changes.
+test("changing the Draft keeps the messages array of the open Chat", () => {
+  const state = opened();
+  assert.equal(Draft.changeDraft(state, { text: "typed" }).openChat.messages, state.openChat.messages);
+});
+
 test("a change that changes nothing returns the same state", () => {
   const state = opened();
   assert.equal(Draft.changeDraft(state, { text: "" }), state);

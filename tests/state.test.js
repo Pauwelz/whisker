@@ -537,6 +537,12 @@ test("typingAction sends Composing on the first text and Paused when the text em
   assert.deepEqual(JSON.parse(Draft.typingRequest(3, "1@s", true)), { jsonrpc: "2.0", id: 3, method: "chat.typing", params: { chat: "1@s", typing: true } });
 });
 
+test("typingAction does not send Composing for text that came from the Draft", () => {
+  assert.equal(Draft.typingAction(false, "saved", "saved"), "");
+  assert.equal(Draft.typingAction(false, "saved!", "saved"), "start");
+  assert.equal(Draft.typingAction(true, "", ""), "stop"); // cancelling an Edit still sends Paused
+});
+
 test("chatStatusLabel prefers the activity over Presence", () => {
   let s = Timeline.openChat(Daemon.initialState(), { jid: "1@s", name: "Ann", kind: "direct" });
   s = Daemon.applyFrame(s, { method: "presenceChanged", params: { chat: "1@s", online: true, lastSeen: 0 } });
