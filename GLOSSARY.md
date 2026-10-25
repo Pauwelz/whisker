@@ -57,8 +57,12 @@ An attachment payload (image, video, audio, voice note, document, or sticker) as
 _Avoid_: File, blob, upload, asset
 
 **Message**:
-A chronological entry in a Chat timeline sent by a Participant, carrying text, Media, or a system event, and open to subsequent in-place mutations (Edit, Reaction, Revoke, Delivery State).
+A chronological entry in a Chat timeline sent by a Participant, carrying text or Media, and open to subsequent in-place mutations (Edit, Reaction, Revoke, Delivery State). A System Message is the one kind that no Participant writes.
 _Avoid_: Post, item, event, packet, bubble
+
+**System Message**:
+A Message that records a change to a Chat, such as a Participant who joins, a new subject or a new Disappearing timer. No Participant writes it, and nobody can react to it, quote it, edit it or revoke it.
+_Avoid_: System line, group event, stub, notice
 
 **Quote**:
 A reference on a Message to an earlier Message in the same Chat. It shows the original sender and a short preview.
