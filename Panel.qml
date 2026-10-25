@@ -876,7 +876,8 @@ Panel {
             }
             delegate: MessageLine {
               required property string key
-              row: timelineView.rowsByKey[key]
+              // A removed row's delegate lives until Qt destroys it, after its key left rowsByKey: it then draws nothing.
+              row: timelineView.rowsByKey[key] ?? ({ kind: "removed" })
               panel: root
               width: ListView.view.width
             }
