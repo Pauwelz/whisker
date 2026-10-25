@@ -458,9 +458,11 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 		}
 	}
 	if m.Media != nil {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state, thumbnail, duration, gif)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState, m.Media.Thumbnail, m.Media.Duration, m.Media.Gif); err != nil {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state, thumbnail, duration, gif,
+			thumb_direct_path, thumb_sha256, thumb_enc_sha256)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState, m.Media.Thumbnail, m.Media.Duration, m.Media.Gif,
+			m.Media.ThumbDirectPath, m.Media.ThumbSHA256, m.Media.ThumbEncSHA256); err != nil {
 			return err
 		}
 	}
@@ -490,10 +492,17 @@ type MediaRef struct {
 // MediaOf returns the Media of a Message. It returns sql.ErrNoRows when the Message has none.
 func (s *Store) MediaOf(chat, id string) (MediaRef, error) {
 	var r MediaRef
-	err := s.db.QueryRow(`SELECT kind, mime, name, size, media_key, direct_path, COALESCE(file_sha256, x''), COALESCE(file_enc_sha256, x''), state
+	err := s.db.QueryRow(`SELECT kind, mime, name, size, media_key, direct_path, COALESCE(file_sha256, x''), COALESCE(file_enc_sha256, x''), state,
+		COALESCE(thumbnail, x''), thumb_direct_path, COALESCE(thumb_sha256, x''), COALESCE(thumb_enc_sha256, x'')
 		FROM media WHERE chat_jid = ? AND id = ?`, chat, id).
-		Scan(&r.Kind, &r.Mime, &r.Name, &r.Size, &r.Key, &r.DirectPath, &r.FileSHA256, &r.FileEncSHA256, &r.State)
+		Scan(&r.Kind, &r.Mime, &r.Name, &r.Size, &r.Key, &r.DirectPath, &r.FileSHA256, &r.FileEncSHA256, &r.State,
+			&r.Thumbnail, &r.ThumbDirectPath, &r.ThumbSHA256, &r.ThumbEncSHA256)
 	return r, err
+}
+
+// SetThumbnail stores the thumbnail of Media that came without one. It reports whether the Media still lacked it.
+func (s *Store) SetThumbnail(chat, id string, data []byte) (bool, error) {
+	return s.change(`UPDATE media SET thumbnail = ? WHERE chat_jid = ? AND id = ? AND length(COALESCE(thumbnail, x'')) = 0`, data, chat, id)
 }
 
 // SetPlayed marks a voice note as played by the user. It reports whether the mark is new.

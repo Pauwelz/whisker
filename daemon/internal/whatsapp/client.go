@@ -857,7 +857,8 @@ func mediaOf(m *waE2E.Message) *Media {
 	switch {
 	case m.GetImageMessage() != nil:
 		im := m.GetImageMessage()
-		return &Media{Kind: media.Image, Mime: im.GetMimetype(), Size: int64(im.GetFileLength()), Key: im.GetMediaKey(), DirectPath: im.GetDirectPath(), FileSHA256: im.GetFileSHA256(), FileEncSHA256: im.GetFileEncSHA256(), Thumbnail: im.GetJPEGThumbnail()}
+		return &Media{Kind: media.Image, Mime: im.GetMimetype(), Size: int64(im.GetFileLength()), Key: im.GetMediaKey(), DirectPath: im.GetDirectPath(), FileSHA256: im.GetFileSHA256(), FileEncSHA256: im.GetFileEncSHA256(), Thumbnail: im.GetJPEGThumbnail(),
+			ThumbDirectPath: im.GetThumbnailDirectPath(), ThumbSHA256: im.GetThumbnailSHA256(), ThumbEncSHA256: im.GetThumbnailEncSHA256()}
 	case m.GetStickerMessage() != nil:
 		sm := m.GetStickerMessage()
 		return &Media{Kind: media.Sticker, Mime: sm.GetMimetype(), Size: int64(sm.GetFileLength()), Key: sm.GetMediaKey(), DirectPath: sm.GetDirectPath(), FileSHA256: sm.GetFileSHA256(), FileEncSHA256: sm.GetFileEncSHA256()}
@@ -870,10 +871,12 @@ func mediaOf(m *waE2E.Message) *Media {
 		return &Media{Kind: kind, Mime: am.GetMimetype(), Size: int64(am.GetFileLength()), Key: am.GetMediaKey(), DirectPath: am.GetDirectPath(), FileSHA256: am.GetFileSHA256(), FileEncSHA256: am.GetFileEncSHA256(), Duration: int64(am.GetSeconds())}
 	case m.GetVideoMessage() != nil:
 		vm := m.GetVideoMessage()
-		return &Media{Kind: media.Video, Mime: vm.GetMimetype(), Size: int64(vm.GetFileLength()), Key: vm.GetMediaKey(), DirectPath: vm.GetDirectPath(), FileSHA256: vm.GetFileSHA256(), FileEncSHA256: vm.GetFileEncSHA256(), Thumbnail: vm.GetJPEGThumbnail(), Duration: int64(vm.GetSeconds()), Gif: vm.GetGifPlayback()}
+		return &Media{Kind: media.Video, Mime: vm.GetMimetype(), Size: int64(vm.GetFileLength()), Key: vm.GetMediaKey(), DirectPath: vm.GetDirectPath(), FileSHA256: vm.GetFileSHA256(), FileEncSHA256: vm.GetFileEncSHA256(), Thumbnail: vm.GetJPEGThumbnail(), Duration: int64(vm.GetSeconds()), Gif: vm.GetGifPlayback(),
+			ThumbDirectPath: vm.GetThumbnailDirectPath(), ThumbSHA256: vm.GetThumbnailSHA256(), ThumbEncSHA256: vm.GetThumbnailEncSHA256()}
 	case m.GetDocumentMessage() != nil:
 		dm := m.GetDocumentMessage()
-		return &Media{Kind: media.Document, Mime: dm.GetMimetype(), Name: dm.GetFileName(), Size: int64(dm.GetFileLength()), Key: dm.GetMediaKey(), DirectPath: dm.GetDirectPath(), FileSHA256: dm.GetFileSHA256(), FileEncSHA256: dm.GetFileEncSHA256(), Thumbnail: dm.GetJPEGThumbnail()}
+		return &Media{Kind: media.Document, Mime: dm.GetMimetype(), Name: dm.GetFileName(), Size: int64(dm.GetFileLength()), Key: dm.GetMediaKey(), DirectPath: dm.GetDirectPath(), FileSHA256: dm.GetFileSHA256(), FileEncSHA256: dm.GetFileEncSHA256(), Thumbnail: dm.GetJPEGThumbnail(),
+			ThumbDirectPath: dm.GetThumbnailDirectPath(), ThumbSHA256: dm.GetThumbnailSHA256(), ThumbEncSHA256: dm.GetThumbnailEncSHA256()}
 	}
 	return nil
 }
@@ -882,6 +885,13 @@ func (c *Client) Download(ref Media, dst *os.File) error {
 	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 	defer cancel()
 	return c.cli.DownloadMediaWithPathToFile(ctx, ref.DirectPath, ref.FileEncSHA256, ref.FileSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false, dst)
+}
+
+// DownloadThumbnail uses the media key and key type of the file itself; whatsmeow's own DownloadThumbnail knows only link previews.
+func (c *Client) DownloadThumbnail(ref Media) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	defer cancel()
+	return c.cli.DownloadMediaWithPath(ctx, ref.ThumbDirectPath, ref.ThumbEncSHA256, ref.ThumbSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false)
 }
 
 // phone is the phone JID of a user JID that whatsmeow gives out. Any alt that holds the phone JID wins over the LID store.

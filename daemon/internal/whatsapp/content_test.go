@@ -79,3 +79,12 @@ func TestMediaOfMarksAVideoThatPlaysAsAGif(t *testing.T) {
 		t.Errorf("gif = %v, video = %v; want true, false", gif.Gif, video.Gif)
 	}
 }
+
+func TestMediaOfKeepsTheLinkToTheSeparateThumbnail(t *testing.T) {
+	im := mediaOf(&waE2E.Message{ImageMessage: &waE2E.ImageMessage{ThumbnailDirectPath: proto.String("/t"), ThumbnailSHA256: []byte{1}, ThumbnailEncSHA256: []byte{2}}})
+	vm := mediaOf(&waE2E.Message{VideoMessage: &waE2E.VideoMessage{ThumbnailDirectPath: proto.String("/v")}})
+	dm := mediaOf(&waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{ThumbnailDirectPath: proto.String("/d")}})
+	if im.ThumbDirectPath != "/t" || im.ThumbSHA256[0] != 1 || im.ThumbEncSHA256[0] != 2 || vm.ThumbDirectPath != "/v" || dm.ThumbDirectPath != "/d" {
+		t.Errorf("thumbnail links = %+v, %+v, %+v", im, vm, dm)
+	}
+}

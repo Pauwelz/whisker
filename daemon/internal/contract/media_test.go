@@ -1,6 +1,7 @@
 package contract_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,5 +86,67 @@ func TestChangedStoredMediaIsRejected(t *testing.T) {
 	_, _, logs := r.finish()
 	if strings.Contains(logs, r.runtime) || strings.Contains(logs, "whatsapp.net") {
 		t.Errorf("logs hold a Chat or a path: %q", logs)
+	}
+}
+
+// startWithVideo starts the Daemon and receives one video without an inline thumbnail, only the link to WhatsApp's.
+func startWithVideo(t *testing.T, r *runner) {
+	t.Helper()
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
+		ID: "v1", Sender: mediaChat, Time: 5,
+		Media: &whatsapp.Media{Kind: media.Video, Mime: "video/mp4", Key: make([]byte, 32), ThumbDirectPath: "/t/v1"},
+	}})
+	for _, want := range []string{`"none"`, "chatsChanged", `"notify"`} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+}
+
+const listVideoChat = `{"jsonrpc":"2.0","id":1,"method":"chat.messages","params":{"chat":"` + mediaChat + `"}}`
+
+// A listed Message without an inline thumbnail gets WhatsApp's separate one, once.
+func TestListedMediaGetsItsSeparateThumbnail(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetThumbnail("thumb", nil)
+	startWithVideo(t, r)
+	r.send(listVideoChat)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) {
+		t.Fatalf("frame = %s, want the page", f)
+	}
+	if f := r.nextFrame(); !strings.Contains(f, "messageChanged") || !strings.Contains(f, `"thumbnail":"dGh1bWI="`) {
+		t.Fatalf("frame = %s, want the Message with its thumbnail", f)
+	}
+	r.send(listVideoChat)
+	if f := r.nextFrame(); !strings.Contains(f, `"thumbnail":"dGh1bWI="`) {
+		t.Fatalf("frame = %s, want the stored thumbnail in the page", f)
+	}
+	if n := r.port.ThumbnailDownloads(); n != 1 {
+		t.Errorf("thumbnail downloads = %d, want 1", n)
+	}
+}
+
+// A failed thumbnail download changes nothing and is not tried again in the same run.
+func TestFailedThumbnailIsNotRetried(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetThumbnail("", errors.New("gone"))
+	startWithVideo(t, r)
+	r.send(listVideoChat)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) {
+		t.Fatalf("frame = %s, want the page", f)
+	}
+	r.send(listVideoChat)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) || strings.Contains(f, "thumbnail") {
+		t.Fatalf("frame = %s, want the page without a thumbnail", f)
+	}
+	if n := r.port.ThumbnailDownloads(); n != 1 {
+		t.Errorf("thumbnail downloads = %d, want 1", n)
+	}
+	if _, _, logs := r.finish(); !strings.Contains(logs, "thumbnail download failed") || strings.Contains(logs, "gone") {
+		t.Errorf("logs = %q, want the fixed text only", logs)
 	}
 }

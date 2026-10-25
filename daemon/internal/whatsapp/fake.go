@@ -29,6 +29,9 @@ type Fake struct {
 	content    string
 	dlErr      error
 	downloads  int
+	thumb          string
+	thumbErr       error
+	thumbDownloads int
 	readErr    error
 	reads      []Read
 	chatReads  []string
@@ -240,6 +243,26 @@ func (f *Fake) SetDownload(content string, err error) {
 	f.mu.Lock()
 	f.content, f.dlErr = content, err
 	f.mu.Unlock()
+}
+
+// SetThumbnail scripts DownloadThumbnail: it returns content, or fails with err (a non-nil err wins).
+func (f *Fake) SetThumbnail(content string, err error) {
+	f.mu.Lock()
+	f.thumb, f.thumbErr = content, err
+	f.mu.Unlock()
+}
+
+// ThumbnailDownloads counts the DownloadThumbnail calls.
+func (f *Fake) ThumbnailDownloads() int { f.mu.Lock(); defer f.mu.Unlock(); return f.thumbDownloads }
+
+func (f *Fake) DownloadThumbnail(Media) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.thumbDownloads++
+	if f.thumbErr != nil {
+		return nil, f.thumbErr
+	}
+	return []byte(f.thumb), nil
 }
 
 // Downloads counts the Download calls.

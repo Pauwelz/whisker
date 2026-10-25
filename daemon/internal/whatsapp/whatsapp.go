@@ -53,6 +53,8 @@ type Port interface {
 	// Download downloads the plain Media into dst, and checks it against its hashes.
 	// It can block for a long time: call it off the Daemon loop.
 	Download(ref Media, dst *os.File) error
+	// DownloadThumbnail downloads the separate thumbnail of Media (ThumbDirectPath), and checks it against its hashes.
+	DownloadThumbnail(ref Media) ([]byte, error)
 	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.
 	// It returns ErrOffline when there is no connection.
 	MarkRead(chat, sender string, ids []string) error
@@ -158,6 +160,11 @@ type Media struct {
 	Thumbnail     []byte     `json:"thumbnail"` // the JPEG thumbnail WhatsApp sent with the Message, empty when none
 	Duration      int64      `json:"duration"`  // seconds of audio, voice and video, 0 when WhatsApp sent none
 	Gif           bool       `json:"gif"`       // a video that WhatsApp plays as a looping GIF
+	// The link to the thumbnail that WhatsApp keeps apart from the Message. Empty when it sent none.
+	// The thumbnail is encrypted with Key, as the file itself.
+	ThumbDirectPath string `json:"thumbDirectPath"`
+	ThumbSHA256     []byte `json:"thumbSha256"`
+	ThumbEncSHA256  []byte `json:"thumbEncSha256"`
 }
 
 // Message is one Message of a History Sync batch. Times are Unix seconds.

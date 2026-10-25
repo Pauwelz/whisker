@@ -17,11 +17,13 @@ import (
 // downloadPort is what the mediaLoader needs from WhatsApp.
 type downloadPort interface {
 	Download(ref whatsapp.Media, dst *os.File) error
+	DownloadThumbnail(ref whatsapp.Media) ([]byte, error)
 }
 
 // mediaLoader downloads Media and hands out paths to plain copies.
 // Images, stickers and voice notes download when the Message arrives (the chat store marks them downloading).
 // Other Media downloads on `media.download`. It runs on the Daemon loop; only the downloads run on other goroutines.
+// It also fetches the separate thumbnail of listed Media that came without an inline one.
 // Logs hold fixed texts only: never a Chat, a name or a path.
 type mediaLoader struct {
 	chats    *chatstore.Store
@@ -31,11 +33,16 @@ type mediaLoader struct {
 	logOut   io.Writer
 	inflight map[string]bool
 	results  chan mediaResult
+	// thumbTried holds the thumbnails fetched in this run, done or not: a failed one waits for the next run.
+	thumbTried map[string]bool
 }
 
+// mediaResult ends a download of a file, or of a thumbnail when thumbnail is set.
 type mediaResult struct {
-	chat, id string
-	err      error
+	chat, id  string
+	err       error
+	thumbnail bool
+	data      []byte // the thumbnail
 }
 
 // newMediaLoader wipes the plain copies of an earlier run and makes interrupted downloads startable again.
@@ -45,7 +52,7 @@ func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Stor
 		fmt.Fprintln(logOut, "chat store write failed")
 	}
 	chats.RemoveMedia = store.Remove
-	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16)}
+	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}}
 }
 
 // start downloads the Media of a Message that is marked downloading. It does nothing while that Media is in flight.
@@ -58,7 +65,7 @@ func (l *mediaLoader) start(chat, id string) {
 	l.inflight[key] = true
 	go func() {
 		err := l.store.Ingest(chat, id, ref.Kind, ref.Key, func(f *os.File) error { return l.port.Download(ref.Media, f) })
-		l.results <- mediaResult{chat, id, err}
+		l.results <- mediaResult{chat: chat, id: id, err: err}
 	}()
 }
 
@@ -69,8 +76,45 @@ func (l *mediaLoader) autoStart(ev whatsapp.NewMessage) {
 	}
 }
 
+// thumbnails fetches the separate thumbnail of each listed Message whose Media came without an inline one.
+// shortcut: all fetches of a page start at once; a page holds at most maxChatsLimit Messages. Add a limit if WhatsApp throttles.
+func (l *mediaLoader) thumbnails(chat string, msgs []chatstore.Message) {
+	for _, m := range msgs {
+		key := chat + "\x00" + m.ID
+		if m.Media == nil || len(m.Media.Thumbnail) > 0 || l.thumbTried[key] {
+			continue
+		}
+		ref, err := l.chats.MediaOf(chat, m.ID)
+		if err != nil || ref.ThumbDirectPath == "" {
+			continue
+		}
+		l.thumbTried[key] = true
+		go func(id string) {
+			data, err := l.port.DownloadThumbnail(ref.Media)
+			l.results <- mediaResult{chat: chat, id: id, err: err, thumbnail: true, data: data}
+		}(m.ID)
+	}
+}
+
+// thumbnailDone stores a fetched thumbnail and tells the Plugin. It returns false when a frame could not be written.
+func (l *mediaLoader) thumbnailDone(r mediaResult) bool {
+	if r.err != nil || len(r.data) == 0 {
+		fmt.Fprintln(l.logOut, "thumbnail download failed") // the error text could hold hosts
+		return true
+	}
+	changed, err := l.chats.SetThumbnail(r.chat, r.id, r.data)
+	if err != nil {
+		fmt.Fprintln(l.logOut, "chat store write failed")
+		return true
+	}
+	return !changed || l.notify(r.chat, r.id)
+}
+
 // done ends a download. It returns false when a frame could not be written.
 func (l *mediaLoader) done(r mediaResult) bool {
+	if r.thumbnail {
+		return l.thumbnailDone(r)
+	}
 	delete(l.inflight, r.chat+"\x00"+r.id)
 	state := chatstore.MediaReady
 	if r.err != nil {
