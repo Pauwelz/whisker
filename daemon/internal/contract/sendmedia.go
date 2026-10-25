@@ -83,6 +83,8 @@ func (s *session) chatSendMedia(req *request) outcome {
 	msg, err := s.chats.AddPendingMedia(p.Chat, msgID, p.Caption, &m)
 	if err != nil {
 		s.media.Remove(p.Chat, msgID)
+	} else {
+		dropPasted(p.Path) // the Media store holds the encrypted copy now
 	}
 	reply, submit := s.messageReply(req.ID, msg, err)
 	return s.sentOutcome(p.Chat, reply, submit)

@@ -1,11 +1,14 @@
 package contract_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
 // fakeClipboard puts a wl-paste on PATH that offers `types` and prints `uris` for text/uri-list.
@@ -85,5 +88,92 @@ func TestPasteFallsBackToText(t *testing.T) {
 				t.Errorf("log = %q", log)
 			}
 		})
+	}
+}
+
+const imageScript = `if [ "$1" = --list-types ]; then printf 'text/html\nimage/png\ntext/plain\n'; else printf 'png'; fi`
+
+// pastedPath sends draft.paste and returns the path in its result.
+func pastedPath(t *testing.T, r *runner, id int) string {
+	t.Helper()
+	r.send(`{"jsonrpc":"2.0","id":` + mustJSON(id) + `,"method":"draft.paste","params":{"chat":"1@s.whatsapp.net"}}`)
+	var f struct {
+		Result struct{ Pasted string } `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(r.nextFrame()), &f); err != nil {
+		t.Fatal(err)
+	}
+	return f.Result.Pasted
+}
+
+func setAttachment(t *testing.T, r *runner, id int, path string) {
+	t.Helper()
+	r.send(`{"jsonrpc":"2.0","id":` + mustJSON(id) + `,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","attachment":` + mustJSON(path) + `}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"result":{}`) {
+		t.Fatalf("frame = %s, want an empty result", f)
+	}
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func TestPastedImageLivesUntilTheDraftDropsItOrItIsSent(t *testing.T) {
+	fakeClipboard(t, imageScript)
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "1@s.whatsapp.net", LastActive: 1}}})
+	r.nextFrame() // chatsChanged
+
+	first := pastedPath(t, r, 1)
+	if filepath.Dir(filepath.Dir(first)) != filepath.Join(r.runtime, "whisker", "pasted") || filepath.Base(first) != "Pasted image.png" {
+		t.Fatalf("pasted = %q", first)
+	}
+	if st, err := os.Stat(first); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("pasted file: %v, %v", st, err)
+	}
+	if b, _ := os.ReadFile(first); string(b) != "png" {
+		t.Errorf("content = %q", b)
+	}
+	setAttachment(t, r, 2, first)
+
+	second := pastedPath(t, r, 3)
+	setAttachment(t, r, 4, second)
+	if exists(filepath.Dir(first)) {
+		t.Error("a replaced pasted image stays")
+	}
+
+	own := filepath.Join(t.TempDir(), "own.png")
+	if err := os.WriteFile(own, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setAttachment(t, r, 5, own)
+	setAttachment(t, r, 6, "")
+	if exists(second) {
+		t.Error("a removed pasted image stays")
+	}
+	if !exists(own) {
+		t.Error("the Daemon deleted a file of the user")
+	}
+
+	third := pastedPath(t, r, 7)
+	r.send(`{"jsonrpc":"2.0","id":8,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","path":` + mustJSON(third) + `}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"state":"pending"`) {
+		t.Fatalf("frame = %s, want the send", f)
+	}
+	if exists(third) {
+		t.Error("a sent pasted image stays")
+	}
+	r.finish()
+}
+
+func TestPasteRefusesAnImageOverTheLimit(t *testing.T) {
+	fakeClipboard(t, `if [ "$1" = --list-types ]; then printf 'image/png\n'; else exec /usr/bin/head -c 104857601 /dev/zero; fi`)
+	if f, _ := paste(t); !strings.Contains(f, "-32013") {
+		t.Errorf("frame = %s, want not sendable", f)
 	}
 }

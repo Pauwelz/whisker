@@ -429,8 +429,10 @@ Error -32006 means a text over 65536 characters, or a `quote` or `edit` that is 
 Params: `chat`. Valid once the Daemon is `ready`. The Plugin sends it on Ctrl+V in the composer, except during an Edit. The Daemon reads the clipboard with `wl-paste` and answers `{"chat": ..., "pasted": ...}`. It does not change the Draft.
 
 - `pasted` is the absolute path of the one `file://` URI in `text/uri-list`, as a file manager copies a file. The Plugin then stages it as the `attachment` with `draft.set`.
-- `pasted` is empty when the clipboard has no `file://` URI, when `wl-paste` is not installed, or when a `wl-paste` call takes more than 2 seconds. The Plugin then pastes the text of the clipboard itself. A missing `wl-paste` is logged once.
-- Error -32012 means two or more `file://` URIs. Error -32013 means a file that `chat.sendMedia` would refuse: not a regular file, empty or over 100 MiB.
+- With no `file://` URI, an image wins over text. For `image/png`, `image/jpeg` or `image/webp` (best first), the Daemon writes the bytes to `$XDG_RUNTIME_DIR/whisker/pasted/<random>/Pasted image.<ext>` (folder 0700, file 0600) and `pasted` is that path. The folder is in memory, so the plain image never reaches the disk.
+- The Daemon deletes a pasted image, with its folder, when `draft.set` changes the `attachment` away from it, when `chat.sendMedia` has stored its encrypted copy, and on an unlink. It never deletes an `attachment` outside that folder. There is no sweep at start; a reboot clears the folder.
+- `pasted` is empty when the clipboard has no `file://` URI and no image, when `wl-paste` is not installed, or when a `wl-paste` call takes more than 2 seconds. The Plugin then pastes the text of the clipboard itself. A missing `wl-paste` is logged once.
+- Error -32012 means two or more `file://` URIs. Error -32013 means a file or image that `chat.sendMedia` would refuse: not a regular file, empty or over 100 MiB.
 
 The `chat` param only comes back in the result, so the Plugin drops a reply for a Chat that is no longer open.
 
@@ -541,7 +543,7 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32010 | invalid chat | `chat.start` got a `jid` that is not a person's WhatsApp ID. `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got an unknown Chat. |
 | -32011 | pin limit | `chat.pin` would make a 4th Pinned Chat. Nothing changed. |
 | -32012 | paste one file at a time | `draft.paste` found two or more copied files. |
-| -32013 | file not sendable | `draft.paste` found a copied file that is not a regular file, is empty, or is over 100 MiB. |
+| -32013 | file not sendable | `draft.paste` found a copied file that is not a regular file, is empty, or is over 100 MiB, or an image over 100 MiB. |
 
 Fixture: `contract/fixtures/unknown-method.jsonl`.
 

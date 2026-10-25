@@ -141,6 +141,7 @@ func (s *session) wipeMedia() {
 func (s *session) unlink(by string) int {
 	s.port.Disconnect()
 	s.wipeMedia()
+	dropAllPasted() // the Drafts go with the Profile
 	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader = false, nil, nil, nil, nil, nil, nil, nil, nil
 	s.sent, s.mediaDone, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, 0
 	s.attn.Set(s.attn.Open(), "") // the Chat is gone with the Profile

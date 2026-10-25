@@ -46,7 +46,8 @@ func (s *session) draftSet(req *request) outcome {
 		return invalid
 	}
 	// Check the file only when it is new: a keystroke that keeps the stored file must save even if the file is gone now.
-	if old, err := s.chats.Draft(chat); err != nil || d.Attachment != old.Attachment {
+	old, oldErr := s.chats.Draft(chat)
+	if oldErr != nil || d.Attachment != old.Attachment {
 		if d.Attachment != "" {
 			if _, err := statSendable(d.Attachment); err != nil {
 				return invalid
@@ -64,6 +65,9 @@ func (s *session) draftSet(req *request) outcome {
 	if err := s.chats.SetDraft(chat, d); err != nil {
 		fmt.Fprintln(s.logOut, "draft write failed")
 		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
+	}
+	if oldErr == nil && d.Attachment != old.Attachment {
+		dropPasted(old.Attachment) // removed, replaced, or dropped for a Quote
 	}
 	return outcome{reply: emptyReply(req)}
 }
