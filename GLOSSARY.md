@@ -28,6 +28,14 @@ _Avoid_: Workspace, tenant, user folder
 A conversation thread belonging to a Companion Device, categorized as a **Direct Chat** (one-to-one with another Participant), a **Group Chat** (multi-participant room), or a **Self Chat** ("Message Yourself").
 _Avoid_: Channel, room, thread, dialog, conversation
 
+**Chat Sign**:
+The icon before the name of a Chat that shows its kind: Direct Chat, Group Chat or Self Chat. It is not App State.
+_Avoid_: Chat icon, avatar, kind mark
+
+**Chat Marks**:
+The signs on a Chat line that show its App State and a mention: Pinned, Muted, `@` and the unread count or `●`. They sit at the end of the line.
+_Avoid_: Badges, flags, status icons
+
 **Attended Chat**:
 The Chat that the Plugin shows while its pop-out is open. A Message in the Attended Chat does not notify.
 _Avoid_: Focused chat, open chat, active chat

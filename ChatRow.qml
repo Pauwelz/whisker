@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import qs.Commons
 import "WhiskerState.js" as State
 
-// One dense line of the Chat list: sign, pin mark, name, mute and mention marks, "is typing…", then the trailing slot.
+// One dense line of the Chat list: Chat Sign, name, "is typing…", the Chat Marks pin, mute and mention, then the trailing slot.
 // The pop-out (Panel.qml) owns the state. The marks and labels come from WhiskerState.js.
 Item {
   id: row
@@ -32,6 +32,13 @@ Item {
     font.pixelSize: Style.font.body
   }
 
+  component MarkColumn: Mark {
+    property bool shown
+    Layout.preferredWidth: Style.space(16)
+    horizontalAlignment: Text.AlignHCenter
+    color: shown && !hover.hovered ? row.panel.contentForeground : "transparent"
+  }
+
   RowLayout {
     id: line
     anchors.left: parent.left
@@ -53,9 +60,6 @@ Item {
       text: row.chat.name
       font.bold: row.chat.unread
     }
-    Mark { text: "▲"; visible: row.chat.pinned === true; opacity: 0.8 } // Pinned: after the name, so names line up
-    Mark { text: "󰝟"; visible: row.chat.muted === true; opacity: 0.6 } // Muted
-    Mark { text: "@"; visible: row.chat.mention === true; font.bold: true } // the Chat mentions the user
     Mark {
       Layout.fillWidth: true
       elide: Text.ElideRight
@@ -64,6 +68,10 @@ Item {
       font.italic: true
       opacity: hover.hovered ? 0 : 1 // the hover links may reach over it
     }
+    // The Chat Marks: one fixed column each, so a mark has the same place on every line. The hover links reach over them.
+    MarkColumn { text: State.PIN_MARK; shown: row.chat.pinned === true; opacity: 0.8 }
+    MarkColumn { text: "󰝟"; shown: row.chat.muted === true; opacity: 0.6 }
+    MarkColumn { text: "@"; shown: row.chat.mention === true; font.bold: true } // the Chat mentions the user
     Item {
       id: trailingSlot
       Layout.preferredWidth: row.trailingWidth

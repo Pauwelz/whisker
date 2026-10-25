@@ -770,7 +770,7 @@ Panel {
               }
               Text {
                 visible: !!root.openChatRow && root.openChatRow.pinned === true
-                text: "▲"
+                text: State.PIN_MARK
                 opacity: 0.8
                 color: root.contentForeground
                 font.family: root.contentFontFamily

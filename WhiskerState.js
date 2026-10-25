@@ -1234,7 +1234,9 @@ function filterChats(chats, filter) {
   })
 }
 
-var CHAT_SIGNS = { direct: "◦", group: "#", self: "◈" }
+var CHAT_SIGNS = { direct: "󰀄", group: "󰡉", self: "󰃀" } // Nerd Font: account, account-group, bookmark
+
+var PIN_MARK = "󰐃" // Nerd Font: pin
 
 function chatSign(chat) {
   return CHAT_SIGNS[chat.kind] || CHAT_SIGNS.direct
