@@ -34,7 +34,8 @@ type mediaLoader struct {
 	inflight map[string]bool
 	results  chan mediaResult
 	// thumbTried holds the thumbnails fetched in this run, done or not: a failed one waits for the next run.
-	thumbTried map[string]bool
+	thumbTried   map[string]bool
+	autoDownload func() bool // the autoDownload setting
 }
 
 // mediaResult ends a download of a file, or of a thumbnail when thumbnail is set.
@@ -46,13 +47,13 @@ type mediaResult struct {
 }
 
 // newMediaLoader wipes the plain copies of an earlier run and makes interrupted downloads startable again.
-func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Store, notify func(chat, id string) bool, logOut io.Writer) *mediaLoader {
+func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Store, notify func(chat, id string) bool, logOut io.Writer, autoDownload func() bool) *mediaLoader {
 	store.Wipe()
 	if err := chats.ResetDownloads(); err != nil {
 		fmt.Fprintln(logOut, "chat store write failed")
 	}
 	chats.RemoveMedia = store.Remove
-	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}}
+	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}, autoDownload: autoDownload}
 }
 
 // start downloads the Media of a Message that is marked downloading. It does nothing while that Media is in flight.
@@ -69,9 +70,9 @@ func (l *mediaLoader) start(chat, id string) {
 	}()
 }
 
-// autoStart starts the download of a live Message whose Media downloads by itself.
+// autoStart starts the download of a live Message that livePolicy stored as downloading.
 func (l *mediaLoader) autoStart(ev whatsapp.NewMessage) {
-	if livePolicy(ev).MediaState == chatstore.MediaDownloading {
+	if ref, err := l.chats.MediaOf(ev.Chat, ev.Message.ID); err == nil && ref.State == chatstore.MediaDownloading {
 		l.start(ev.Chat, ev.Message.ID)
 	}
 }
@@ -102,9 +103,9 @@ func (l *mediaLoader) previews(chat string, msgs []chatstore.Message) {
 	}
 }
 
-// autoImage downloads an image that is not downloaded. A failed one waits for a click: its retry link shows.
+// autoImage downloads an image that is not downloaded, when autoDownload is on. A failed one waits for a click: its retry link shows.
 func (l *mediaLoader) autoImage(chat, id string, ref chatstore.MediaRef) {
-	if ref.Kind != media.Image || ref.State != chatstore.MediaNone {
+	if ref.Kind != media.Image || ref.State != chatstore.MediaNone || !l.autoDownload() {
 		return
 	}
 	if changed, err := l.chats.BeginDownload(chat, id); err != nil {
@@ -244,4 +245,3 @@ var mimeExtensions = map[string]string{
 	"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif",
 	"video/mp4": ".mp4", "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "application/pdf": ".pdf",
 }
-

@@ -267,7 +267,8 @@ var READ_RECEIPT_MODES = [
 var SETTING_TOGGLES = {
   sendOnline: { label: "Send online", description: "Contacts see when you are online." },
   sendTyping: { label: "Send typing", description: "The Chat shows \"typing…\" while you write." },
-  notifications: { label: "Notifications", description: "Show new Messages when the pop-out is closed." }
+  notifications: { label: "Notifications", description: "Show new Messages when the pop-out is closed." },
+  autoDownload: { label: "Download media", description: "Images, stickers and voice notes download by themselves." }
 }
 
 // True when the Plugin must read the Profile Settings after this frame.

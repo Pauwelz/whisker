@@ -27,6 +27,7 @@ type Settings struct {
 	SendOnline    bool   `json:"sendOnline"`
 	SendTyping    bool   `json:"sendTyping"`
 	Notifications bool   `json:"notifications"`
+	AutoDownload  bool   `json:"autoDownload"` // images, stickers and voice notes download by themselves
 }
 
 // Update is a partial change. A nil field stays as it is.
@@ -35,11 +36,12 @@ type Update struct {
 	SendOnline    *bool   `json:"sendOnline"`
 	SendTyping    *bool   `json:"sendTyping"`
 	Notifications *bool   `json:"notifications"`
+	AutoDownload  *bool   `json:"autoDownload"`
 }
 
 // Defaults returns the settings of a Profile that has no settings file.
 func Defaults() Settings {
-	return Settings{ReadReceipts: ReadReceiptsOnOpen, SendOnline: true, SendTyping: true, Notifications: true}
+	return Settings{ReadReceipts: ReadReceiptsOnOpen, SendOnline: true, SendTyping: true, Notifications: true, AutoDownload: true}
 }
 
 func validMode(m string) bool {
@@ -84,6 +86,9 @@ func (s *Store) Set(u Update) (Settings, error) {
 	}
 	if u.Notifications != nil {
 		cur.Notifications = *u.Notifications
+	}
+	if u.AutoDownload != nil {
+		cur.AutoDownload = *u.AutoDownload
 	}
 	return cur, s.save(cur)
 }

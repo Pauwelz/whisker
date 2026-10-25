@@ -175,3 +175,40 @@ func TestListedImageWithoutAnyThumbnailDownloads(t *testing.T) {
 		t.Errorf("downloads = %d, want 1: the document waits for a click", n)
 	}
 }
+
+// With automatic download off, a live image and a listed image wait for a click.
+func TestAutoDownloadOffKeepsMediaWaiting(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetDownload("pixels", nil)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.send(`{"jsonrpc":"2.0","id":9,"method":"settings.set","params":{"autoDownload":false}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"autoDownload":false`) {
+		t.Fatalf("frame = %s, want the setting off", f)
+	}
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: mediaChat, LastActive: 5, Messages: []whatsapp.Message{
+		{ID: "i1", Sender: mediaChat, Time: 5, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Key: make([]byte, 32)}},
+	}}}})
+	r.nextFrame() // chatsChanged
+	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
+		ID: "i2", Sender: mediaChat, Time: 6, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Key: make([]byte, 32)},
+	}})
+	if f := r.nextFrame(); !strings.Contains(f, `"state":"none"`) {
+		t.Fatalf("frame = %s, want the live image waiting", f)
+	}
+	r.nextFrame() // chatsChanged
+	r.nextFrame() // notify
+	r.send(listVideoChat)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) {
+		t.Fatalf("frame = %s, want the page", f)
+	}
+	r.send(listVideoChat) // a second reply proves no download frame came in between
+	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) {
+		t.Fatalf("frame = %s, want the page again", f)
+	}
+	if n := r.port.Downloads(); n != 0 {
+		t.Errorf("downloads = %d, want 0", n)
+	}
+}

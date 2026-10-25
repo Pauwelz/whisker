@@ -10,7 +10,7 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{}}}
 {"dir":"presence","online":[],"typing":["1@s.whatsapp.net:composing","1@s.whatsapp.net:paused"],"subscribed":[]}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"settings.set","params":{"sendTyping":false}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":false,"notifications":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":false,"notifications":true,"autoDownload":true}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.typing","params":{"chat":"1@s.whatsapp.net","typing":true}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{}}}
 {"dir":"presence","online":[false],"typing":["1@s.whatsapp.net:composing","1@s.whatsapp.net:paused"],"subscribed":[]}

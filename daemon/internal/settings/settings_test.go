@@ -10,7 +10,7 @@ import (
 
 func TestDefaultsWithoutFile(t *testing.T) {
 	got, err := settings.New(filepath.Join(t.TempDir(), "settings.json")).Get()
-	want := settings.Settings{ReadReceipts: "onOpen", SendOnline: true, SendTyping: true, Notifications: true}
+	want := settings.Settings{ReadReceipts: "onOpen", SendOnline: true, SendTyping: true, Notifications: true, AutoDownload: true}
 	if err != nil || got != want {
 		t.Errorf("Get = %+v, %v; want %+v", got, err, want)
 	}
@@ -19,11 +19,11 @@ func TestDefaultsWithoutFile(t *testing.T) {
 func TestSetSurvivesANewStore(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "settings.json")
 	mode, off := "off", false
-	if _, err := settings.New(path).Set(settings.Update{ReadReceipts: &mode, SendTyping: &off}); err != nil {
+	if _, err := settings.New(path).Set(settings.Update{ReadReceipts: &mode, SendTyping: &off, AutoDownload: &off}); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := settings.New(path).Get()
-	want := settings.Settings{ReadReceipts: "off", SendOnline: true, SendTyping: false, Notifications: true}
+	want := settings.Settings{ReadReceipts: "off", SendOnline: true, SendTyping: false, Notifications: true, AutoDownload: false}
 	if got != want {
 		t.Errorf("Get = %+v, want %+v", got, want)
 	}

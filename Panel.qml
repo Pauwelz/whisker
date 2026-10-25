@@ -607,6 +607,10 @@ Panel {
           SettingToggle { key: "notifications" }
 
           PanelSeparator { width: parent.width; foreground: root.contentForeground }
+          PanelSectionHeader { text: "Media"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
+          SettingToggle { key: "autoDownload" }
+
+          PanelSeparator { width: parent.width; foreground: root.contentForeground }
           PanelSectionHeader { text: "Account"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
           Text {
             visible: root.confirmLogout

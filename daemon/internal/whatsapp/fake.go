@@ -12,47 +12,47 @@ import (
 type Fake struct {
 	events chan Event
 
-	mu         sync.Mutex
-	linked     bool
-	pairCode   string
-	pairErr    error
-	connectErr error
-	connects   int
-	sendErr    error
-	sent       []string
-	uploads    []string
-	timers     []int64
-	attempts   int
-	ids        int
-	logoutErr  error
-	logouts    int
-	content    string
-	dlErr      error
-	downloads  int
+	mu             sync.Mutex
+	linked         bool
+	pairCode       string
+	pairErr        error
+	connectErr     error
+	connects       int
+	sendErr        error
+	sent           []string
+	uploads        []string
+	timers         []int64
+	attempts       int
+	ids            int
+	logoutErr      error
+	logouts        int
+	content        string
+	dlErr          error
+	downloads      int
 	thumb          string
 	thumbErr       error
 	thumbDownloads int
-	readErr    error
-	reads      []Read
-	chatReads  []string
-	pins       []string
-	mutes      []string
-	unreads    []string
-	deletes    []string
-	plays      []Read
-	edits      []string
-	revokes    []string
-	quotes     []string
-	reactions  []string
-	online     []bool
-	subscribed []string
-	typing     []string
-	own        []string
-	lookups    map[string]string // digits -> WhatsApp ID; a missing number is not on WhatsApp
-	phones     map[string]string // LID -> phone JID, as the local LID store holds them
-	pictures   map[string]string // chat -> "id|content"; a missing Chat has no picture
-	pictureReq []string          // "chat:knownID" of each ProfilePicture call
-	gate       chan struct{}     // while set, Send waits
+	readErr        error
+	reads          []Read
+	chatReads      []string
+	pins           []string
+	mutes          []string
+	unreads        []string
+	deletes        []string
+	plays          []Read
+	edits          []string
+	revokes        []string
+	quotes         []string
+	reactions      []string
+	online         []bool
+	subscribed     []string
+	typing         []string
+	own            []string
+	lookups        map[string]string // digits -> WhatsApp ID; a missing number is not on WhatsApp
+	phones         map[string]string // LID -> phone JID, as the local LID store holds them
+	pictures       map[string]string // chat -> "id|content"; a missing Chat has no picture
+	pictureReq     []string          // "chat:knownID" of each ProfilePicture call
+	gate           chan struct{}     // while set, Send waits
 }
 
 // SetOwn sets the user parts of the user's own IDs.

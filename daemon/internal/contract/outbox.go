@@ -30,18 +30,19 @@ type sendPort interface {
 // A send and its retries use one Message ID, so WhatsApp drops a repeat: a Message never shows twice.
 // It runs on the Daemon loop only. Only the sends run on other goroutines.
 type outbox struct {
-	chats    *chatstore.Store
-	port     sendPort
-	send     func(map[string]any) bool
-	logOut   io.Writer
-	online   bool
-	gen      int // counts the Connected events, so a send can tell that a reconnect came while it ran
-	inflight map[string]bool
-	merged   map[string]string // LID Chat to phone Chat: a send that began in the LID Chat ends in the phone Chat
-	results  chan sendResult
-	store    *media.Store                             // holds the files of Media to send
-	incoming func(whatsapp.NewMessage)                // runs after a new Message is stored
-	notice   func(whatsapp.NewMessage) map[string]any // the `notify` frame of a new Message, or nil
+	chats        *chatstore.Store
+	port         sendPort
+	send         func(map[string]any) bool
+	logOut       io.Writer
+	online       bool
+	gen          int // counts the Connected events, so a send can tell that a reconnect came while it ran
+	inflight     map[string]bool
+	merged       map[string]string // LID Chat to phone Chat: a send that began in the LID Chat ends in the phone Chat
+	results      chan sendResult
+	store        *media.Store                             // holds the files of Media to send
+	incoming     func(whatsapp.NewMessage)                // runs after a new Message is stored
+	notice       func(whatsapp.NewMessage) map[string]any // the `notify` frame of a new Message, or nil
+	autoDownload func() bool                              // the autoDownload setting
 }
 
 type sendResult struct {
@@ -51,8 +52,8 @@ type sendResult struct {
 }
 
 func newOutbox(chats *chatstore.Store, port sendPort, store *media.Store, send func(map[string]any) bool, logOut io.Writer,
-	incoming func(whatsapp.NewMessage), notice func(whatsapp.NewMessage) map[string]any) *outbox {
-	return &outbox{chats: chats, port: port, store: store, send: send, logOut: logOut, incoming: incoming, notice: notice,
+	incoming func(whatsapp.NewMessage), notice func(whatsapp.NewMessage) map[string]any, autoDownload func() bool) *outbox {
+	return &outbox{chats: chats, port: port, store: store, send: send, logOut: logOut, incoming: incoming, notice: notice, autoDownload: autoDownload,
 		inflight: map[string]bool{}, merged: map[string]string{}, results: make(chan sendResult, 64)}
 }
 
@@ -173,7 +174,7 @@ func (b *outbox) disconnected() bool {
 
 // incomingMessage stores a new Message and tells the Plugin: the Message, the Chat list, then the notification if the policy says so.
 func (b *outbox) incomingMessage(ev whatsapp.NewMessage) bool {
-	if err := b.chats.PutLive(ev, livePolicy(ev)); err != nil {
+	if err := b.chats.PutLive(ev, livePolicy(ev, b.autoDownload())); err != nil {
 		fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
 		return true
 	}
