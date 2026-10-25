@@ -37,6 +37,7 @@ Panel {
   readonly property var openChat: root.view.openChat || null
   onOpenChatChanged: chatLinksFor = "" // also after mark unread, which closes the Chat
   readonly property var timeline: root.openChat ? State.timelineRows(root.openChat.messages) : [] // oldest first
+  onTimelineChanged: timelineView.showTimeline()
   // Which parts show. The decision is State.panelParts.
   readonly property var parts: State.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings, showNewChat: root.showNewChat })
 
@@ -815,7 +816,31 @@ Panel {
             Layout.fillHeight: true
             clip: true
             verticalLayoutDirection: ListView.BottomToTop
-            model: root.timeline.slice().reverse()
+            // A new model array scrolls the list back to the newest row. So the rows live in a ListModel of keys that only gets edits.
+            // Rows added above or below the view then leave the rows in view in place.
+            model: ListModel { id: timelineKeys }
+            property var rowsByKey: ({})
+            property string shownChat: ""
+            Component.onCompleted: showTimeline()
+            function showTimeline() {
+              var rows = root.timeline.slice().reverse() // newest first: BottomToTop puts row 0 at the bottom
+              var keys = rows.map(State.rowKey)
+              var byKey = {}
+              rows.forEach(function (row, i) { byKey[keys[i]] = row })
+              var before = []
+              for (var i = 0; i < timelineKeys.count; i++) before.push(timelineKeys.get(i).key)
+              var chat = root.openChat ? root.openChat.jid : ""
+              var edits = chat === shownChat ? State.listEdits(before, keys) : null
+              rowsByKey = Object.assign({}, rowsByKey, byKey) // removed and inserted rows both resolve during the edits
+              if (edits) {
+                edits.forEach(function (e) { if (e.key === undefined) timelineKeys.remove(e.remove); else timelineKeys.insert(e.insert, { key: e.key }) })
+              } else {
+                timelineKeys.clear() // another Chat opens at its newest row
+                keys.forEach(function (key) { timelineKeys.append({ key: key }) })
+              }
+              rowsByKey = byKey
+              shownChat = chat
+            }
             // BottomToTop puts the footer at the top of the timeline: a quiet link that loads the older Messages.
             footer: Item {
               visible: State.olderLink(root.view) !== ""
@@ -840,8 +865,8 @@ Panel {
               onClicked: { root.reactingId = ""; root.menuId = "" }
             }
             delegate: MessageLine {
-              required property var modelData
-              row: modelData
+              required property string key
+              row: timelineView.rowsByKey[key]
               panel: root
               width: ListView.view.width
             }

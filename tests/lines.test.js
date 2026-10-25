@@ -84,3 +84,41 @@ test("(edited) marks an edited Message, not a Tombstone", () => {
   assert.equal(State.editedLabel(mine("m", 1, { edited: true })), "(edited)");
   assert.equal(State.editedLabel(mine("m", 1, { edited: true, revoked: true })), "");
 });
+
+// Applies listEdits to a copy of the keys, as the Panel applies them to its ListModel.
+const edited = (before, edits) => {
+  const keys = before.slice();
+  edits.forEach((e) => (e.key === undefined ? keys.splice(e.remove, 1) : keys.splice(e.insert, 0, e.key)));
+  return keys;
+};
+
+test("rowKey gives each row of a timeline its own key", () => {
+  const rows = State.timelineRows([from("a", "m1", at(1)), { id: "s1", system: true, time: at(1), text: "x" }, from("a", "m2", at(2))]);
+  assert.deepEqual(plain(rows.map(State.rowKey)), ["day 2026-10-01", "m m1", "m s1", "day 2026-10-02", "m m2"]);
+});
+
+test("listEdits adds older rows at the end and leaves the others in place", () => {
+  const edits = plain(State.listEdits(["m3", "m2"], ["m3", "m2", "m1", "day"]));
+  assert.deepEqual(edits, [{ insert: 2, key: "m1" }, { insert: 3, key: "day" }]);
+});
+
+test("listEdits puts a new row at the front", () => {
+  assert.deepEqual(plain(State.listEdits(["m2", "m1"], ["m3", "m2", "m1"])), [{ insert: 0, key: "m3" }]);
+});
+
+test("listEdits removes from the end first, so each index is still right", () => {
+  const before = ["m4", "m3", "m2", "m1"];
+  const edits = State.listEdits(before, ["m4", "m2"]);
+  assert.deepEqual(plain(edits), [{ remove: 3 }, { remove: 1 }]);
+  assert.deepEqual(edited(before, edits), ["m4", "m2"]);
+});
+
+test("listEdits mixes removes and inserts into the new order", () => {
+  const before = ["m5", "m4", "day b", "m3", "m2"];
+  const after = ["m6", "m5", "day b", "m3", "m2", "m1", "day a"];
+  assert.deepEqual(edited(before, State.listEdits(before, after)), after);
+});
+
+test("listEdits gives null when kept rows change order", () => {
+  assert.equal(State.listEdits(["m1", "m2"], ["m2", "m1"]), null);
+});

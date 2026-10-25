@@ -789,6 +789,31 @@ function rowIndexOf(rows, id) {
   return -1
 }
 
+// The key of a timeline row: one day row per date, one row per Message id.
+function rowKey(row) {
+  return row.kind === "day" ? "day " + row.label : "m " + row.message.id
+}
+
+// The edits that turn the list of keys before into the list after: removes from the end first, then inserts in order.
+// The timeline list applies them in place of a new model, because a new model scrolls it back to the newest row.
+// It returns null when kept keys change order: the list then starts again.
+function listEdits(before, after) {
+  var kept = {}
+  after.forEach(function (key) { kept[key] = true })
+  var edits = []
+  for (var i = before.length - 1; i >= 0; i--) if (!kept[before[i]]) edits.push({ remove: i })
+  var left = before.filter(function (key) { return kept[key] })
+  var inLeft = {}
+  left.forEach(function (key) { inLeft[key] = true })
+  var next = 0
+  for (var at = 0; at < after.length; at++) {
+    if (next < left.length && left[next] === after[at]) { next++; continue }
+    if (inLeft[after[at]]) return null
+    edits.push({ insert: at, key: after[at] })
+  }
+  return edits
+}
+
 // The Delivery State column of a line: a mark and its tone. Messages of others have no mark.
 function deliveryMark(message) {
   if (!message.fromMe) return { text: "", tone: "normal" }
