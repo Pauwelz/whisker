@@ -1621,12 +1621,13 @@ function unplayedDot(m) {
   return !!m.media && m.media.kind === "voice" && m.media.state === MEDIA_STATE.READY && m.fromMe !== true && m.media.played !== true
 }
 
-// One wheel notch scrolls a list this far. Qt's default wheel flick is slow in a long timeline.
-var WHEEL_STEP = 60
+// One wheel notch scrolls a list this far, the same rate as the Bitwarden plugin. Qt's default wheel flick is slow.
+var WHEEL_STEP = 90
 
-// The contentY a list scrolls to on a wheel event: the touchpad's pixels when it sends them, else a fixed step per notch
-// (angleY is 120 per notch). It stays between top and bottom; a bottom above the top (short content) keeps it at the top.
-function wheelScrollTarget(contentY, angleY, pixelY, top, bottom) {
-  var delta = pixelY !== 0 ? pixelY : angleY / 120 * WHEEL_STEP
+// The contentY a list scrolls to on a wheel event: a fixed step per notch (angleY is 120 per notch).
+// A touchpad also sends angleY, in fractions of a notch. Its pixelDelta is much smaller and scrolls too slowly.
+// It stays between top and bottom; a bottom above the top (short content) keeps it at the top.
+function wheelScrollTarget(contentY, angleY, top, bottom) {
+  var delta = angleY / 120 * WHEEL_STEP
   return Math.max(top, Math.min(Math.max(top, bottom), contentY - delta))
 }

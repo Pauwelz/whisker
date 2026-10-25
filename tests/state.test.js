@@ -640,14 +640,16 @@ test("mediaFrameStep launches Media the user clicked once its path arrives, and 
   assert.deepEqual(plain(second.load), []);
 });
 
-test("the wheel scrolls a fixed step per notch, a touchpad by its pixels, inside the list", () => {
-  // contentY, angleDelta.y, pixelDelta.y, top, bottom
-  assert.equal(State.wheelScrollTarget(500, 120, 0, 0, 1000), 500 - State.WHEEL_STEP);
-  assert.equal(State.wheelScrollTarget(500, -240, 0, 0, 1000), 500 + 2 * State.WHEEL_STEP);
-  assert.equal(State.wheelScrollTarget(500, 120, 7, 0, 1000), 493);
-  assert.equal(State.wheelScrollTarget(10, 120, 0, 0, 1000), 0);
-  assert.equal(State.wheelScrollTarget(990, -120, 0, 0, 1000), 1000);
-  assert.equal(State.wheelScrollTarget(0, -120, 0, 0, -50), 0); // content shorter than the view: stay at the top
+test("the wheel and the touchpad scroll by angleDelta at a fixed step per notch, inside the list", () => {
+  // contentY, angleDelta.y, top, bottom
+  assert.equal(State.WHEEL_STEP, 90); // the Bitwarden plugin's rate
+  assert.equal(State.wheelScrollTarget(500, 120, 0, 1000), 500 - State.WHEEL_STEP);
+  assert.equal(State.wheelScrollTarget(500, -240, 0, 1000), 500 + 2 * State.WHEEL_STEP);
+  // A touchpad event measured on Hyprland: angleDelta -72 (pixelDelta -6). Scrolling by pixelDelta was 9x too slow.
+  assert.equal(State.wheelScrollTarget(500, -72, 0, 1000), 500 + 72 / 120 * State.WHEEL_STEP);
+  assert.equal(State.wheelScrollTarget(10, 120, 0, 1000), 0);
+  assert.equal(State.wheelScrollTarget(990, -120, 0, 1000), 1000);
+  assert.equal(State.wheelScrollTarget(0, -120, 0, -50), 0); // content shorter than the view: stay at the top
 });
 
 test("a chat.picture request names the Chat", () => {
