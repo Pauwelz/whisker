@@ -630,7 +630,9 @@ Panel {
                 }
               }
               Text {
-                Layout.maximumWidth: parent.width * 0.6
+                // Fill, but never wider than the name: the name then shrinks and elides when the Chat links need the room.
+                Layout.fillWidth: true
+                Layout.maximumWidth: Math.min(implicitWidth, parent.width * 0.6)
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 text: root.openChat ? root.openChat.name : ""
@@ -642,11 +644,11 @@ Panel {
               // Presence of the other side: Online or Last Seen, and "typing…" or "recording…" in the accent colour.
               Text {
                 Layout.fillWidth: true
-                visible: !chatLinks.active // the Chat links take its place
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 readonly property string status: State.chatStatusLabel(root.view, Math.floor(Date.now() / 1000))
-                text: status !== "" ? " · " + status : ""
+                // Empty while the Chat links show: it stays as the spacer that keeps ⋯ and Back at the right.
+                text: status !== "" && !chatLinks.active ? " · " + status : ""
                 color: State.activityLabel(root.view) !== "" ? Color.accent : root.contentForeground
                 opacity: State.activityLabel(root.view) !== "" ? 1 : 0.6
                 font.family: root.contentFontFamily
@@ -670,13 +672,9 @@ Panel {
               }
               Loader {
                 id: chatLinks
-                Layout.fillWidth: true
                 active: root.openChatRow !== null && root.chatLinksFor === root.openChat.jid
                 visible: active
-                sourceComponent: Item {
-                  implicitHeight: links.implicitHeight
-                  ChatLinks { id: links; anchors.right: parent.right; chat: root.openChatRow; panel: root }
-                }
+                sourceComponent: ChatLinks { chat: root.openChatRow; panel: root }
               }
               Button {
                 visible: root.openChatRow !== null
