@@ -188,3 +188,22 @@ func TestMergeChatKeepsTheLivePin(t *testing.T) {
 		t.Errorf("Pinned = %v, %v; want the live unpin", c.Pinned, err)
 	}
 }
+
+// A LID that is only a target of a System Message is listed, and merges, so the line shows the phone name.
+func TestMergeChatRenamesASystemMessageTarget(t *testing.T) {
+	s, _ := newStore(t)
+	sys := whatsapp.Message{ID: "sys-1", Sender: "2@s.whatsapp.net", Time: 10, System: &whatsapp.System{Kind: whatsapp.SystemAdd, Targets: []string{lidJID}}}
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "g1@g.us", Kind: whatsapp.KindGroup, LastActive: 10, Messages: []whatsapp.Message{sys}}}})
+	apply(t, s, whatsapp.ContactName{JID: phoneJID, Name: "Ann"})
+	lids, err := s.LIDs()
+	if err != nil || len(lids) != 1 || lids[0] != lidJID {
+		t.Fatalf("LIDs = %v, %v; want [%s]", lids, err, lidJID)
+	}
+	if changed, err := s.MergeChat(lidJID, phoneJID); err != nil || !changed {
+		t.Fatalf("MergeChat = %v, %v; want true", changed, err)
+	}
+	m, err := s.Message("g1@g.us", "sys-1")
+	if err != nil || m.Text != "+2 added Ann" {
+		t.Fatalf("Message = %q, %v; want %q", m.Text, err, "+2 added Ann")
+	}
+}

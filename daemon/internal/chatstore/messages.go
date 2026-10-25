@@ -2,6 +2,7 @@ package chatstore
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -40,6 +41,8 @@ type Message struct {
 	MentionsMe bool `json:"mentionsMe,omitempty"`
 	// ExpiresAt is when a Disappearing Message goes (Unix seconds). It is 0 for a Message that stays.
 	ExpiresAt int64 `json:"expiresAt,omitempty"`
+	// System is true for a System Message. Text then holds its line, and Sender and FromMe name who made the change.
+	System bool `json:"system,omitempty"`
 }
 
 // Quote is the Message that a reply quotes: a snapshot taken when the reply was stored.
@@ -98,7 +101,8 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 const selectMessage = `
 	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
 		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, ''),
-	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at, m.mentions_me, COALESCE(md.thumbnail, x''), COALESCE(md.duration, 0), COALESCE(md.played, 0), COALESCE(md.gif, 0)
+	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at, m.mentions_me, COALESCE(md.thumbnail, x''), COALESCE(md.duration, 0), COALESCE(md.played, 0), COALESCE(md.gif, 0),
+	       m.system_kind, m.system_targets, m.system_value
 	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN names q ON q.jid = m.quote_sender
 	LEFT JOIN media md ON md.chat_jid = m.chat_jid AND md.id = m.id `
 
@@ -372,16 +376,24 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 	}
 	defer rows.Close()
 	var msgs []Message
-	var raw []string // the stored mentions of each Message
-	var contact, push, qContact, qPush, mentions string
+	var raw []string              // the stored mentions of each Message
+	var systems []whatsapp.System // the stored change of each Message; Kind is empty for one that is not a System Message
+	var contact, push, qContact, qPush, mentions, targets string
 	for rows.Next() {
 		var m Message
 		var q Quote
 		var mi MediaInfo
+		var sys whatsapp.System
 		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push,
-			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played, &mi.Gif); err != nil {
+			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played, &mi.Gif,
+			&sys.Kind, &targets, &sys.Value); err != nil {
 			return nil, err
 		}
+		if err := json.Unmarshal([]byte(targets), &sys.Targets); err != nil {
+			return nil, err
+		}
+		m.System = sys.Kind != ""
+		systems = append(systems, sys)
 		if mi.Kind != "" {
 			m.Media = &mi
 		}
@@ -407,8 +419,33 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 		if err := s.nameMentions(&msgs[i], jids); err != nil {
 			return nil, err
 		}
+		if msgs[i].System {
+			if msgs[i].Text, err = s.systemLine(msgs[i], systems[i]); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return msgs, nil
+}
+
+// systemLine is the text of a System Message, with the names of now (the name rule).
+func (s *Store) systemLine(m Message, sys whatsapp.System) (string, error) {
+	names := make([]string, len(sys.Targets))
+	for i, jid := range sys.Targets {
+		if jid == "" {
+			continue // the user
+		}
+		name, err := s.ParticipantName(jid)
+		if err != nil {
+			return "", err
+		}
+		names[i] = name
+	}
+	actor := systemActor{Me: m.FromMe, Name: m.SenderName}
+	if m.Sender == "" {
+		actor.Name = "" // the change came without an actor
+	}
+	return systemText(sys.Kind, actor, names, sys.Value), nil
 }
 
 // nameMentions replaces "@<user part>" in the text with "@<name>" (the name rule) and lists the names.
@@ -431,16 +468,25 @@ func (s *Store) nameMentions(m *Message, jids string) error {
 // mediaState is the state of the Media row: a live Message of a kind that downloads by itself starts downloading.
 func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) error {
 	state := ""
-	if m.FromMe {
+	if m.FromMe && m.System == nil { // a System Message has no Delivery State
 		state = whatsapp.StateSent
 	}
 	q := whatsapp.Quote{}
 	if m.Quote != nil {
 		q = *m.Quote
 	}
-	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, mentions, mentions_me, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text, strings.Join(m.Mentions, " "), boolInt(m.MentionsMe), expiry(m.Time, m.Timer)); err != nil {
+	sys, targets := whatsapp.System{}, []byte("[]")
+	if m.System != nil {
+		sys = *m.System
+		if len(sys.Targets) > 0 {
+			targets, _ = json.Marshal(sys.Targets) // a []string always marshals
+		}
+	}
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, mentions, mentions_me, expires_at,
+		system_kind, system_targets, system_value)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		chat, m.ID, m.Sender, boolInt(m.FromMe), m.Time, m.Text, state, q.ID, q.Sender, q.Text, strings.Join(m.Mentions, " "), boolInt(m.MentionsMe), expiry(m.Time, m.Timer),
+		sys.Kind, string(targets), sys.Value); err != nil {
 		return err
 	}
 	// A stored Message moves forward to the Delivery State of History Sync.

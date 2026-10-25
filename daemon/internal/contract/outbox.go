@@ -192,6 +192,9 @@ func (b *outbox) disconnected() bool {
 
 // incomingMessage stores a new Message and tells the Plugin: the Message, the Chat list, then the notification if the policy says so.
 func (b *outbox) incomingMessage(ev whatsapp.NewMessage) bool {
+	if ev.Message.System != nil {
+		return b.systemMessage(ev)
+	}
 	if err := b.chats.PutLive(ev, livePolicy(ev, b.autoDownloads)); err != nil {
 		fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
 		return true
@@ -207,6 +210,16 @@ func (b *outbox) incomingMessage(ev whatsapp.NewMessage) bool {
 		return b.send(frame)
 	}
 	return true
+}
+
+// systemMessage stores a System Message and tells the Plugin. It raises no notification and no Read Receipt.
+// The Chat list hears of it too: a new subject renames the Chat.
+func (b *outbox) systemMessage(ev whatsapp.NewMessage) bool {
+	if err := b.chats.PutSystem(ev); err != nil {
+		fmt.Fprintln(b.logOut, "chat store write failed")
+		return true
+	}
+	return b.notify(ev.Chat, ev.Message.ID) && b.send(notification("chatsChanged", nil))
 }
 
 func (b *outbox) edited(ev whatsapp.MessageEdited) bool {

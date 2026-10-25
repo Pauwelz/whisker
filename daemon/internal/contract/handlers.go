@@ -313,7 +313,7 @@ func (s *session) chatSend(req *request) outcome {
 	var quote *whatsapp.Quote
 	if p.Quote != "" {
 		q, err := s.chats.Message(p.Chat, p.Quote)
-		if err != nil || q.Revoked {
+		if err != nil || inert(q) {
 			return outcome{reply: s.storeOrInvalid(req.ID, err)}
 		}
 		quote = whatsappQuote(q.ID, q.Sender, q.Text)
