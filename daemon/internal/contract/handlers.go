@@ -51,26 +51,27 @@ type request struct {
 	ID     json.RawMessage `json:"id"`
 	Method string          `json:"method"`
 	Params struct {
-		Phone      string `json:"phone"`
-		Offset     int    `json:"offset"`
-		Limit      int    `json:"limit"`
-		Query      string `json:"query"`
-		Chat       string `json:"chat"`
-		JID        string `json:"jid"`
-		Text       string `json:"text"`
-		Caption    string `json:"caption"`
-		Open       bool   `json:"open"`
-		Pinned     bool   `json:"pinned"`
-		Archived   bool   `json:"archived"`
-		Unread     bool   `json:"unread"`
-		Until      *int64 `json:"until"` // nil when the request has none
-		Typing     bool   `json:"typing"`
-		ID         string `json:"id"`
-		Emoji      string `json:"emoji"`
-		Quote      string `json:"quote"`
-		Edit       string `json:"edit"`
-		Path       string `json:"path"`
-		Attachment string `json:"attachment"`
+		Phone       string   `json:"phone"`
+		Offset      int      `json:"offset"`
+		Limit       int      `json:"limit"`
+		Query       string   `json:"query"`
+		Chat        string   `json:"chat"`
+		JID         string   `json:"jid"`
+		Text        string   `json:"text"`
+		Caption     string   `json:"caption"`
+		Open        bool     `json:"open"`
+		Pinned      bool     `json:"pinned"`
+		Archived    bool     `json:"archived"`
+		Unread      bool     `json:"unread"`
+		Until       *int64   `json:"until"` // nil when the request has none
+		Typing      bool     `json:"typing"`
+		ID          string   `json:"id"`
+		Emoji       string   `json:"emoji"`
+		Quote       string   `json:"quote"`
+		Edit        string   `json:"edit"`
+		Path        string   `json:"path"`
+		Paths       []string `json:"paths"`
+		Attachments []string `json:"attachments"`
 		settings.Update
 	} `json:"params"`
 }
@@ -182,16 +183,21 @@ func (s *session) submit(m chatstore.Message) bool {
 }
 
 // followUp is the follow-up of a request that stored or changed a Message: before runs, act runs (submit or announce), then after runs.
-// before and after may be nil. Nothing runs when the request left no Message (m is nil).
-func (s *session) followUp(reply map[string]any, m *chatstore.Message, before func(), act func(chatstore.Message) bool, after func()) outcome {
+// before and after may be nil. Nothing runs when the request left no Message (ms is empty). act runs once per Message, in order.
+func (s *session) followUp(reply map[string]any, ms []chatstore.Message, before func(), act func(chatstore.Message) bool, after func()) outcome {
 	return outcome{reply, func() int {
-		if m == nil {
+		if len(ms) == 0 {
 			return keepGoing
 		}
 		if before != nil {
 			before()
 		}
-		ok := act(*m)
+		ok := true
+		for _, m := range ms {
+			if ok = act(m); !ok {
+				break
+			}
+		}
 		if after != nil {
 			after()
 		}
@@ -199,9 +205,17 @@ func (s *session) followUp(reply map[string]any, m *chatstore.Message, before fu
 	}}
 }
 
+// oneOf is the list of the Message that a handler left, or none when m is nil.
+func oneOf(m *chatstore.Message) []chatstore.Message {
+	if m == nil {
+		return nil
+	}
+	return []chatstore.Message{*m}
+}
+
 // sentOutcome is the follow-up of a send: sending uses up the Draft, and a sent Message is the interaction that the Read Receipt policy waits for.
-func (s *session) sentOutcome(chat string, reply map[string]any, m *chatstore.Message) outcome {
-	return s.followUp(reply, m, func() { s.clearDraft(chat) }, s.submit, func() { s.read.interaction(chat) })
+func (s *session) sentOutcome(chat string, reply map[string]any, ms []chatstore.Message) outcome {
+	return s.followUp(reply, ms, func() { s.clearDraft(chat) }, s.submit, func() { s.read.interaction(chat) })
 }
 
 // clearDraft uses up the Draft of a Chat: sending or editing consumes it.
@@ -322,7 +336,7 @@ func (s *session) chatSend(req *request) outcome {
 	}
 	m, err := s.chats.AddPending(p.Chat, s.port.NewMessageID(), p.Text, quote)
 	reply, submit := s.messageReply(req.ID, m, err)
-	return s.sentOutcome(p.Chat, reply, submit)
+	return s.sentOutcome(p.Chat, reply, oneOf(submit))
 }
 
 // chatRetry makes a failed Message pending again. The follow-up sends it after the reply.
@@ -338,7 +352,7 @@ func (s *session) chatRetry(req *request) outcome {
 	}
 	m, err := s.chats.Message(p.Chat, p.ID)
 	reply, submit := s.messageReply(req.ID, m, err)
-	return s.followUp(reply, submit, nil, s.submit, nil)
+	return s.followUp(reply, oneOf(submit), nil, s.submit, nil)
 }
 
 func (s *session) messageReply(id json.RawMessage, m chatstore.Message, err error) (map[string]any, *chatstore.Message) {
@@ -379,7 +393,7 @@ func (s *session) mediaRelease(req *request) outcome {
 
 func (s *session) mediaPlayed(req *request) outcome {
 	reply, played := s.loader.playedReply(req.ID, req.Params.Chat, req.Params.ID, s.read)
-	return s.followUp(reply, played, nil, s.announce, nil)
+	return s.followUp(reply, oneOf(played), nil, s.announce, nil)
 }
 
 func (s *session) attentionSet(req *request) outcome {

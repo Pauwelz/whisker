@@ -46,17 +46,86 @@ func TestPasteOfOneCopiedFileGivesItsPath(t *testing.T) {
 	}
 	fakeClipboard(t, uriScript("# comment\\r\\nfile://"+strings.ReplaceAll(file, " ", "%%20")+"\\r\\n"))
 	f, _ := paste(t)
-	if want := `"result":{"chat":"a@s.whatsapp.net","pasted":` + mustJSON(file) + `}`; !strings.Contains(f, want) {
+	if want := `"result":{"chat":"a@s.whatsapp.net","pasted":[` + mustJSON(file) + `]}`; !strings.Contains(f, want) {
 		t.Errorf("frame = %s, want %s", f, want)
 	}
 }
 
-func TestPasteRefusesTwoFiles(t *testing.T) {
+func TestPasteOfTwoCopiedFilesGivesBothInClipboardOrder(t *testing.T) {
 	dir := t.TempDir()
-	fakeClipboard(t, uriScript("file://"+dir+"/a\\nfile://"+dir+"/b\\n"))
-	if f, _ := paste(t); !strings.Contains(f, "-32012") {
-		t.Errorf("frame = %s, want paste one file at a time", f)
+	b, a := filepath.Join(dir, "b"), filepath.Join(dir, "a")
+	for _, f := range []string{a, b} {
+		if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
+	fakeClipboard(t, uriScript("file://"+b+"\\nfile://"+a+"\\n"))
+	f, _ := paste(t)
+	if want := `"pasted":[` + mustJSON(b) + `,` + mustJSON(a) + `]`; !strings.Contains(f, want) {
+		t.Errorf("frame = %s, want %s", f, want)
+	}
+}
+
+func TestPasteCountsAPathListedTwiceOnce(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "a")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fakeClipboard(t, uriScript("file://"+file+"\\nfile://"+file+"\\n"))
+	f, _ := paste(t)
+	if want := `"pasted":[` + mustJSON(file) + `]`; !strings.Contains(f, want) {
+		t.Errorf("frame = %s, want %s", f, want)
+	}
+}
+
+// attachFiles makes n files and stores them as the Draft of the Chat.
+func attachFiles(t *testing.T, r *runner, n int) []string {
+	t.Helper()
+	dir := t.TempDir()
+	var paths []string
+	for i := 0; i < n; i++ {
+		p := filepath.Join(dir, "f"+mustJSON(i))
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+	}
+	setAttachments(t, r, 100, paths)
+	return paths
+}
+
+func TestPasteOverThirtyAttachmentsIsRefusedButADuplicateIsNot(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "1@s.whatsapp.net", LastActive: 1}}})
+	r.nextFrame() // chatsChanged
+	stored := attachFiles(t, r, 30)
+	extra := filepath.Join(t.TempDir(), "extra")
+	if err := os.WriteFile(extra, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fakeClipboard(t, uriScript("file://"+extra+"\\n"))
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"draft.paste","params":{"chat":"1@s.whatsapp.net"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"code":-32012`) || !strings.Contains(f, "30 files at most") {
+		t.Errorf("frame = %s, want -32012", f)
+	}
+
+	fakeClipboard(t, uriScript("file://"+stored[0]+"\\n"))
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"draft.paste","params":{"chat":"1@s.whatsapp.net"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"pasted":[`+mustJSON(stored[0])+`]`) {
+		t.Errorf("frame = %s, want the duplicate to pass", f)
+	}
+
+	fakeClipboard(t, imageScript)
+	r.send(`{"jsonrpc":"2.0","id":3,"method":"draft.paste","params":{"chat":"1@s.whatsapp.net"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"code":-32012`) {
+		t.Errorf("frame = %s, want -32012 for an image too", f)
+	}
+	r.finish()
 }
 
 func TestPasteRefusesADirectory(t *testing.T) {
@@ -78,7 +147,7 @@ func TestPasteFallsBackToText(t *testing.T) {
 			fakeClipboard(t, script)
 			start := time.Now()
 			f, log := paste(t)
-			if !strings.Contains(f, `"pasted":""`) {
+			if !strings.Contains(f, `"pasted":[]`) {
 				t.Errorf("frame = %s, want a text paste", f)
 			}
 			if time.Since(start) > 4*time.Second {
@@ -93,22 +162,25 @@ func TestPasteFallsBackToText(t *testing.T) {
 
 const imageScript = `if [ "$1" = --list-types ]; then printf 'text/html\nimage/png\ntext/plain\n'; else printf 'png'; fi`
 
-// pastedPath sends draft.paste and returns the path in its result.
+// pastedPath sends draft.paste and returns the one path in its result.
 func pastedPath(t *testing.T, r *runner, id int) string {
 	t.Helper()
 	r.send(`{"jsonrpc":"2.0","id":` + mustJSON(id) + `,"method":"draft.paste","params":{"chat":"1@s.whatsapp.net"}}`)
 	var f struct {
-		Result struct{ Pasted string } `json:"result"`
+		Result struct{ Pasted []string } `json:"result"`
 	}
 	if err := json.Unmarshal([]byte(r.nextFrame()), &f); err != nil {
 		t.Fatal(err)
 	}
-	return f.Result.Pasted
+	if len(f.Result.Pasted) != 1 {
+		t.Fatalf("pasted = %v, want one path", f.Result.Pasted)
+	}
+	return f.Result.Pasted[0]
 }
 
-func setAttachment(t *testing.T, r *runner, id int, path string) {
+func setAttachments(t *testing.T, r *runner, id int, paths []string) {
 	t.Helper()
-	r.send(`{"jsonrpc":"2.0","id":` + mustJSON(id) + `,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","attachment":` + mustJSON(path) + `}}`)
+	r.send(`{"jsonrpc":"2.0","id":` + mustJSON(id) + `,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","attachments":` + mustJSON(paths) + `}}`)
 	if f := r.nextFrame(); !strings.Contains(f, `"result":{}`) {
 		t.Fatalf("frame = %s, want an empty result", f)
 	}
@@ -139,10 +211,10 @@ func TestPastedImageLivesUntilTheDraftDropsItOrItIsSent(t *testing.T) {
 	if b, _ := os.ReadFile(first); string(b) != "png" {
 		t.Errorf("content = %q", b)
 	}
-	setAttachment(t, r, 2, first)
+	setAttachments(t, r, 2, []string{first})
 
 	second := pastedPath(t, r, 3)
-	setAttachment(t, r, 4, second)
+	setAttachments(t, r, 4, []string{second})
 	if exists(filepath.Dir(first)) {
 		t.Error("a replaced pasted image stays")
 	}
@@ -151,8 +223,8 @@ func TestPastedImageLivesUntilTheDraftDropsItOrItIsSent(t *testing.T) {
 	if err := os.WriteFile(own, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setAttachment(t, r, 5, own)
-	setAttachment(t, r, 6, "")
+	setAttachments(t, r, 5, []string{own})
+	setAttachments(t, r, 6, nil)
 	if exists(second) {
 		t.Error("a removed pasted image stays")
 	}
@@ -161,7 +233,7 @@ func TestPastedImageLivesUntilTheDraftDropsItOrItIsSent(t *testing.T) {
 	}
 
 	third := pastedPath(t, r, 7)
-	r.send(`{"jsonrpc":"2.0","id":8,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","path":` + mustJSON(third) + `}}`)
+	r.send(`{"jsonrpc":"2.0","id":8,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","paths":[` + mustJSON(third) + `]}}`)
 	if f := r.nextFrame(); !strings.Contains(f, `"state":"pending"`) {
 		t.Fatalf("frame = %s, want the send", f)
 	}

@@ -41,7 +41,7 @@ var ERROR_NOTICES = {
   "-32007": NO_WHATSAPP,
   "-32010": "That chat is not in your chat list",
   "-32011": "You can pin up to 3 chats",
-  "-32012": "Paste one file at a time",
+  "-32012": "30 files at most",
   "-32013": "That file cannot be sent"
 }
 
@@ -169,6 +169,7 @@ function effectsOf(frame) {
 }
 
 function foldFrame(state, frame) {
+  if (state.sending && frame && frame.id === state.sending.id) state = sendAnswered(state, frame)
   var effects = effectsOf(frame)
   if (effects && effects.fold) return effects.fold(state, frame.params)
   var chatState = foldChatResult(state, frame)
@@ -332,6 +333,7 @@ function foldChatResult(state, frame) {
   if (frame.result && frame.result.data !== undefined && frame.result.chat) return pictureLoaded(state, frame.result)
   if (frame.result && frame.result.messages) return messagesPage(state, frame.result)
   if (frame.result && frame.result.message) return upsertMessage(state, frame.result.message)
+  if (frame.result && frame.result.sent) return frame.result.sent.reduce(upsertMessage, state)
   return null
 }
 
@@ -457,39 +459,81 @@ function messagesPage(state, result) {
   return withChanges(next, { loadedChat: result.chat, openChat: withChanges(next.openChat, { moreMessages: result.more === true }) })
 }
 
-// The Draft of the open Chat: { text, quote, edit, attachment }. The Daemon stores it.
-// `quote` and `edit` are Message ids or "". `attachment` is the absolute path of the staged file or "".
-var EMPTY_DRAFT = { text: "", quote: "", edit: "", attachment: "" }
+// The Draft of the open Chat: { text, quote, edit, attachments }. The Daemon stores it.
+// `quote` and `edit` are Message ids or "". `attachments` are the absolute paths of the Attachments, in order.
+// Attachments never combine with a Quote or an Edit.
+// `openChat.unsendable` lists the Attachment paths that the Daemon refused. The marks live in the view only.
+var EMPTY_DRAFT = { text: "", quote: "", edit: "", attachments: [] }
 
 function draftOf(state) {
   return (state.openChat && state.openChat.draft) || EMPTY_DRAFT
 }
 
-// A draft.get result. The first one for the open Chat sets the Draft; a Draft that the user already changed stays.
+// A draft.get result. The first one for the open Chat sets the Draft and the marks; a Draft that the user already changed stays.
 function draftLoaded(state, result) {
   var chat = state.openChat
   if (!chat || chat.jid !== result.chat || chat.draft !== undefined) return state
-  return withChanges(state, { openChat: withChanges(chat, { draft: result.draft }) })
+  var draft = withChanges(result.draft, { attachments: result.draft.attachments || [] })
+  return withChanges(state, { openChat: withChanges(chat, { draft: draft, unsendable: result.unsendable || [] }) })
 }
 
-// Changes the Draft of the open Chat. Returns the same state when nothing changes.
-// A staged file never combines with an Edit or a Quote. Starting an Edit or a Quote drops the file.
-// Staging a file drops the Quote, and is refused during an Edit.
+function sameList(a, b) {
+  return a.length === b.length && a.every(function(x, i) { return x === b[i] })
+}
+
+// Changes the Draft of the open Chat. `changes.attachments` is the whole new list. Returns the same state when nothing changes.
+// Attachments never combine with an Edit or a Quote. Starting an Edit or a Quote drops them.
+// Adding Attachments drops the Quote, and is refused during an Edit.
+// A mark goes away with its row.
 function changeDraft(state, changes) {
   if (!state.openChat) return state
   var old = draftOf(state)
   var draft = withChanges(old, changes)
-  if (draft.attachment && (draft.edit || draft.quote)) {
-    if (!changes.attachment) draft = withChanges(draft, { attachment: "" })
+  if (draft.attachments.length && (draft.edit || draft.quote)) {
+    if (!changes.attachments || !changes.attachments.length) draft = withChanges(draft, { attachments: [] })
     else if (draft.edit) return state
     else draft = withChanges(draft, { quote: "" })
   }
-  if (draft.text === old.text && draft.quote === old.quote && draft.edit === old.edit && draft.attachment === old.attachment) return state
-  return withChanges(state, { openChat: withChanges(state.openChat, { draft: draft }) })
+  var marks = (state.openChat.unsendable || []).filter(function(path) { return draft.attachments.indexOf(path) >= 0 })
+  if (draft.text === old.text && draft.quote === old.quote && draft.edit === old.edit && sameList(draft.attachments, old.attachments) &&
+      marks.length === (state.openChat.unsendable || []).length) return state
+  return withChanges(state, { openChat: withChanges(state.openChat, { draft: draft, unsendable: marks }) })
 }
 
 function clearDraft(state) {
   return changeDraft(state, EMPTY_DRAFT)
+}
+
+// The composer sent the Draft as request `id`: clear the view Draft at once, and keep the sent one in case the Daemon refuses the send.
+// Only a send with Attachments is kept, because only that Draft is worth a restore.
+function submitDraft(state, id) {
+  var draft = draftOf(state)
+  var sending = draft.attachments.length ? { id: id, jid: state.openChat.jid, draft: draft } : null
+  return withChanges(clearDraft(state), { sending: sending })
+}
+
+// The answer to the send of submitDraft. After an error the Daemon still stores the Draft, so the view takes it back:
+// the sent Attachments, marked where error.data.paths names them, and the sent text unless the user typed new text since.
+function sendAnswered(state, frame) {
+  var sent = state.sending
+  var next = withChanges(state, { sending: null })
+  if (!frame.error || !next.openChat || next.openChat.jid !== sent.jid) return next
+  var typed = draftOf(next).text
+  next = changeDraft(next, { text: typed !== "" ? typed : sent.draft.text, attachments: sent.draft.attachments })
+  var bad = (frame.error.data && frame.error.data.paths) || []
+  return withChanges(next, { openChat: withChanges(next.openChat, { unsendable: bad }) })
+}
+
+// Whether the Plugin sends draft.set for the Draft of the view now. `state` is the state before `frame`; leave `frame` out for a change of the Draft.
+// While a send is pending the Daemon still holds the sent Draft, and a draft.set would drop its Attachments. So the Plugin waits.
+// The answer to the send then triggers one draft.set: after an error it stores the restored Draft (typed text and sent Attachments);
+// after a success the Daemon cleared the Draft, so it stores only the typed text, and nothing when there is none.
+function draftSetDue(state, frame) {
+  if (!frame) return !state.sending
+  if (!state.sending || frame.id !== state.sending.id) return false
+  if (frame.error) return true
+  var draft = draftOf(applyFrame(state, frame))
+  return draft.text !== "" || draft.quote !== "" || draft.edit !== "" || draft.attachments.length > 0
 }
 
 // The Message that the Draft quotes (or edits, with `field` "edit"), if the Plugin has it loaded. Else null.
@@ -504,7 +548,7 @@ function draftGetRequest(id, jid) {
 }
 
 function draftSetRequest(id, jid, draft) {
-  return request(id, "draft.set", { chat: jid, text: draft.text, quote: draft.quote, edit: draft.edit, attachment: draft.attachment })
+  return request(id, "draft.set", { chat: jid, text: draft.text, quote: draft.quote, edit: draft.edit, attachments: draft.attachments })
 }
 
 // The request for the people the new Chat view lists. The Daemon returns the first 50 that match the query.
@@ -612,26 +656,40 @@ function pasteRequest(id, jid) {
   return request(id, "draft.paste", { chat: jid })
 }
 
-// What a draft.paste reply gives the open Chat: the path of the Attachment, "" to paste text, or null for any other frame.
+// What a draft.paste reply gives the open Chat: the pasted paths, [] to paste text, or null for any other frame.
 function pastedAttachment(state, frame) {
-  if (!frame || !frame.result || typeof frame.result.pasted !== "string") return null
+  if (!frame || !frame.result || !Array.isArray(frame.result.pasted)) return null
   if (!state.openChat || state.openChat.jid !== frame.result.chat) return null
   return frame.result.pasted
 }
 
-// Whether the composer shows the staged file row (name and remove button).
+// The Attachments of the Draft with the pasted paths added at the end. A path that is already in the list stays once.
+function appendAttachments(draft, paths) {
+  return paths.reduce(function(list, path) { return list.indexOf(path) < 0 ? list.concat([path]) : list }, draft.attachments)
+}
+
+// Whether the composer shows the Attachment rows.
 function hasAttachment(draft) {
-  return draft.attachment !== ""
+  return draft.attachments.length > 0
 }
 
-// The file name of the staged file, shown in the composer.
-function attachmentName(draft) {
-  return draft.attachment.split("/").pop()
+// The file name of an Attachment, shown in its row.
+function attachmentName(path) {
+  return path.split("/").pop()
 }
 
-// The request to send the file at `path` as Media.
-function sendMediaRequest(id, jid, path, caption) {
-  return request(id, "chat.sendMedia", { chat: jid, path: path, caption: caption })
+// One row per Attachment: its path, its text, and whether it is marked as not sendable.
+function attachmentRows(state) {
+  var marks = (state.openChat && state.openChat.unsendable) || []
+  return draftOf(state).attachments.map(function(path) {
+    var bad = marks.indexOf(path) >= 0
+    return { path: path, bad: bad, label: (bad ? "Not sendable: " : "Attached: ") + attachmentName(path) }
+  })
+}
+
+// The request to send the files at `paths` as Media. The first Message has the caption.
+function sendMediaRequest(id, jid, paths, caption) {
+  return request(id, "chat.sendMedia", { chat: jid, paths: paths, caption: caption })
 }
 
 function retryMessageRequest(id, jid, messageId) {
@@ -843,10 +901,10 @@ function deleteForMeRequest(id, jid, messageId) {
 
 // The request for the composer text: an edit of `editingId`, or a new Message when `editingId` is empty.
 // A new Message quotes `quoteId` when it is set.
-// A staged file (`attachment`, a path) goes as Media with the text as caption. The Draft never holds a Quote with a file.
-function composerRequest(id, jid, editingId, text, quoteId, attachment) {
+// Attachments (`attachments`, a list of paths) go as Media with the text as caption. The Draft never holds a Quote with files.
+function composerRequest(id, jid, editingId, text, quoteId, attachments) {
   if (editingId) return editRequest(id, jid, editingId, text)
-  return attachment ? sendMediaRequest(id, jid, attachment, text) : sendRequest(id, jid, text, quoteId)
+  return attachments && attachments.length ? sendMediaRequest(id, jid, attachments, text) : sendRequest(id, jid, text, quoteId)
 }
 
 // The Reaction picker: the six default emoji of WhatsApp. Mirror of `ReactionEmoji` in daemon/internal/contract/react.go.

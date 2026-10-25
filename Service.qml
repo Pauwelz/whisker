@@ -110,7 +110,7 @@ Item {
     var next = State.changeDraft(view, changes)
     if (next === view) return
     view = next
-    send(State.draftSetRequest, view.openChat.jid, view.openChat.draft)
+    if (State.draftSetDue(view)) send(State.draftSetRequest, view.openChat.jid, view.openChat.draft)
   }
 
   // Called by the IPC handler `openChat`, which a click on a notification runs.
@@ -273,10 +273,12 @@ Item {
 
   // Called by the composer. The Draft says whether this is an edit, and what the new Message quotes.
   // The Daemon clears the Draft when it accepts the send or edit; the view clears its copy at once.
+  // When the Daemon refuses a send with Attachments, the reply handler puts the Draft back (State.submitDraft keeps it).
   function submitComposer(text) {
     var draft = State.draftOf(view)
-    send(State.composerRequest, view.openChat.jid, draft.edit, text, draft.quote, draft.attachment)
-    view = State.clearDraft(view)
+    var id = nextRequestId // the id that send() gives this request
+    send(State.composerRequest, view.openChat.jid, draft.edit, text, draft.quote, draft.attachments)
+    view = State.submitDraft(view, id)
   }
 
   // Called by the Chat links. `option` is the option of a State.chatLinks link.
@@ -295,7 +297,7 @@ Item {
     send(State.reactRequest, view.openChat.jid, message.id, State.reactionChoice(message, emoji))
   }
 
-  // Called by Ctrl+V in the composer. A copied file becomes the Attachment; anything else comes back as pasteText.
+  // Called by Ctrl+V in the composer. Copied files become Attachments; anything else comes back as pasteText.
   function pasteIntoComposer() {
     send(State.pasteRequest, view.openChat.jid)
   }
@@ -386,12 +388,14 @@ Item {
       onRead: function(line) {
         var frame = State.parseLine(line)
         if (!frame) return
+        var draftSetDue = State.draftSetDue(root.view, frame) // the answer to a send: store the restored or typed Draft
         root.view = State.applyFrame(root.view, frame)
+        if (draftSetDue) root.send(State.draftSetRequest, root.view.openChat.jid, State.draftOf(root.view))
         if (State.isNotify(frame)) Quickshell.execDetached(State.notifyCommand(frame.params))
         root.handleMediaFrame(frame)
         var pasted = State.pastedAttachment(root.view, frame)
-        if (pasted === "") root.pasteText()
-        else if (pasted !== null) root.changeDraft({ attachment: pasted })
+        if (pasted !== null && pasted.length === 0) root.pasteText()
+        else if (pasted !== null) root.changeDraft({ attachments: State.appendAttachments(State.draftOf(root.view), pasted) })
         if (State.resendsAttention(frame)) root.syncAttention()
         if (State.reloadsOpenChat(root.view, frame)) {
           root.syncAttention()

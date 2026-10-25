@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
@@ -50,42 +51,76 @@ func statSendable(path string) (os.FileInfo, error) {
 	return st, nil
 }
 
-// chatSendMedia stores the file encrypted in the Profile and adds a pending Message. The follow-up sends it after the reply.
+// errMediaCopy marks a file that could not be copied into the Media store.
+var errMediaCopy = errors.New("media copy failed")
+
+// chatSendMedia checks every path, then stores each file encrypted in the Profile as a pending Message, in order.
+// Only the first Message has the caption. The follow-up sends them after the reply and clears the Draft once.
+// It is all or nothing: one bad path gives error -32013 with `error.data.paths`, and a failure while storing deletes the Messages already stored.
 // shortcut: the copy into the Profile runs on the Daemon loop, so a very large file blocks other requests for a moment.
 func (s *session) chatSendMedia(req *request) outcome {
 	p := req.Params
 	invalid := outcome{reply: errorReply(req.ID, errMessage, msgInvalidMessage)}
-	if !fitsMessage(p.Caption) {
+	if !fitsMessage(p.Caption) || len(p.Paths) == 0 || len(p.Paths) > maxAttachments {
 		return invalid
 	}
-	st, err := statSendable(p.Path)
-	if err != nil {
-		return invalid
+	if bad := unsendable(p.Paths); len(bad) > 0 {
+		return outcome{reply: errorReplyData(req.ID, errNotSendable, msgNotSendable, map[string]any{"paths": bad})}
 	}
-	f, err := os.Open(p.Path)
+	var sent []chatstore.Message
+	for i, path := range p.Paths {
+		caption := ""
+		if i == 0 {
+			caption = p.Caption
+		}
+		m, err := s.storeMedia(p.Chat, path, caption)
+		if err != nil {
+			for _, done := range sent {
+				if err := s.chats.DeleteMessage(p.Chat, done.ID); err != nil {
+					fmt.Fprintln(s.logOut, "message delete failed")
+				}
+			}
+			if errors.Is(err, errMediaCopy) {
+				return outcome{reply: errorReply(req.ID, errMediaFailed, msgMediaCopy)}
+			}
+			reply, _ := s.messageReply(req.ID, m, err)
+			return outcome{reply: reply}
+		}
+		sent = append(sent, m)
+	}
+	for _, path := range p.Paths {
+		dropPasted(path) // the Media store holds the encrypted copies now
+	}
+	return s.sentOutcome(p.Chat, resultReply(req.ID, map[string]any{"sent": sent}), sent)
+}
+
+// storeMedia copies one checked file into the Media store and adds its pending Message.
+func (s *session) storeMedia(chat, path, caption string) (chatstore.Message, error) {
+	f, err := os.Open(path)
 	if err != nil {
-		return invalid
+		return chatstore.Message{}, errMediaCopy
 	}
 	defer f.Close()
-	m := whatsapp.Media{Kind: media.Document, Mime: sniffMime(p.Path, f), Name: filepath.Base(p.Path), Size: st.Size(), Key: make([]byte, 32)}
+	st, err := f.Stat()
+	if err != nil {
+		return chatstore.Message{}, errMediaCopy
+	}
+	m := whatsapp.Media{Kind: media.Document, Mime: sniffMime(path, f), Name: filepath.Base(path), Size: st.Size(), Key: make([]byte, 32)}
 	if sendableImages[m.Mime] {
 		m.Kind, m.Name = media.Image, ""
 	}
 	if _, err := rand.Read(m.Key); err != nil {
 		fmt.Fprintln(s.logOut, "media copy failed")
-		return outcome{reply: errorReply(req.ID, errMediaFailed, msgMediaCopy)}
+		return chatstore.Message{}, errMediaCopy
 	}
 	msgID := s.port.NewMessageID()
-	if err := s.media.Put(p.Chat, msgID, m.Kind, m.Key, f); err != nil {
+	if err := s.media.Put(chat, msgID, m.Kind, m.Key, f); err != nil {
 		fmt.Fprintln(s.logOut, "media copy failed") // the error text could hold paths
-		return outcome{reply: errorReply(req.ID, errMediaFailed, msgMediaCopy)}
+		return chatstore.Message{}, errMediaCopy
 	}
-	msg, err := s.chats.AddPendingMedia(p.Chat, msgID, p.Caption, &m)
+	msg, err := s.chats.AddPendingMedia(chat, msgID, caption, &m)
 	if err != nil {
-		s.media.Remove(p.Chat, msgID)
-	} else {
-		dropPasted(p.Path) // the Media store holds the encrypted copy now
+		s.media.Remove(chat, msgID)
 	}
-	reply, submit := s.messageReply(req.ID, msg, err)
-	return s.sentOutcome(p.Chat, reply, submit)
+	return msg, err
 }

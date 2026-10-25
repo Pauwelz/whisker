@@ -4,8 +4,8 @@
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","subject":"","lastActive":10,"messages":[]}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"file","path":"$RUNTIME/src/photo.png","content":"pix","write":true}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","path":"$RUNTIME/src/photo.png"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"pending","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}}}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","paths":["$RUNTIME/src/photo.png"]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"sent":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"pending","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}}]}}}
 {"dir":"uploaded","uploads":[]}
 {"dir":"whatsapp","event":{"kind":"connected"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}

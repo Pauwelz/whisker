@@ -858,21 +858,32 @@ Panel {
             font.pixelSize: Style.font.body
           }
 
-          RowLayout {
+          // One row per Attachment, each with its own ✕. A row that the Daemon refused shows in the error colour. After 4 rows the list scrolls.
+          ListView {
+            id: attachmentList
             visible: State.hasAttachment(root.draft)
             Layout.fillWidth: true
-            Text {
-              Layout.fillWidth: true
-              elide: Text.ElideMiddle
-              textFormat: Text.PlainText
-              text: "Attached: " + State.attachmentName(root.draft)
-              color: root.contentForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.caption
-            }
-            Button {
-              text: "✕"
-              onClicked: root.whiskerService.changeDraft({ attachment: "" })
+            Layout.preferredHeight: Math.min(count, 4) * 28
+            clip: true
+            model: State.attachmentRows(root.view)
+            delegate: RowLayout {
+              id: attachmentRow
+              required property var modelData
+              width: attachmentList.width
+              height: 28
+              Text {
+                Layout.fillWidth: true
+                elide: Text.ElideMiddle
+                textFormat: Text.PlainText
+                text: attachmentRow.modelData.label
+                color: attachmentRow.modelData.bad ? Color.urgent : root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+              Button {
+                text: "✕"
+                onClicked: root.whiskerService.changeDraft({ attachments: root.draft.attachments.filter(function(path) { return path !== attachmentRow.modelData.path }) })
+              }
             }
           }
 

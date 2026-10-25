@@ -9,8 +9,8 @@ FocusScope {
   id: composer
   property var panel: null // the pop-out: service, Draft and colours
   readonly property var service: panel ? panel.whiskerService : null
-  readonly property var draft: panel ? panel.draft : ({ text: "", attachment: "" })
-  readonly property bool hasAttachment: !!draft.attachment
+  readonly property var draft: panel ? panel.draft : ({ text: "", attachments: [] })
+  readonly property bool hasAttachment: State.hasAttachment(draft)
   implicitHeight: row.implicitHeight + Style.space(8)
 
   function send() {
