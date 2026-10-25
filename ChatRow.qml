@@ -1,15 +1,15 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
-import "WhiskerState.js" as State
+import "state/ChatList.js" as ChatList
 
 // One dense line of the Chat list: Chat Sign, name, "is typing…", the Chat Marks pin, mute and mention, then the trailing slot.
-// The pop-out (Panel.qml) owns the state. The marks and labels come from WhiskerState.js.
+// The pop-out (Panel.qml) owns the state. The marks and labels come from the state/ modules.
 Item {
   id: row
   required property var chat
   required property var panel // the pop-out: service, colours and the view state
-  readonly property string typing: State.chatActivityLabel(panel.view, chat) // "typing…", or ""
+  readonly property string typing: ChatList.chatActivityLabel(panel.view, chat) // "typing…", or ""
   // The slot at the right end. The unread count and the time sit in it; on hover the Chat links take their place.
   // Keep the slot at a fixed width: the line must not move on hover.
   readonly property alias trailing: trailingSlot
@@ -51,7 +51,7 @@ Item {
       Layout.preferredWidth: Style.space(16)
       Layout.preferredHeight: Style.space(16)
       Layout.rightMargin: Style.space(2) // with the spacing, the 8 of the top bars
-      Mark { anchors.centerIn: parent; text: State.chatSign(row.chat); opacity: 0.6 }
+      Mark { anchors.centerIn: parent; text: ChatList.chatSign(row.chat); opacity: 0.6 }
     }
     Mark {
       Layout.maximumWidth: parent.width * 0.5
@@ -69,7 +69,7 @@ Item {
       opacity: hover.hovered ? 0 : 1 // the hover links may reach over it
     }
     // The Chat Marks: one fixed column each, so a mark has the same place on every line. The hover links reach over them.
-    MarkColumn { text: State.PIN_MARK; shown: row.chat.pinned === true; opacity: 0.8 }
+    MarkColumn { text: ChatList.PIN_MARK; shown: row.chat.pinned === true; opacity: 0.8 }
     MarkColumn { text: "󰝟"; shown: row.chat.muted === true; opacity: 0.6 }
     MarkColumn { text: "@"; shown: row.chat.mention === true; font.bold: true } // the Chat mentions the user
     Item {
@@ -80,14 +80,14 @@ Item {
         id: countText
         visible: !hover.hovered
         anchors.left: parent.left
-        text: State.chatCountLabel(row.chat)
+        text: ChatList.chatCountLabel(row.chat)
         font.bold: true
         opacity: row.chat.muted ? 0.4 : 1 // a Muted Chat shows a grey count
       }
       Mark {
         visible: !hover.hovered
         anchors.right: parent.right
-        text: State.chatTimeLabel(row.chat.lastActive, Math.floor(Date.now() / 1000))
+        text: ChatList.chatTimeLabel(row.chat.lastActive, Math.floor(Date.now() / 1000))
         opacity: 0.5
       }
       // The Chat links, on hover. They grow to the left out of the slot; the name has room, since it takes at most half the line.

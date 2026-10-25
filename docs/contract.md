@@ -22,7 +22,7 @@ The decisions behind it are in [architecture.md](architecture.md), section 7.
 
 ## Exit codes
 
-The Go source of truth is `daemon/internal/contract/contract.go`. The Plugin mirrors the codes it maps in `WhiskerState.js`.
+The Go source of truth is `daemon/internal/contract/contract.go`. The Plugin mirrors the codes it maps in `state/Daemon.js`.
 
 | Code | Name | Meaning |
 |---|---|---|
@@ -658,7 +658,7 @@ The `event` kind `chatTimer` (`chat`, `seconds`) sets the Disappearing timer of 
 The events are the event kinds of the WhatsApp port (`daemon/internal/whatsapp`). A new port event kind gets a new `event` kind here. A new port method that a fixture must script gets a new key.
 
 - The Go test (Seam A) runs the lines in order: it sends each `in` line and waits for each `out` frame. At the end it checks that no frame is left. It ignores `view` lines.
-- The `node --test` test (Seam B) folds the `out` frames through `WhiskerState.js` and checks each `view` line. It ignores `in` lines.
+- The `node --test` test (Seam B) folds the `out` frames through `state/Daemon.js` and checks each `view` line. It ignores `in` lines.
 - Later tickets add line kinds here, in this table.
 
 ### Add a fixture

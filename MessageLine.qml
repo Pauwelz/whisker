@@ -1,10 +1,12 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "WhiskerState.js" as State
+import "state/Media.js" as Media
+import "state/Message.js" as Message
+import "state/Timeline.js" as Timeline
 
 // One row of the open Chat's timeline: a day separator, a system line or a Message line.
-// The pop-out (Panel.qml) owns the state; this item only draws it. The rows and the line-grouping rule come from State.timelineRows.
+// The pop-out (Panel.qml) owns the state; this item only draws it. The rows and the line-grouping rule come from Timeline.timelineRows.
 // A Message line is: a header (sender and time, first line of a run only), then the body at full width. The body stacks: Quote, text, media area, Reactions row, actions, failed line.
 Item {
   id: line
@@ -28,7 +30,7 @@ Item {
     onTapped: if (line.isMessage) line.panel.menuId = line.message.id
   }
 
-  // Runs one action of State.actionsFor. The toolbar and the menu call it.
+  // Runs one action of Message.actionsFor. The toolbar and the menu call it.
   function run(name) {
     var service = line.panel.whiskerService
     var message = line.message
@@ -40,7 +42,7 @@ Item {
       line.panel.focusComposer()
       break
     case "react": line.panel.reactingId = message.id; break
-    case "copy": service.copyText(State.messageBody(message)); break
+    case "copy": service.copyText(Message.messageBody(message)); break
     case "edit":
       service.changeDraft({ edit: message.id, text: message.text })
       line.panel.focusComposer()
@@ -105,8 +107,8 @@ Item {
       spacing: Style.space(8)
       Text {
         textFormat: Text.PlainText
-        text: line.isMessage ? State.senderLabel(line.message) : ""
-        color: line.mine ? Color.accent : (line.isMessage && line.group ? State.senderColor(line.message.sender) : line.panel.contentForeground)
+        text: line.isMessage ? Timeline.senderLabel(line.message) : ""
+        color: line.mine ? Color.accent : (line.isMessage && line.group ? Timeline.senderColor(line.message.sender) : line.panel.contentForeground)
         font.family: line.panel.contentFontFamily
         font.pixelSize: Style.font.body
         font.bold: true
@@ -114,7 +116,7 @@ Item {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.PlainText
-        text: line.isMessage ? State.timeLabel(line.message.time) : ""
+        text: line.isMessage ? Timeline.timeLabel(line.message.time) : ""
         opacity: 0.5
         color: line.panel.contentForeground
         font.family: line.panel.contentFontFamily
@@ -134,7 +136,7 @@ Item {
 
       // The mark shows on each Message of the user, also inside a run.
       Text {
-        readonly property var mark: line.isMessage ? State.deliveryMark(line.message) : ({ text: "", tone: "normal" })
+        readonly property var mark: line.isMessage ? Timeline.deliveryMark(line.message) : ({ text: "", tone: "normal" })
         anchors.right: parent.right
         anchors.top: parent.top
         horizontalAlignment: Text.AlignRight
@@ -154,7 +156,7 @@ Item {
 
         // The Quote of a reply: the quoted author and a one-line preview. A click jumps to the quoted Message.
         Text {
-          readonly property var quote: line.isMessage ? State.quoteView(line.message) : null
+          readonly property var quote: line.isMessage ? Message.quoteView(line.message) : null
           visible: quote !== null
           width: parent.width
           elide: Text.ElideRight
@@ -172,7 +174,7 @@ Item {
           width: parent.width
           wrapMode: Text.Wrap
           textFormat: Text.StyledText
-          text: line.isMessage ? State.messageHtml(line.message) + (State.editedLabel(line.message) !== "" ? " <i>" + State.editedLabel(line.message) + "</i>" : "") : ""
+          text: line.isMessage ? Message.messageHtml(line.message) + (Message.editedLabel(line.message) !== "" ? " <i>" + Message.editedLabel(line.message) + "</i>" : "") : ""
           font.italic: line.isMessage && line.message.revoked === true
           opacity: line.isMessage && line.message.revoked === true ? 0.6 : 1
           color: line.panel.contentForeground
@@ -186,7 +188,7 @@ Item {
           width: parent.width
           spacing: Style.space(2)
           Button {
-            readonly property var map: line.isMessage ? State.mapView(line.message) : null
+            readonly property var map: line.isMessage ? Message.mapView(line.message) : null
             visible: map !== null
             text: "Open map"
             bordered: true
@@ -194,8 +196,8 @@ Item {
           }
           // A sticker shows here once the Daemon holds it. The path comes from media.open, never bytes.
           Image {
-            readonly property string file: line.isMessage ? State.mediaPath(line.panel.view, line.message) : ""
-            visible: file !== "" && State.showsInline(line.message)
+            readonly property string file: line.isMessage ? Media.mediaPath(line.panel.view, line.message) : ""
+            visible: file !== "" && Media.showsInline(line.message)
             source: visible ? "file://" + file : ""
             width: Math.min(parent.width, Style.space(240))
             fillMode: Image.PreserveAspectFit
@@ -203,7 +205,7 @@ Item {
             TapHandler { onTapped: line.panel.whiskerService.openMedia(line.message) }
           }
           Loader {
-            active: line.isMessage && State.chipShown(line.message)
+            active: line.isMessage && Media.chipShown(line.message)
             visible: active
             sourceComponent: MediaChip { message: line.message; panel: line.panel }
           }
@@ -236,7 +238,7 @@ Item {
           id: reactionsRow
           spacing: Style.space(4)
           Repeater {
-            model: line.isMessage ? State.reactionChips(line.message) : []
+            model: line.isMessage ? Message.reactionChips(line.message) : []
             Item {
               id: chip
               required property var modelData
@@ -289,7 +291,7 @@ Item {
         Text {
           visible: text !== ""
           textFormat: Text.PlainText
-          text: line.isMessage ? State.failedLine(line.message) : ""
+          text: line.isMessage ? Timeline.failedLine(line.message) : ""
           color: Color.urgent
           font.family: line.panel.contentFontFamily
           font.pixelSize: Style.font.caption
@@ -316,7 +318,7 @@ Item {
       height: parent.height - 2
       spacing: 0
       Repeater {
-        model: line.pickerOpen ? State.REACTION_EMOJI : []
+        model: line.pickerOpen ? Message.REACTION_EMOJI : []
         Button {
           required property string modelData
           text: modelData
@@ -324,7 +326,7 @@ Item {
           verticalPadding: 0
           fontSize: Style.font.caption
           height: toolRow.height
-          bordered: State.myReaction(line.message) === modelData
+          bordered: Message.myReaction(line.message) === modelData
           onClicked: {
             line.panel.whiskerService.reactToMessage(line.message, modelData)
             line.panel.reactingId = ""
@@ -335,7 +337,7 @@ Item {
         model: line.pickerOpen ? [] : [{ name: "react", icon: "☺" }, { name: "reply", icon: "↩" }, { name: "more", icon: "⋯" }]
         Button {
           required property var modelData
-          visible: line.isMessage && (modelData.name === "more" || State.menuActions(line.message, Math.floor(Date.now() / 1000)).indexOf(modelData.name) >= 0)
+          visible: line.isMessage && (modelData.name === "more" || Message.menuActions(line.message, Math.floor(Date.now() / 1000)).indexOf(modelData.name) >= 0)
           text: modelData.icon
           height: toolRow.height
           horizontalPadding: Style.space(4)
@@ -363,11 +365,11 @@ Item {
       anchors.centerIn: parent
       width: parent.width - Style.space(8)
       Repeater {
-        model: line.menuOpen ? State.menuActions(line.message, Math.floor(Date.now() / 1000)) : []
+        model: line.menuOpen ? Message.menuActions(line.message, Math.floor(Date.now() / 1000)) : []
         Button {
           required property string modelData
           width: parent.width
-          text: State.ACTION_LABELS[modelData]
+          text: Message.ACTION_LABELS[modelData]
           onClicked: line.run(modelData)
         }
       }

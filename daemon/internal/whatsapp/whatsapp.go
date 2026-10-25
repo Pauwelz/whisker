@@ -110,7 +110,7 @@ func Digits(phone string) string {
 }
 
 // cleanPhone keeps the digits of a phone number. It returns ErrInvalidPhone for a number that is too short
-// or not international. The rule is the one of whatsmeow's PairPhone. WhiskerState.js mirrors it (isLookupPhone).
+// or not international. The rule is the one of whatsmeow's PairPhone. state/NewChat.js mirrors it (isLookupPhone).
 func cleanPhone(phone string) (string, error) {
 	digits := Digits(phone)
 	if len(digits) <= 6 || strings.HasPrefix(digits, "0") {

@@ -3,7 +3,12 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
-import "WhiskerState.js" as State
+import "state/ChatList.js" as ChatList
+import "state/Daemon.js" as Daemon
+import "state/Draft.js" as Draft
+import "state/Message.js" as Message
+import "state/NewChat.js" as NewChat
+import "state/Timeline.js" as Timeline
 
 // The bar widget entry point: a bar icon and its pop-out. It reads the Daemon state from the Service.
 Panel {
@@ -13,7 +18,7 @@ Panel {
   manageIpc: false // the handler below adds openChat to the standard methods
 
   readonly property var whiskerService: bar && bar.shell ? bar.shell.serviceFor("pauwelz.whisker") : null
-  readonly property var view: whiskerService ? whiskerService.view : State.initialState()
+  readonly property var view: whiskerService ? whiskerService.view : Daemon.initialState()
   // Which linking method the pop-out shows. The user picks it, so it is view state only.
   property bool pairMode: false
   // Settings view and Log out confirmation: the user picks them, so they are view state only.
@@ -21,25 +26,25 @@ Panel {
   property bool confirmLogout: false
   property bool showNewChat: false // the new Chat view: the user picks it, so it is view state only
   property string chatFilter: "all" // the Chat list filter the user picked: all, unread, groups or archived
-  readonly property var shownChats: State.filterChats(root.view.chats || [], root.chatFilter)
+  readonly property var shownChats: ChatList.filterChats(root.view.chats || [], root.chatFilter)
   property string savingId: "" // the Message whose Save as path is being typed, or empty
   // The Draft of the open Chat comes from the Daemon state. The Plugin changes it through Service.changeDraft.
-  readonly property var draft: State.draftOf(root.view)
+  readonly property var draft: Draft.draftOf(root.view)
   readonly property string editingId: root.draft.edit // the Message under edit in the composer, or empty
-  readonly property var quoting: State.draftTarget(root.view, "quote") // the Message that the next send quotes, or null
+  readonly property var quoting: Draft.draftTarget(root.view, "quote") // the Message that the next send quotes, or null
   property string reactingId: "" // the Message whose Reaction picker is open, or empty
   property string chatLinksFor: "" // the jid of the Chat whose links show in the Chat header, or empty
   // The open Chat as the Chat list holds it, for the pin and mute state of its links. Null when a search hides it.
-  readonly property var openChatRow: root.openChat ? State.chatRow(root.view, root.openChat.jid) : null
+  readonly property var openChatRow: root.openChat ? ChatList.chatRow(root.view, root.openChat.jid) : null
   property string menuId: "" // the Message whose action menu is open, or empty
   readonly property var settings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
   readonly property var openChat: root.view.openChat || null
   onOpenChatChanged: chatLinksFor = "" // also after mark unread, which closes the Chat
-  readonly property var timeline: root.openChat ? State.timelineRows(root.openChat.messages) : [] // oldest first
+  readonly property var timeline: root.openChat ? Timeline.timelineRows(root.openChat.messages) : [] // oldest first
   onTimelineChanged: timelineView.showTimeline()
-  // Which parts show. The decision is State.panelParts.
-  readonly property var parts: State.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings, showNewChat: root.showNewChat })
+  // Which parts show. The decision is Daemon.panelParts.
+  readonly property var parts: Daemon.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings, showNewChat: root.showNewChat })
 
   // The pop-out keeps one size in every view, so it never grows or shrinks on a view switch.
   readonly property real popoutHeight: Style.space(560)
@@ -49,15 +54,15 @@ Panel {
   readonly property color surfaceColor: Qt.rgba(contentForeground.r, contentForeground.g, contentForeground.b, 0.06)
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
-  // One on/off Profile Setting. `key` is its wire name; State.SETTING_TOGGLES holds its texts.
+  // One on/off Profile Setting. `key` is its wire name; Daemon.SETTING_TOGGLES holds its texts.
   // Smaller than the shell's Toggle (at least 54 px), so all settings fit the pop-out without a scroll.
   component SettingToggle: Toggle {
     required property string key
     width: parent.width
     implicitHeight: Style.space(46)
     titleSize: Style.font.body
-    label: State.SETTING_TOGGLES[key].label
-    description: State.SETTING_TOGGLES[key].description
+    label: Daemon.SETTING_TOGGLES[key].label
+    description: Daemon.SETTING_TOGGLES[key].description
     checked: !!root.settings && root.settings[key]
     foreground: root.contentForeground
     fontFamily: root.contentFontFamily
@@ -87,9 +92,9 @@ Panel {
     }
   }
 
-  // Runs a fixed shortcut. The decision is State.shortcutAction.
+  // Runs a fixed shortcut. The decision is Daemon.shortcutAction.
   function runShortcut(shortcut) {
-    var action = State.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat })
+    var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat })
     if (action === "closeChat") {
       root.reactingId = ""
       root.whiskerService.closeChat()
@@ -110,7 +115,7 @@ Panel {
 
   // A click on a Quote: scroll the timeline to the quoted Message. The model is newest first, so the row index flips.
   function jumpToMessage(id) {
-    var index = State.rowIndexOf(root.timeline, id)
+    var index = Timeline.rowIndexOf(root.timeline, id)
     if (index >= 0) timelineView.positionViewAtIndex(root.timeline.length - 1 - index, ListView.Center)
   }
 
@@ -140,7 +145,7 @@ Panel {
 
   BarIconButton {
     id: button
-    labelText: State.unreadLabel(root.view)
+    labelText: Daemon.unreadLabel(root.view)
     anchors.fill: parent
     bar: root.bar
     // One-colour cat. MultiEffect paints it in the bar foreground, so it follows the theme.
@@ -156,7 +161,7 @@ Panel {
         }
       }
     }
-    dimmed: State.barDimmed(root.view)
+    dimmed: Daemon.barDimmed(root.view)
     tooltipText: root.view.message
     onPressed: function(b) { root.toggle() }
   }
@@ -213,7 +218,7 @@ Panel {
               font.bold: true
             }
             Text {
-              visible: State.ownOnline(root.view)
+              visible: Daemon.ownOnline(root.view)
               text: "● online"
               color: Color.accent
               font.family: root.contentFontFamily
@@ -222,7 +227,7 @@ Panel {
             Text {
               Layout.fillWidth: true
               textFormat: Text.PlainText
-              text: State.unreadSuffix(root.view)
+              text: Daemon.unreadSuffix(root.view)
               opacity: 0.5
               color: root.contentForeground
               font.family: root.contentFontFamily
@@ -255,11 +260,11 @@ Panel {
 
         Text {
           id: message
-          visible: State.statusLineShown(root.view)
+          visible: Daemon.statusLineShown(root.view)
           width: parent.width
           wrapMode: Text.Wrap
           textFormat: Text.PlainText
-          text: State.linkMessage(root.view, root.pairMode)
+          text: Daemon.linkMessage(root.view, root.pairMode)
           color: root.parts.error ? Color.urgent : root.contentForeground
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
@@ -287,7 +292,7 @@ Panel {
         Text {
           visible: root.parts.banner
           width: parent.width
-          text: State.connectionBanner(root.view)
+          text: Daemon.connectionBanner(root.view)
           color: root.view.connection === "offline" ? Color.urgent : root.contentForeground
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
@@ -431,12 +436,12 @@ Panel {
             }
           }
           Repeater {
-            model: State.CHAT_FILTERS
+            model: ChatList.CHAT_FILTERS
             Button {
               text: modelData.label
               selected: root.chatFilter === modelData.value
               onClicked: {
-                const archivedChanged = State.archivedFilterChanged(root.chatFilter, modelData.value)
+                const archivedChanged = ChatList.archivedFilterChanged(root.chatFilter, modelData.value)
                 root.chatFilter = modelData.value
                 if (archivedChanged) root.whiskerService.showArchived(modelData.value === "archived")
               }
@@ -543,7 +548,7 @@ Panel {
             width: parent.width
             height: Math.max(0, root.popoutHeight - newChatView.y - y)
             clip: true
-            model: State.newChatRows(root.view.contacts, newChatInput.text, root.view.lookup)
+            model: NewChat.newChatRows(root.view.contacts, newChatInput.text, root.view.lookup)
             delegate: Item {
               required property var modelData
               readonly property bool note: modelData.kind === "note"
@@ -554,7 +559,7 @@ Panel {
                 enabled: modelData.kind === "contact" || modelData.status === "found"
                 onTapped: {
                   root.showNewChat = false
-                  root.whiskerService.startChat(State.newChatTarget(modelData))
+                  root.whiskerService.startChat(NewChat.newChatTarget(modelData))
                 }
               }
               // Contact row: "@ name    +phone  open|new". A phone row shows the number and its status. The note is a dim footer line.
@@ -577,7 +582,7 @@ Panel {
                   Layout.fillWidth: true
                   wrapMode: Text.Wrap
                   textFormat: Text.PlainText
-                  text: note ? modelData.text : State.newChatRowName(modelData)
+                  text: note ? modelData.text : NewChat.newChatRowName(modelData)
                   color: root.contentForeground
                   opacity: note || modelData.pushNameOnly ? 0.6 : 1
                   font.family: root.contentFontFamily
@@ -616,7 +621,7 @@ Panel {
             PanelSectionHeader { text: "Privacy"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
             SettingChoice {
               label: "Read Receipts"
-              options: State.READ_RECEIPT_MODES
+              options: Daemon.READ_RECEIPT_MODES
               value: root.settings ? root.settings.readReceipts : ""
               onChanged: function(mode) { root.whiskerService.changeSettings({ readReceipts: mode }) }
             }
@@ -624,7 +629,7 @@ Panel {
               width: parent.width
               wrapMode: Text.Wrap
               opacity: 0.6
-              text: State.readReceiptDescription(root.settings)
+              text: Daemon.readReceiptDescription(root.settings)
               color: root.contentForeground
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.caption
@@ -642,7 +647,7 @@ Panel {
             SettingChoice {
               visible: !!root.settings && root.settings.autoDownload
               label: "Up to"
-              options: State.AUTO_DOWNLOAD_LIMITS
+              options: Daemon.AUTO_DOWNLOAD_LIMITS
               value: root.settings ? root.settings.autoDownloadLimit : ""
               onChanged: function(limit) { root.whiskerService.changeSettings({ autoDownloadLimit: limit }) }
             }
@@ -713,7 +718,7 @@ Panel {
                 Layout.preferredHeight: Style.space(16)
                 Image {
                   id: chatPicture
-                  readonly property string pictureSource: root.openChat ? State.chatPictureSource(root.view, root.openChat.jid) : ""
+                  readonly property string pictureSource: root.openChat ? ChatList.chatPictureSource(root.view, root.openChat.jid) : ""
                   anchors.fill: parent
                   visible: pictureSource !== ""
                   source: pictureSource
@@ -735,7 +740,7 @@ Panel {
                 Text {
                   anchors.centerIn: parent
                   visible: !chatPicture.visible
-                  text: root.openChat ? State.chatSign(root.openChat) : ""
+                  text: root.openChat ? ChatList.chatSign(root.openChat) : ""
                   opacity: 0.6 // as in the Chat list row
                   color: root.contentForeground
                   font.family: root.contentFontFamily
@@ -760,17 +765,17 @@ Panel {
                 Layout.fillWidth: true
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
-                readonly property string status: State.chatStatusLabel(root.view, Math.floor(Date.now() / 1000))
+                readonly property string status: ChatList.chatStatusLabel(root.view, Math.floor(Date.now() / 1000))
                 // Empty while the Chat links show: it stays as the spacer that keeps ⋯ and Back at the right.
                 text: status !== "" && !chatLinks.active ? " · " + status : ""
-                color: State.activityLabel(root.view) !== "" ? Color.accent : root.contentForeground
-                opacity: State.activityLabel(root.view) !== "" ? 1 : 0.6
+                color: ChatList.activityLabel(root.view) !== "" ? Color.accent : root.contentForeground
+                opacity: ChatList.activityLabel(root.view) !== "" ? 1 : 0.6
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
               }
               Text {
                 visible: !!root.openChatRow && root.openChatRow.pinned === true
-                text: State.PIN_MARK
+                text: ChatList.PIN_MARK
                 opacity: 0.8
                 color: root.contentForeground
                 font.family: root.contentFontFamily
@@ -778,7 +783,7 @@ Panel {
               }
               Text {
                 visible: !!root.openChatRow && root.openChatRow.muted === true
-                text: visible ? "󰝟 " + State.muteLeftLabel(root.openChatRow, Math.floor(Date.now() / 1000)) : ""
+                text: visible ? "󰝟 " + ChatList.muteLeftLabel(root.openChatRow, Math.floor(Date.now() / 1000)) : ""
                 opacity: 0.6
                 color: root.contentForeground
                 font.family: root.contentFontFamily
@@ -829,13 +834,13 @@ Panel {
             Component.onCompleted: showTimeline()
             function showTimeline() {
               var rows = root.timeline.slice().reverse() // newest first: BottomToTop puts row 0 at the bottom
-              var keys = rows.map(State.rowKey)
+              var keys = rows.map(Timeline.rowKey)
               var byKey = {}
               rows.forEach(function (row, i) { byKey[keys[i]] = row })
               var before = []
               for (var i = 0; i < timelineKeys.count; i++) before.push(timelineKeys.get(i).key)
               var chat = root.openChat ? root.openChat.jid : ""
-              var edits = chat === shownChat ? State.listEdits(before, keys) : null
+              var edits = chat === shownChat ? Timeline.listEdits(before, keys) : null
               rowsByKey = Object.assign({}, rowsByKey, byKey) // removed and inserted rows both resolve during the edits
               if (edits) {
                 edits.forEach(function (e) { if (e.key === undefined) timelineKeys.remove(e.remove); else timelineKeys.insert(e.insert, { key: e.key }) })
@@ -848,13 +853,13 @@ Panel {
             }
             // BottomToTop puts the footer at the top of the timeline: a quiet link that loads the older Messages.
             footer: Item {
-              visible: State.olderLink(root.view) !== ""
+              visible: Timeline.olderLink(root.view) !== ""
               width: ListView.view.width
               height: visible ? olderText.implicitHeight + Style.space(4) : 0
               Text {
                 id: olderText
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: State.olderLink(root.view)
+                text: Timeline.olderLink(root.view)
                 opacity: 0.5
                 color: root.contentForeground
                 font.family: root.contentFontFamily
@@ -881,7 +886,7 @@ Panel {
             visible: root.parts.emptyChat
             Layout.fillWidth: true
             wrapMode: Text.Wrap
-            text: State.EMPTY_CHAT_TEXT
+            text: NewChat.EMPTY_CHAT_TEXT
             color: root.contentForeground
             opacity: 0.6
             font.family: root.contentFontFamily
@@ -891,11 +896,11 @@ Panel {
           // One row per Attachment, each with its own ✕. A row that the Daemon refused shows in the error colour. After 4 rows the list scrolls.
           ListView {
             id: attachmentList
-            visible: State.hasAttachment(root.draft)
+            visible: Draft.hasAttachment(root.draft)
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(count, 4) * 28
             clip: true
-            model: State.attachmentRows(root.view)
+            model: Draft.attachmentRows(root.view)
             delegate: RowLayout {
               id: attachmentRow
               required property var modelData
@@ -919,7 +924,7 @@ Panel {
 
           // The target of the next send: the Message under Quote or Edit, with a ✕ that cancels it.
           RowLayout {
-            readonly property var quote: State.composerQuoteView(root.quoting)
+            readonly property var quote: Message.composerQuoteView(root.quoting)
             visible: quote !== null || root.editingId !== ""
             Layout.fillWidth: true
             Text {
@@ -979,7 +984,7 @@ Panel {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             textFormat: Text.PlainText
-            text: State.emptyChatsText(root.chatFilter, searchInput.text)
+            text: ChatList.emptyChatsText(root.chatFilter, searchInput.text)
             color: root.contentForeground
             opacity: 0.6
             font.family: root.contentFontFamily

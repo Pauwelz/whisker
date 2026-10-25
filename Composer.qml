@@ -3,7 +3,8 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
-import "WhiskerState.js" as State
+import "state/Draft.js" as Draft
+import "state/Shortcode.js" as Shortcode
 
 // The composer of the open Chat: one strip under a line with a prompt, the text and Send.
 // Enter sends, Shift+Enter adds a line. Ctrl+V of a copied file makes it the Attachment. The pop-out (Panel.qml) owns the Draft; this item only draws it.
@@ -13,7 +14,7 @@ FocusScope {
   property var panel: null // the pop-out: service, Draft and colours
   readonly property var service: panel ? panel.whiskerService : null
   readonly property var draft: panel ? panel.draft : ({ text: "", attachments: [] })
-  readonly property bool hasAttachment: State.hasAttachment(draft)
+  readonly property bool hasAttachment: Draft.hasAttachment(draft)
   implicitHeight: suggestionList.height + row.implicitHeight + Style.space(8)
 
   // Omarchy's emoji list. Without it, Emoji Shortcodes are off.
@@ -21,13 +22,13 @@ FocusScope {
   FileView {
     path: Quickshell.env("OMARCHY_PATH") + "/shell/plugins/emojis/emojis.json"
     printErrors: false
-    onLoaded: composer.emojis = State.parseEmojis(text())
+    onLoaded: composer.emojis = Shortcode.parseEmojis(text())
   }
 
-  readonly property var shortcode: State.shortcodeAt(input.text, input.cursorPosition)
+  readonly property var shortcode: Shortcode.shortcodeAt(input.text, input.cursorPosition)
   property int dismissedStart: -1 // Escape hides the row for the Emoji Shortcode that starts here
   property int selected: 0
-  readonly property var suggestions: shortcode && shortcode.start !== dismissedStart ? State.shortcodeSuggestions(emojis, shortcode.query) : []
+  readonly property var suggestions: shortcode && shortcode.start !== dismissedStart ? Shortcode.shortcodeSuggestions(emojis, shortcode.query) : []
   onShortcodeChanged: {
     selected = 0
     if (!shortcode) dismissedStart = -1
@@ -39,11 +40,11 @@ FocusScope {
   }
 
   function pick(index) {
-    setText(State.insertEmoji(input.text, shortcode.start, input.cursorPosition, suggestions[index].emoji))
+    setText(Shortcode.insertEmoji(input.text, shortcode.start, input.cursorPosition, suggestions[index].emoji))
   }
 
   function send() {
-    if (State.canSend(input.text, composer.hasAttachment)) composer.service.submitComposer(input.text)
+    if (Draft.canSend(input.text, composer.hasAttachment)) composer.service.submitComposer(input.text)
   }
 
   // The line above the strip.
@@ -181,7 +182,7 @@ FocusScope {
       }
       Keys.onPressed: function(event) {
         if (composer.suggestions.length > 0) {
-          var move = State.shortcodeKeyAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0)
+          var move = Shortcode.shortcodeKeyAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0)
           if (move !== "default") {
             event.accepted = true
             if (move === "previous") composer.selected = Math.max(0, composer.selected - 1)
@@ -191,14 +192,14 @@ FocusScope {
           }
         }
         if (event.text === ":") {
-          var closed = State.closeShortcode(text, cursorPosition, composer.emojis)
+          var closed = Shortcode.closeShortcode(text, cursorPosition, composer.emojis)
           if (closed) {
             event.accepted = true
             composer.setText(closed)
             return
           }
         }
-        var action = State.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text, composer.hasAttachment,
+        var action = Draft.composerAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0, text, composer.hasAttachment,
                                           (event.modifiers & Qt.ControlModifier) !== 0, composer.panel ? composer.panel.editingId : "")
         if (action === "default") return
         event.accepted = true
@@ -223,7 +224,7 @@ FocusScope {
     Button {
       id: sendButton
       anchors.verticalCenter: parent.verticalCenter
-      enabled: State.canSend(input.text, composer.hasAttachment)
+      enabled: Draft.canSend(input.text, composer.hasAttachment)
       opacity: enabled ? 1 : 0.4
       text: "⏎"
       tooltipText: "Send"

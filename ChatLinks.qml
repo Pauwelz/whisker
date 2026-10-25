@@ -1,8 +1,8 @@
 import QtQuick
 import qs.Commons
-import "WhiskerState.js" as State
+import "state/ChatList.js" as ChatList
 
-// The links of a Chat: pin, mark unread and mute, from State.chatLinks. A click on mute shows the mute choices in their place.
+// The links of a Chat: pin, mark unread and mute, from ChatList.chatLinks. A click on mute shows the mute choices in their place.
 // A Chat line shows them on hover, the Chat header after a click on ⋯. Create them when they show, so the mute choices start closed.
 Row {
   id: links
@@ -13,7 +13,7 @@ Row {
 
   Repeater {
     // `muting` changes when mute is clicked, so the end times of the mute choices are fresh.
-    model: State.chatLinks(links.chat, links.muting, Math.floor(Date.now() / 1000))
+    model: ChatList.chatLinks(links.chat, links.muting, Math.floor(Date.now() / 1000))
     Text {
       required property var modelData
       text: modelData.text

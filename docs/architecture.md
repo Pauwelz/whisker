@@ -30,6 +30,7 @@ whisker is the Omarchy product: a Quickshell/QML Plugin and its own Go Daemon. I
 
 ```
 manifest.json, QML         the Plugin (repo root)
+state/*.js                 the Plugin state logic, one module per topic (QML-free)
 scripts/fetch-daemon.sh    downloads and verifies the Daemon
 bin/                       the Daemon binary (git-ignored)
 daemon/

@@ -1,15 +1,21 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "WhiskerState.js" as State
+import "state/ChatList.js" as ChatList
+import "state/Daemon.js" as Daemon
+import "state/Draft.js" as Draft
+import "state/Media.js" as Media
+import "state/Message.js" as Message
+import "state/NewChat.js" as NewChat
+import "state/Timeline.js" as Timeline
 
 // Owns the Daemon process. keepLoaded: one Daemon serves the bar widget of every monitor.
-// Views read `view` and hold no decision logic (see WhiskerState.js).
+// Views read `view` and hold no decision logic (see state/Daemon.js).
 Item {
   id: root
 
   property var shell: null
-  property var view: State.initialState()
+  property var view: Daemon.initialState()
 
   readonly property string pluginDir: decodeURIComponent(Qt.resolvedUrl(".").toString().replace("file://", ""))
   readonly property string daemonPath: pluginDir + "bin/whisker-daemon"
@@ -24,7 +30,7 @@ Item {
   // The Plugin never runs a Daemon with another version. It never restarts a Daemon that exited.
   // A wrong or missing binary is fetched once; a running wrong Daemon is stopped first.
   function startDaemon(versionOutput) {
-    var step = State.versionStep(expectedVersion, versionOutput, downloaded)
+    var step = Daemon.versionStep(expectedVersion, versionOutput, downloaded)
     view = step.view
     if (step.action === "start") daemon.running = true
     if (step.action !== "download") return
@@ -38,7 +44,7 @@ Item {
 
   // Called by the Pair Code form.
   function requestPairCode(phone) {
-    send(State.pairCodeRequest, phone)
+    send(Daemon.pairCodeRequest, phone)
   }
 
   // The text of the search field. It filters every Chat list request.
@@ -48,30 +54,30 @@ Item {
 
   // Called by the "Load more" button of the Chat list.
   function loadMoreChats() {
-    send(State.chatListRequest, view.chats ? view.chats.length : 0, chatQuery, chatArchived)
+    send(ChatList.chatListRequest, view.chats ? view.chats.length : 0, chatQuery, chatArchived)
   }
 
   // Called when the search field changes.
   function searchChats(text) {
     chatQuery = text
-    send(State.chatListRequest, 0, chatQuery, chatArchived)
+    send(ChatList.chatListRequest, 0, chatQuery, chatArchived)
   }
 
   // Called when the user picks or leaves the "archived" filter.
   function showArchived(on) {
     chatArchived = on
-    send(State.chatListRequest, 0, chatQuery, chatArchived)
+    send(ChatList.chatListRequest, 0, chatQuery, chatArchived)
   }
 
   // The new Chat view: the people that match the search field, and the pick of one of them.
   function searchContacts(text) {
-    send(State.contactsSearchRequest, text)
-    var digits = State.lookupPhone(text)
+    send(NewChat.contactsSearchRequest, text)
+    var digits = NewChat.lookupPhone(text)
     if (digits === "") {
       lookupTimer.stop()
       return
     }
-    view = State.lookupStarted(view, digits)
+    view = NewChat.lookupStarted(view, digits)
     lookupTimer.digits = digits
     lookupTimer.restart() // the lookup waits until the user stops typing
   }
@@ -80,56 +86,56 @@ Item {
     id: lookupTimer
     property string digits: ""
     interval: 400
-    onTriggered: root.send(State.lookupRequest, digits)
+    onTriggered: root.send(NewChat.lookupRequest, digits)
   }
 
   // Called when the user picks a person. The Daemon stores the Chat first; the Messages and the Draft follow in order.
   function startChat(contact) {
-    send(State.chatStartRequest, contact.jid)
+    send(NewChat.chatStartRequest, contact.jid)
     openChat({ jid: contact.jid, name: contact.name, kind: "direct" })
   }
 
   // Called when the user picks a Chat of the Chat list. `chat` is a row of the list.
   function openChat(chat) {
     if (view.openChat) leaveChat() // a notification click can open a Chat while another is open
-    view = State.openChat(view, chat)
+    view = Timeline.openChat(view, chat)
     syncAttention()
-    send(State.messagesRequest, chat.jid, 0)
-    send(State.draftGetRequest, chat.jid)
+    send(Timeline.messagesRequest, chat.jid, 0)
+    send(Draft.draftGetRequest, chat.jid)
     requestPicture()
   }
 
   // Asks for the Profile picture of the open Chat when the view has no answer for it yet.
   function requestPicture() {
-    var jid = State.pictureToRequest(view)
-    if (jid !== "") send(State.chatPictureRequest, jid)
+    var jid = ChatList.pictureToRequest(view)
+    if (jid !== "") send(ChatList.chatPictureRequest, jid)
   }
 
   // Called when the user changes the Draft: the composer text, or a Quote or Edit target. The Daemon stores it.
   function changeDraft(changes) {
-    var next = State.changeDraft(view, changes)
+    var next = Draft.changeDraft(view, changes)
     if (next === view) return
     view = next
-    if (State.draftSetDue(view)) send(State.draftSetRequest, view.openChat.jid, view.openChat.draft)
+    if (Daemon.draftSetDue(view)) send(Draft.draftSetRequest, view.openChat.jid, view.openChat.draft)
   }
 
   // Called by the IPC handler `openChat`, which a click on a notification runs.
   function openChatByJid(jid) {
-    openChat(State.chatByJid(view, jid))
+    openChat(ChatList.chatByJid(view, jid))
   }
 
   // Ends what belongs to the open Chat. The Daemon deletes the plain Media copies of the Chat.
   function leaveChat() {
     stopTyping()
     stopPlayer()
-    send(State.mediaReleaseRequest, view.openChat.jid)
+    send(Media.mediaReleaseRequest, view.openChat.jid)
   }
 
   function closeChat() {
     leaveChat()
-    view = State.closeChat(view)
+    view = Timeline.closeChat(view)
     syncAttention()
-    send(State.chatListRequest, 0, chatQuery, chatArchived) // a Draft can list a Chat
+    send(ChatList.chatListRequest, 0, chatQuery, chatArchived) // a Draft can list a Chat
   }
 
   // Outgoing Composing. The Daemon drops it when "send typing" is off.
@@ -139,10 +145,10 @@ Item {
   function composerChanged(text) {
     if (!view.openChat) return
     changeDraft({ text: text })
-    var action = State.typingAction(typingChat !== "", text)
+    var action = Draft.typingAction(typingChat !== "", text)
     if (action === "start") {
       typingChat = view.openChat.jid
-      send(State.typingRequest, typingChat, true)
+      send(Draft.typingRequest, typingChat, true)
     } else if (action === "stop") {
       stopTyping()
     }
@@ -150,7 +156,7 @@ Item {
 
   function stopTyping() {
     if (typingChat === "") return
-    send(State.typingRequest, typingChat, false)
+    send(Draft.typingRequest, typingChat, false)
     typingChat = ""
   }
 
@@ -169,7 +175,7 @@ Item {
 
   function syncAttention() {
     if (!daemon.running) return
-    send(State.attentionRequest, popoutOpen, view.openChat ? view.openChat.jid : "")
+    send(Daemon.attentionRequest, popoutOpen, view.openChat ? view.openChat.jid : "")
   }
 
   // Media the user clicked to open, by key, until its path arrives.
@@ -177,28 +183,28 @@ Item {
 
   // Called by the Download button.
   function downloadMedia(message) {
-    send(State.mediaDownloadRequest, message)
+    send(Media.mediaDownloadRequest, message)
   }
 
   // Called by Open and by a tap on an image. A path that is already known opens at once.
   function openMedia(message) {
-    var step = State.openMediaStep(view, playingKey, message)
+    var step = Media.openMediaStep(view, playingKey, message)
     if (step.action === "stop") {
       stopPlayer()
     } else if (step.action === "launch") {
       launch(message, step.path)
     } else {
-      pendingOpen = State.rememberOpen(pendingOpen, message)
-      send(State.mediaOpenRequest, message)
+      pendingOpen = Media.rememberOpen(pendingOpen, message)
+      send(Media.mediaOpenRequest, message)
     }
   }
 
   // Called by Save as, with an absolute path.
   function saveMedia(message, path) {
-    send(State.mediaSaveRequest, message, path)
+    send(Media.mediaSaveRequest, message, path)
   }
 
-  // The voice note that plays now, by State.mediaKey. Empty when nothing plays.
+  // The voice note that plays now, by Media.mediaKey. Empty when nothing plays.
   property string playingKey: ""
 
   function stopPlayer() {
@@ -208,29 +214,29 @@ Item {
 
   function playVoice(message, path) {
     stopPlayer()
-    playingKey = State.mediaKey(message.chat, message.id)
-    player.command = State.openCommand(message, path)
+    playingKey = Media.mediaKey(message.chat, message.id)
+    player.command = Media.openCommand(message, path)
     player.running = true
-    send(State.playedRequest, message)
+    send(Media.playedRequest, message)
   }
 
   // voice in mpv without a window, video in mpv, the rest in the default app
   function launch(message, path) {
-    if (State.isVoice(message)) {
+    if (Media.isVoice(message)) {
       playVoice(message, path)
       return
     }
-    opener.command = State.openCommand(message, path)
+    opener.command = Media.openCommand(message, path)
     opener.startDetached()
   }
 
   // Asks for the path of each image and sticker that is ready, and opens Media that the user clicked.
   function handleMediaFrame(frame) {
-    var step = State.mediaFrameStep(view, pendingOpen, frame)
+    var step = Media.mediaFrameStep(view, pendingOpen, frame)
     view = step.state
     pendingOpen = step.pending
     if (step.launch) launch(step.launch.message, step.launch.path)
-    step.load.forEach(function(m) { send(State.mediaOpenRequest, m) })
+    step.load.forEach(function(m) { send(Media.mediaOpenRequest, m) })
   }
 
   Process {
@@ -243,7 +249,7 @@ Item {
 
   // Called by the Open map button of a location. Only a map link opens.
   function openLink(url) {
-    var command = State.linkCommand(url)
+    var command = Message.linkCommand(url)
     if (command.length === 0) return
     linkOpener.command = command
     linkOpener.startDetached()
@@ -262,85 +268,85 @@ Item {
 
   // Called by the "Load older" button of the open Chat.
   function loadOlderMessages() {
-    var action = State.olderAction(view)
+    var action = Timeline.olderAction(view)
     if (action === "messages") {
-      send(State.messagesRequest, view.openChat.jid, view.openChat.messages.length)
+      send(Timeline.messagesRequest, view.openChat.jid, view.openChat.messages.length)
     } else if (action === "history") {
-      view = State.historyRequested(view)
-      send(State.historyRequest, view.openChat.jid)
+      view = Timeline.historyRequested(view)
+      send(Timeline.historyRequest, view.openChat.jid)
     }
   }
 
   // Called by the composer. The Draft says whether this is an edit, and what the new Message quotes.
   // The Daemon clears the Draft when it accepts the send or edit; the view clears its copy at once.
-  // When the Daemon refuses a send with Attachments, the reply handler puts the Draft back (State.submitDraft keeps it).
+  // When the Daemon refuses a send with Attachments, the reply handler puts the Draft back (Draft.submitDraft keeps it).
   function submitComposer(text) {
-    var draft = State.draftOf(view)
+    var draft = Draft.draftOf(view)
     var id = nextRequestId // the id that send() gives this request
-    send(State.composerRequest, view.openChat.jid, draft.edit, text, draft.quote, draft.attachments)
-    view = State.submitDraft(view, id)
+    send(Draft.composerRequest, view.openChat.jid, draft.edit, text, draft.quote, draft.attachments)
+    view = Draft.submitDraft(view, id)
   }
 
-  // Called by the Chat links. `option` is the option of a State.chatLinks link.
+  // Called by the Chat links. `option` is the option of a ChatList.chatLinks link.
   function chooseChatOption(chat, option) {
-    if (State.leavesChatFor(view, chat.jid, option)) closeChat() // before the request: the Chat is no longer attended
-    send(State.chatOptionRequest, chat.jid, option)
+    if (ChatList.leavesChatFor(view, chat.jid, option)) closeChat() // before the request: the Chat is no longer attended
+    send(ChatList.chatOptionRequest, chat.jid, option)
   }
 
   // Called when the notice of an error has shown long enough.
   function dismissNotice() {
-    view = State.clearNotice(view)
+    view = Daemon.clearNotice(view)
   }
 
   // Called by the Reaction picker. `emoji` is the picked emoji; picking the current Reaction removes it.
   function reactToMessage(message, emoji) {
-    send(State.reactRequest, view.openChat.jid, message.id, State.reactionChoice(message, emoji))
+    send(Message.reactRequest, view.openChat.jid, message.id, Message.reactionChoice(message, emoji))
   }
 
   // Called by Ctrl+V in the composer. Copied files become Attachments; anything else comes back as pasteText.
   function pasteIntoComposer() {
-    send(State.pasteRequest, view.openChat.jid)
+    send(Draft.pasteRequest, view.openChat.jid)
   }
 
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.
   function revokeMessage(messageId) {
-    send(State.revokeRequest, view.openChat.jid, messageId)
+    send(Message.revokeRequest, view.openChat.jid, messageId)
   }
 
   // Called by "Delete for me" in the Message menu. The Daemon sends messageExpired, which removes the Message.
   function deleteMessageForMe(messageId) {
-    send(State.deleteForMeRequest, view.openChat.jid, messageId)
+    send(Message.deleteForMeRequest, view.openChat.jid, messageId)
   }
 
   // Called by the Retry button of a failed Message.
   function retryMessage(messageId) {
-    send(State.retryMessageRequest, view.openChat.jid, messageId)
+    send(Timeline.retryMessageRequest, view.openChat.jid, messageId)
   }
 
   // Called by the settings view. `changes` holds only the settings that change.
   function changeSettings(changes) {
-    send(State.settingsSetRequest, changes)
+    send(Daemon.settingsSetRequest, changes)
   }
 
   // Called by the Log out button, after the user confirmed.
   function logout() {
-    send(State.logoutRequest)
+    send(Daemon.logoutRequest)
   }
 
   // Called by the Retry button.
   function retry() {
-    var kind = State.retryKind(view)
+    var kind = Daemon.retryKind(view)
     if (kind === "keyring") {
-      view = State.initialState()
-      send(State.keyringRetryRequest)
+      view = Daemon.initialState()
+      send(Daemon.keyringRetryRequest)
       return
     }
     if (kind === "link") {
-      send(State.linkRetryRequest)
+      send(Daemon.linkRetryRequest)
       return
     }
     downloaded = false
-    view = State.initialState()
+    view = Daemon.initialState()
     versionProbe.running = true
   }
 
@@ -350,13 +356,13 @@ Item {
     command: ["sh", root.pluginDir + "scripts/fetch-daemon.sh"]
     onExited: function(exitCode) {
       if (exitCode === 0) versionProbe.running = true
-      else root.view = State.downloadFailed(exitCode)
+      else root.view = Daemon.downloadFailed(exitCode)
     }
   }
 
   property int nextRequestId: 1
 
-  // Sends one request to the Daemon. `builder` is a State.xRequest function; this gives it the next request id, then the other arguments.
+  // Sends one request to the Daemon. `builder` is a request function of the state/ modules; this gives it the next request id, then the other arguments.
   function send(builder) {
     daemon.write(builder.apply(State, [nextRequestId++].concat(Array.prototype.slice.call(arguments, 1))))
   }
@@ -386,27 +392,27 @@ Item {
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) {
-        var frame = State.parseLine(line)
+        var frame = Daemon.parseLine(line)
         if (!frame) return
-        var draftSetDue = State.draftSetDue(root.view, frame) // the answer to a send: store the restored or typed Draft
-        root.view = State.applyFrame(root.view, frame)
-        if (draftSetDue) root.send(State.draftSetRequest, root.view.openChat.jid, State.draftOf(root.view))
-        if (State.isNotify(frame)) Quickshell.execDetached(State.notifyCommand(frame.params))
+        var draftSetDue = Daemon.draftSetDue(root.view, frame) // the answer to a send: store the restored or typed Draft
+        root.view = Daemon.applyFrame(root.view, frame)
+        if (draftSetDue) root.send(Draft.draftSetRequest, root.view.openChat.jid, Draft.draftOf(root.view))
+        if (Daemon.isNotify(frame)) Quickshell.execDetached(Daemon.notifyCommand(frame.params))
         root.handleMediaFrame(frame)
-        var pasted = State.pastedAttachment(root.view, frame)
+        var pasted = Draft.pastedAttachment(root.view, frame)
         if (pasted !== null && pasted.length === 0) root.pasteText()
-        else if (pasted !== null) root.changeDraft({ attachments: State.appendAttachments(State.draftOf(root.view), pasted) })
-        if (State.resendsAttention(frame)) root.syncAttention()
-        if (State.reloadsOpenChat(root.view, frame)) {
+        else if (pasted !== null) root.changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(root.view), pasted) })
+        if (Daemon.resendsAttention(frame)) root.syncAttention()
+        if (Timeline.reloadsOpenChat(root.view, frame)) {
           root.syncAttention()
-          root.send(State.messagesRequest, root.view.openChat.jid, 0)
-          root.send(State.draftGetRequest, root.view.openChat.jid)
+          root.send(Timeline.messagesRequest, root.view.openChat.jid, 0)
+          root.send(Draft.draftGetRequest, root.view.openChat.jid)
         }
-        if (State.reloadsHistory(root.view, frame)) root.send(State.messagesRequest, root.view.openChat.jid, root.view.openChat.messages.length)
+        if (Timeline.reloadsHistory(root.view, frame)) root.send(Timeline.messagesRequest, root.view.openChat.jid, root.view.openChat.messages.length)
         // A merge changes the JID of the open Chat, and a changed picture drops its entry. Both need a new request.
-        if (State.reloadsOpenChat(root.view, frame) || frame.method === "pictureChanged") root.requestPicture()
-        if (State.requestsSettings(frame)) root.send(State.settingsGetRequest)
-        if (State.refreshesChats(frame)) root.send(State.chatListRequest, 0, root.chatQuery, root.chatArchived)
+        if (Timeline.reloadsOpenChat(root.view, frame) || frame.method === "pictureChanged") root.requestPicture()
+        if (Daemon.requestsSettings(frame)) root.send(Daemon.settingsGetRequest)
+        if (Daemon.refreshesChats(frame)) root.send(ChatList.chatListRequest, 0, root.chatQuery, root.chatArchived)
       }
     }
     stderr: SplitParser {
@@ -414,7 +420,7 @@ Item {
     }
     onExited: function(exitCode) {
       if (root.replacing) root.replacing = false
-      else root.view = State.daemonExited(root.view, exitCode)
+      else root.view = Daemon.daemonExited(root.view, exitCode)
     }
   }
 }

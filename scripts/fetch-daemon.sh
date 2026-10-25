@@ -1,6 +1,6 @@
 #!/bin/sh
 # Download the Daemon for the version in manifest.json, check it against SHA256SUMS, move it to bin/.
-# Exit codes (also in docs/releasing.md and WhiskerState.js):
+# Exit codes (also in docs/releasing.md and state/Daemon.js):
 #   0 OK, 20 no version in manifest.json, 21 no SHA256SUMS line, 22 download failed, 23 checksum mismatch.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)

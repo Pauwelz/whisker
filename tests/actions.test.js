@@ -2,12 +2,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const load = require("./load");
 
-const State = load("WhiskerState.js");
+const Message = load("state/Message.js");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const mine = (extra = {}) => ({ id: "m1", fromMe: true, text: "hi", state: "sent", time: 1000, ...extra });
 const theirs = (extra = {}) => ({ id: "m2", fromMe: false, text: "hi", senderName: "Ann", ...extra });
 const media = (kind, state) => ({ media: { kind, state } });
-const actions = (m) => plain(State.actionsFor(m));
+const actions = (m) => plain(Message.actionsFor(m));
 
 test("a Tombstone only allows delete for me", () => {
   assert.deepEqual(actions(mine({ revoked: true })), ["deleteForMe"]);
@@ -42,25 +42,25 @@ test("a sticker has no Media actions", () => {
 });
 
 test("the menu drops react and edit when the Message cannot take them", () => {
-  assert.deepEqual(plain(State.menuActions(mine({ state: "failed" }), 1001)), ["reply", "copy", "retry", "deleteForEveryone"]);
-  assert.deepEqual(plain(State.menuActions(mine(), 1001)), ["reply", "react", "copy", "edit", "deleteForEveryone"]);
-  assert.deepEqual(plain(State.menuActions(mine(), 1000 + State.EDIT_WINDOW_SECONDS + 1)), ["reply", "react", "copy", "deleteForEveryone"]);
+  assert.deepEqual(plain(Message.menuActions(mine({ state: "failed" }), 1001)), ["reply", "copy", "retry", "deleteForEveryone"]);
+  assert.deepEqual(plain(Message.menuActions(mine(), 1001)), ["reply", "react", "copy", "edit", "deleteForEveryone"]);
+  assert.deepEqual(plain(Message.menuActions(mine(), 1000 + Message.EDIT_WINDOW_SECONDS + 1)), ["reply", "react", "copy", "deleteForEveryone"]);
 });
 
 test("the menu offers delete for me, also for a Tombstone", () => {
-  assert.deepEqual(plain(State.menuActions(theirs(), 1)), ["reply", "react", "copy", "deleteForMe"]);
-  assert.deepEqual(plain(State.menuActions(mine({ revoked: true }), 1)), ["deleteForMe"]);
+  assert.deepEqual(plain(Message.menuActions(theirs(), 1)), ["reply", "react", "copy", "deleteForMe"]);
+  assert.deepEqual(plain(Message.menuActions(mine({ revoked: true }), 1)), ["deleteForMe"]);
 });
 
 test("every action has a label", () => {
   for (const name of ["reply", "react", "copy", "edit", "retry", "download", "play", "open", "saveAs", "deleteForMe", "deleteForEveryone"]) {
-    assert.ok(State.ACTION_LABELS[name], name);
+    assert.ok(Message.ACTION_LABELS[name], name);
   }
 });
 
 test("reaction chips mark the own Reaction and name who reacted", () => {
   const m = { id: "m", reactions: [{ fromMe: false, senderName: "Ann", emoji: "👍" }, { fromMe: true, senderName: "", emoji: "👍" }, { fromMe: false, senderName: "Bob", emoji: "🙏" }] };
-  assert.deepEqual(plain(State.reactionChips(m)), [
+  assert.deepEqual(plain(Message.reactionChips(m)), [
     { emoji: "👍", count: 2, mine: true, names: "Ann, You" },
     { emoji: "🙏", count: 1, mine: false, names: "Bob" },
   ]);
