@@ -270,7 +270,7 @@ Item {
     view = State.clearDraft(view)
   }
 
-  // Called by the Chat menu and the hover buttons of the Chat list. `option` is the option of a State.chatOptions item.
+  // Called by the Chat links. `option` is the option of a State.chatLinks link.
   function chooseChatOption(chat, option) {
     if (State.leavesChatFor(view, chat.jid, option)) closeChat() // before the request: the Chat is no longer attended
     send(State.chatOptionRequest, chat.jid, option)

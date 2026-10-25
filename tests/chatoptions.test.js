@@ -17,42 +17,47 @@ test("muteEnd turns a choice into an absolute end time", () => {
   assert.equal(State.muteEnd(always, NOW), -1);
 });
 
-const texts = (options) => plain(options.map((o) => o.text));
-const option = (options, text) => plain(options.find((o) => o.text === text).option);
+const texts = (links) => plain(links.map((o) => o.text));
+const option = (links, text) => plain(links.find((o) => o.text === text).option);
 
-test("an unmuted Chat offers pin, mark as unread, and mute with the three choices", () => {
-  const options = State.chatOptions(ann, NOW);
-  assert.deepEqual(texts(options), ["pin", "mark as unread", "mute", "8h", "1w", "always"]);
-  assert.deepEqual(option(options, "pin"), { pinned: true });
-  assert.equal(option(options, "mute"), null); // a label, not a choice
-  assert.deepEqual(plain(options.slice(3).map((o) => o.option.until)), [NOW + 28800, NOW + 604800, -1]);
+test("the links of a Chat: pin, mark unread and mute", () => {
+  const links = State.chatLinks(ann, false, NOW);
+  assert.deepEqual(texts(links), ["pin", "mark unread", "mute"]);
+  assert.deepEqual(option(links, "pin"), { pinned: true });
+  assert.deepEqual(option(links, "mark unread"), { unread: true });
+  assert.equal(option(links, "mute"), null); // shows the mute choices
 });
 
-test("a pinned and muted Chat offers unpin and unmute with the time left", () => {
-  const hours = State.chatOptions({ ...ann, pinned: true, muted: true, mutedUntil: NOW + 3 * 3600 + 5 }, NOW);
-  assert.deepEqual(texts(hours), ["unpin", "mark as unread", "unmute (3h left)"]);
-  assert.deepEqual(option(hours, "unpin"), { pinned: false });
-  assert.deepEqual(option(hours, "unmute (3h left)"), { until: 0 });
-  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: -1 }, NOW)[2].text, "unmute (for ever)");
-  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: NOW + 2 * 86400 }, NOW)[2].text, "unmute (2d left)");
-  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: NOW + 10 }, NOW)[2].text, "unmute (1m left)");
+test("the links of a pinned, unread and muted Chat: unpin, mark read and unmute", () => {
+  const links = State.chatLinks({ ...ann, pinned: true, unread: true, muted: true }, false, NOW);
+  assert.deepEqual(texts(links), ["unpin", "mark read", "unmute"]);
+  assert.deepEqual(option(links, "unpin"), { pinned: false });
+  assert.deepEqual(option(links, "mark read"), { unread: false });
+  assert.deepEqual(option(links, "unmute"), { until: 0 });
 });
 
-test("a choice becomes a pin or a mute request", () => {
-  const options = State.chatOptions(ann, NOW);
-  assert.deepEqual(JSON.parse(State.chatOptionRequest(4, ann.jid, option(options, "pin"))),
+test("after a click on mute, the links are the mute choices with their end times", () => {
+  assert.deepEqual(plain(State.chatLinks(ann, true, NOW)),
+    [{ text: "8h", option: { until: NOW + 28800 } }, { text: "1w", option: { until: NOW + 604800 } }, { text: "always", option: { until: -1 } }]);
+});
+
+test("the time left of a Muted Chat", () => {
+  const left = (mutedUntil) => State.muteLeftLabel({ ...ann, muted: true, mutedUntil }, NOW);
+  assert.equal(left(-1), "for ever");
+  assert.equal(left(NOW + 2 * 86400), "2d left");
+  assert.equal(left(NOW + 3 * 3600 + 5), "3h left");
+  assert.equal(left(NOW + 10), "1m left");
+});
+
+test("a link becomes a pin, markUnread or mute request", () => {
+  const links = State.chatLinks(ann, false, NOW);
+  assert.deepEqual(JSON.parse(State.chatOptionRequest(4, ann.jid, option(links, "pin"))),
     { jsonrpc: "2.0", id: 4, method: "chat.pin", params: { chat: ann.jid, pinned: true } });
-  assert.deepEqual(JSON.parse(State.chatOptionRequest(5, ann.jid, option(options, "8h"))),
+  assert.deepEqual(JSON.parse(State.chatOptionRequest(5, ann.jid, option(State.chatLinks(ann, true, NOW), "8h"))),
     { jsonrpc: "2.0", id: 5, method: "chat.mute", params: { chat: ann.jid, until: NOW + 28800 } });
   assert.deepEqual(JSON.parse(State.chatOptionRequest(6, ann.jid, State.UNMUTE)).params, { chat: ann.jid, until: 0 });
-});
-
-test("the menu offers mark as read on an unread Chat, and both marks make a markUnread request", () => {
-  const unread = option(State.chatOptions(ann, NOW), "mark as unread");
-  assert.deepEqual(JSON.parse(State.chatOptionRequest(7, ann.jid, unread)),
+  assert.deepEqual(JSON.parse(State.chatOptionRequest(7, ann.jid, option(links, "mark unread"))),
     { jsonrpc: "2.0", id: 7, method: "chat.markUnread", params: { chat: ann.jid, unread: true } });
-  const read = option(State.chatOptions({ ...ann, unread: true }, NOW), "mark as read");
-  assert.equal(JSON.parse(State.chatOptionRequest(8, ann.jid, read)).params.unread, false);
 });
 
 test("only Mark as unread on the open Chat leaves the Chat", () => {
@@ -90,16 +95,4 @@ test("the contract doc lists the error codes of the Chat options", () => {
   const doc = fs.readFileSync(path.join(__dirname, "..", "docs", "contract.md"), "utf8");
   for (const code of ["-32007", "-32010", "-32011", "-32602"]) assert.ok(doc.includes(`| ${code} |`), code);
   for (const code of Object.keys(State.ERROR_NOTICES)) assert.ok(doc.includes(`| ${code} |`), code);
-});
-
-test("the inline mute choices of a Chat line are short and end at the chosen time", () => {
-  assert.deepEqual(plain(State.chatRowMuteChoices(NOW)),
-    [{ text: "8h", option: { until: NOW + 28800 } }, { text: "1w", option: { until: NOW + 604800 } }, { text: "always", option: { until: -1 } }]);
-});
-
-test("the hover buttons of a Chat line: pin toggles, mute unmutes or shows the mute choices", () => {
-  const buttons = (chat) => plain(State.chatRowButtons(chat));
-  assert.deepEqual(buttons(ann), { pin: { text: "pin", option: { pinned: true } }, mute: { text: "mute", option: null } });
-  assert.deepEqual(buttons({ ...ann, pinned: true, muted: true }),
-    { pin: { text: "unpin", option: { pinned: false } }, mute: { text: "unmute", option: { until: 0 } } });
 });

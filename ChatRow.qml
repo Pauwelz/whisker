@@ -10,27 +10,20 @@ Item {
   required property var chat
   required property var panel // the pop-out: service, colours and the view state
   readonly property string typing: State.chatActivityLabel(panel.view, chat) // "typing…", or ""
-  // The slot at the right end. The unread count and the time sit in it; on hover the pin and mute buttons take their place.
+  // The slot at the right end. The unread count and the time sit in it; on hover the Chat links take their place.
   // Keep the slot at a fixed width: the line must not move on hover.
   readonly property alias trailing: trailingSlot
   readonly property real trailingWidth: Style.space(88)
-  readonly property bool optionsOpen: panel.optionsFor === chat.jid
-  property bool muting: false // the mute choices show in place of the hover buttons
 
-  implicitHeight: line.implicitHeight + (optionsOpen ? menu.height : 0)
+  implicitHeight: line.implicitHeight
   height: implicitHeight
 
-  HoverHandler { id: hover; onHoveredChanged: if (!hovered) row.muting = false }
-  // A tap opens the Chat, but not on the trailing slot: its buttons take the tap.
+  HoverHandler { id: hover }
+  // A tap opens the Chat, but not on the hover links: they take the tap. They can be wider than the trailing slot.
   Item {
     anchors.fill: parent
-    anchors.rightMargin: row.trailingWidth
+    anchors.rightMargin: Math.max(row.trailingWidth, hoverLinks.width)
     TapHandler { onTapped: panel.whiskerService.openChat(chat) }
-  }
-  // A right click opens the Chat menu below the line, or closes it.
-  TapHandler {
-    acceptedButtons: Qt.RightButton
-    onTapped: panel.optionsFor = row.optionsOpen ? "" : chat.jid
   }
 
   component Mark: Text {
@@ -69,6 +62,7 @@ Item {
       textFormat: Text.PlainText
       text: row.typing
       font.italic: true
+      opacity: hover.hovered ? 0 : 1 // the hover links may reach over it
     }
     Item {
       id: trailingSlot
@@ -88,54 +82,13 @@ Item {
         text: State.chatTimeLabel(row.chat.lastActive, Math.floor(Date.now() / 1000))
         opacity: 0.5
       }
-      // Hover buttons, from State.chatRowButtons.
-      Row {
-        visible: hover.hovered && !row.muting
+      // The Chat links, on hover. They grow to the left out of the slot; the name has room, since it takes at most half the line.
+      Loader {
+        id: hoverLinks
+        active: hover.hovered
         anchors.right: parent.right
-        spacing: Style.space(8)
-        Mark {
-          text: State.chatRowButtons(row.chat).pin.text
-          TapHandler { onTapped: row.panel.whiskerService.chooseChatOption(row.chat, State.chatRowButtons(row.chat).pin.option) }
-        }
-        Mark {
-          text: State.chatRowButtons(row.chat).mute.text
-          TapHandler {
-            onTapped: {
-              var option = State.chatRowButtons(row.chat).mute.option
-              if (option) row.panel.whiskerService.chooseChatOption(row.chat, option)
-              else row.muting = true
-            }
-          }
-        }
-      }
-      // The mute choices, from State.chatRowMuteChoices. Create them on click, so the end times are fresh.
-      Row {
-        visible: hover.hovered && row.muting
-        anchors.right: parent.right
-        spacing: Style.space(8)
-        Repeater {
-          model: row.muting ? State.chatRowMuteChoices(Math.floor(Date.now() / 1000)) : []
-          Mark {
-            required property var modelData
-            text: modelData.text
-            TapHandler {
-              onTapped: {
-                row.muting = false
-                row.panel.whiskerService.chooseChatOption(row.chat, modelData.option)
-              }
-            }
-          }
-        }
+        sourceComponent: ChatLinks { chat: row.chat; panel: row.panel }
       }
     }
-  }
-
-  Loader {
-    id: menu
-    active: row.optionsOpen
-    anchors.top: line.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    sourceComponent: ChatOptions { chat: row.chat; panel: row.panel }
   }
 }

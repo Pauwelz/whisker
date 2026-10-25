@@ -1042,7 +1042,7 @@ function chatTimeLabel(lastActive, nowSeconds) {
   return at.getDate() + " " + MONTHS[at.getMonth()]
 }
 
-// The mute choices of the Chat menu and the Chat line. `seconds` is -1 for ever.
+// The mute choices of the Chat links. `seconds` is -1 for ever.
 var MUTE_CHOICES = [
   { label: "8h", seconds: 8 * 3600 },
   { label: "1w", seconds: 7 * 86400 },
@@ -1065,35 +1065,21 @@ function muteLeftLabel(chat, nowSeconds) {
   return Math.max(1, Math.floor(left / 60)) + "m left"
 }
 
-// The Chat menu, one line of links: pin or unpin, mark as read or unread, then "mute" and its choices, or unmute.
-// An item has `text` and `option`; `option` has `pinned`, `unread` or `until`, or is null for the "mute" label.
-function chatOptions(chat, nowSeconds) {
-  var options = [
-    chatRowButtons(chat).pin,
-    { text: chat.unread ? "mark as read" : "mark as unread", option: { unread: !chat.unread } }
-  ]
-  if (chat.muted)
-    return options.concat([{ text: "unmute (" + muteLeftLabel(chat, nowSeconds) + ")", option: UNMUTE }])
-  return options.concat([{ text: "mute", option: null }], chatRowMuteChoices(nowSeconds))
-}
-
-// The hover buttons of a Chat line. `option` is what a click chooses.
-// Pin toggles. Mute on a Muted Chat unmutes; otherwise `option` is null and the click shows the mute choices in the line.
-function chatRowButtons(chat) {
-  return {
-    pin: { text: chat.pinned ? "unpin" : "pin", option: { pinned: !chat.pinned } },
-    mute: chat.muted ? { text: "unmute", option: UNMUTE } : { text: "mute", option: null }
-  }
-}
-
-// The mute choices that replace the hover buttons after a click on mute.
-function chatRowMuteChoices(nowSeconds) {
-  return MUTE_CHOICES.map(function(choice) {
+// The links of a Chat, on hover in the Chat list and in the Chat header: pin, mark unread and mute, or their opposites.
+// A link has `text` and `option`; `option` has `pinned`, `unread` or `until`, or is null for mute: it shows the mute choices.
+// With `muting`, the links are the mute choices, with end times from `nowSeconds`.
+function chatLinks(chat, muting, nowSeconds) {
+  if (muting) return MUTE_CHOICES.map(function(choice) {
     return { text: choice.label, option: { until: muteEnd(choice, nowSeconds) } }
   })
+  return [
+    { text: chat.pinned ? "unpin" : "pin", option: { pinned: !chat.pinned } },
+    { text: chat.unread ? "mark read" : "mark unread", option: { unread: !chat.unread } },
+    chat.muted ? { text: "unmute", option: UNMUTE } : { text: "mute", option: null }
+  ]
 }
 
-// The request for a Chat menu option.
+// The request for the option of a Chat link.
 function chatOptionRequest(id, jid, option) {
   if (option.pinned !== undefined) return request(id, "chat.pin", { chat: jid, pinned: option.pinned })
   if (option.unread !== undefined) return request(id, "chat.markUnread", { chat: jid, unread: option.unread })
@@ -1105,7 +1091,7 @@ function leavesChatFor(state, jid, option) {
   return option.unread === true && !!state.openChat && state.openChat.jid === jid
 }
 
-// The listed Chat of a jid, or null. The menu of the open Chat needs its pin and mute state.
+// The listed Chat of a jid, or null. The links of the open Chat need its pin and mute state.
 function chatRow(state, jid) {
   var chats = state.chats || []
   for (var i = 0; i < chats.length; i++) if (chats[i].jid === jid) return chats[i]

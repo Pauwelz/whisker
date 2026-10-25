@@ -28,13 +28,14 @@ Panel {
   readonly property string editingId: root.draft.edit // the Message under edit in the composer, or empty
   readonly property var quoting: State.draftTarget(root.view, "quote") // the Message that the next send quotes, or null
   property string reactingId: "" // the Message whose Reaction picker is open, or empty
-  property string optionsFor: "" // the jid of the Chat whose Chat menu is open, or empty
-  // The open Chat as the Chat list holds it, for the pin and mute state of its menu. Null when a search hides it.
+  property string chatLinksFor: "" // the jid of the Chat whose links show in the Chat header, or empty
+  // The open Chat as the Chat list holds it, for the pin and mute state of its links. Null when a search hides it.
   readonly property var openChatRow: root.openChat ? State.chatRow(root.view, root.openChat.jid) : null
   property string menuId: "" // the Message whose action menu is open, or empty
   readonly property var settings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
   readonly property var openChat: root.view.openChat || null
+  onOpenChatChanged: chatLinksFor = "" // also after mark unread, which closes the Chat
   readonly property var timeline: root.openChat ? State.timelineRows(root.openChat.messages) : [] // oldest first
   // Which parts show. The decision is State.panelParts.
   readonly property var parts: State.panelParts(root.view, { pairMode: root.pairMode, showSettings: root.showSettings, showNewChat: root.showNewChat })
@@ -641,6 +642,7 @@ Panel {
               // Presence of the other side: Online or Last Seen, and "typing…" or "recording…" in the accent colour.
               Text {
                 Layout.fillWidth: true
+                visible: !chatLinks.active // the Chat links take its place
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 readonly property string status: State.chatStatusLabel(root.view, Math.floor(Date.now() / 1000))
@@ -660,17 +662,27 @@ Panel {
               }
               Text {
                 visible: !!root.openChatRow && root.openChatRow.muted === true
-                text: "󰝟"
+                text: visible ? "󰝟 " + State.muteLeftLabel(root.openChatRow, Math.floor(Date.now() / 1000)) : ""
                 opacity: 0.6
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
               }
+              Loader {
+                id: chatLinks
+                Layout.fillWidth: true
+                active: root.openChatRow !== null && root.chatLinksFor === root.openChat.jid
+                visible: active
+                sourceComponent: Item {
+                  implicitHeight: links.implicitHeight
+                  ChatLinks { id: links; anchors.right: parent.right; chat: root.openChatRow; panel: root }
+                }
+              }
               Button {
                 visible: root.openChatRow !== null
                 text: "⋯"
-                tooltipText: "Chat menu"
-                onClicked: root.optionsFor = root.optionsFor === root.openChat.jid ? "" : root.openChat.jid
+                tooltipText: "Chat links"
+                onClicked: root.chatLinksFor = root.chatLinksFor === root.openChat.jid ? "" : root.openChat.jid
               }
               // Back sits at the right in every bar, so the left side never shifts.
               Button {
@@ -679,17 +691,10 @@ Panel {
                 onClicked: {
                   root.reactingId = ""
                   root.menuId = ""
-                  root.optionsFor = ""
                   root.whiskerService.closeChat()
                 }
               }
             }
-          }
-          Loader {
-            Layout.fillWidth: true
-            active: root.openChatRow !== null && root.optionsFor === root.openChat.jid
-            visible: active
-            sourceComponent: ChatOptions { chat: root.openChatRow; panel: root }
           }
 
           ListView {

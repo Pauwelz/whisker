@@ -32,6 +32,10 @@ _Avoid_: Channel, room, thread, dialog, conversation
 The Chat that the Plugin shows while its pop-out is open. A Message in the Attended Chat does not notify.
 _Avoid_: Focused chat, open chat, active chat
 
+**Chat links**:
+The links pin, mark unread and mute of one Chat. A Chat line shows them on hover, the Chat header after a click on ⋯. Mute shows the mute choices in their place.
+_Avoid_: Chat menu, Chat options, hover buttons
+
 **Participant**:
 A canonical WhatsApp user identity resolved across both phone-number addressing (JID) and privacy-preserving linked identity (LID).
 _Avoid_: User, contact, peer, member, sender
