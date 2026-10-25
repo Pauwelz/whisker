@@ -54,13 +54,22 @@ type Client struct {
 	pending []Event // the flag events of a full App State sync, until it completes
 }
 
-// SetDeviceIdentity names the linked device "whisker" on the phone. Call it once, before the first connect and pair.
-// A version that is not "major.minor.patch" at its start counts as 0.0.0.
+// SetDeviceIdentity names the linked device "whisker (hostname)" on the phone. Call it once, before the first connect and pair.
+// WhatsApp keeps the name it got at pairing. A version that is not "major.minor.patch" at its start counts as 0.0.0.
 func SetDeviceIdentity(version string) {
 	var v [3]uint32
 	fmt.Sscanf(version, "%d.%d.%d", &v[0], &v[1], &v[2])
-	store.SetOSInfo("whisker", v)
+	host, _ := os.Hostname()
+	store.SetOSInfo(deviceName(host), v)
 	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
+}
+
+// deviceName is "whisker (host)", or "whisker" when the hostname is unknown.
+func deviceName(host string) string {
+	if host == "" {
+		return "whisker"
+	}
+	return "whisker (" + host + ")"
 }
 
 // NewClient loads the device from the device store (a new unpaired device if there is none).
