@@ -163,7 +163,7 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 
 // qrDataURI renders a WhatsApp QR code string as a PNG data: URI.
 func qrDataURI(text string) (string, error) {
-	code, err := qr.Encode(text, qr.L)
+	code, err := qr.Encode(text, qr.Q) // Q restores 25% of the code: the Plugin covers the middle with the logo
 	if err != nil {
 		return "", err
 	}

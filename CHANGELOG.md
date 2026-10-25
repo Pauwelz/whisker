@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- The QR code of the linking screen is centred and shows the whisker logo in the middle. The Daemon now makes it at error correction level Q, so the code stays readable under the logo.
 - The Chat header shows the round Profile picture of a contact, or the group icon, in place of the Chat sign. Without a picture, or when WhatsApp hides it, the sign stays. The Daemon keeps the small picture in the encrypted chat store for 24 hours. It has the new method `chat.picture` and the new notification `pictureChanged`.
 - The Chat links offer "mark unread" or "mark read". It changes only the Read Marker and sends no Read Receipt. Marking the open Chat unread returns to the Chat list, so the mark stays. The Daemon has the new method `chat.markUnread`.
 - Hover toolbar on a Message: React, Reply and More take the place of the time and Delivery State. React shows the quick emoji with your current Reaction outlined; a click elsewhere closes it. Right-click and More open a menu with the actions that the Message allows, including Copy text. Reactions show as chips with a count below the Message; your own is outlined, a click adds or removes it, and hover lists who reacted. The composer shows the Quote or Edit target with a ✕ that cancels it. Delete for me removes the Message on your devices only; the Daemon has the new method `chat.deleteForMe`.

@@ -260,17 +260,36 @@ Panel {
           font.bold: true
         }
 
-        // The Daemon sends the QR code as a data: URI.
+        // The Daemon sends the QR code as a data: URI, at error correction level Q.
+        // Q restores a quarter of the code, so the logo in the middle (under 5% of the area) keeps it readable.
         Image {
+          id: qrCode
+          anchors.horizontalCenter: parent.horizontalCenter
           visible: root.parts.qr
           source: root.view.qr || ""
           width: Style.space(232)
           height: width
           fillMode: Image.PreserveAspectFit
           smooth: false
+          // A white ring keeps the logo apart from the modules around it.
+          Rectangle {
+            anchors.centerIn: parent
+            width: parent.width * 0.22
+            height: width
+            radius: width * 0.25
+            color: "white"
+            Image {
+              anchors.fill: parent
+              anchors.margins: Style.space(3)
+              source: Qt.resolvedUrl("assets/whisker.svg")
+              sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
+              fillMode: Image.PreserveAspectFit
+            }
+          }
         }
 
         Text {
+          anchors.horizontalCenter: parent.horizontalCenter
           visible: !!root.view.pairCode
           text: root.view.pairCode || ""
           color: root.contentForeground
