@@ -182,3 +182,38 @@ func TestUnsafeNamesAreRejected(t *testing.T) {
 		t.Error("a path in the Chat id must fail")
 	}
 }
+
+// A media.open during an upload rewrites the Plain copy. The upload copy must stay whole, and its removal must keep the Plain copy.
+func TestUploadCopyIsApartFromThePlainCopy(t *testing.T) {
+	s, _, _ := newStore(t)
+	text := []byte(strings.Repeat("picture ", 5000))
+	if err := s.Put("c@s.whatsapp.net", "m", media.Image, key, bytes.NewReader(text)); err != nil {
+		t.Fatal(err)
+	}
+	upload, err := s.UploadCopy("c@s.whatsapp.net", "m", media.Image, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := s.Plain("c@s.whatsapp.net", "m", ".png", media.Image, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upload == plain {
+		t.Fatal("the upload copy is the Plain copy")
+	}
+	if got, _ := os.ReadFile(upload); !bytes.Equal(got, text) {
+		t.Error("the upload copy differs from the original")
+	}
+	os.Remove(upload)
+	if _, err := os.Stat(plain); err != nil {
+		t.Error("removing the upload copy removed the Plain copy")
+	}
+	s.Release("c@s.whatsapp.net")
+	again, err := s.UploadCopy("c@s.whatsapp.net", "m", media.Image, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again == upload {
+		t.Error("two upload copies share a name")
+	}
+}

@@ -159,6 +159,30 @@ func (s *Store) Plain(chat, id, ext string, k Kind, mediaKey []byte) (string, er
 	return path, nil
 }
 
+// UploadCopy writes a plain copy for a send to a new file of its own, apart from the copy that Plain hands out.
+// A media.open during the upload rewrites the Plain copy, so the upload must not read it. The caller removes the file.
+func (s *Store) UploadCopy(chat, id string, k Kind, mediaKey []byte) (string, error) {
+	if err := safe(chat, id); err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(s.plainDir) {
+		return "", errNoRuntime
+	}
+	dir := filepath.Join(s.plainDir, "upload") // no Chat folder: a JID always holds "@"
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(dir, "") // mode 0600
+	if err != nil {
+		return "", err
+	}
+	f.Close()
+	if err := s.Export(chat, id, k, mediaKey, f.Name()); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
+}
+
 // Export writes a plain copy to dst (mode 0600) after the HMAC passed. On error dst is removed.
 func (s *Store) Export(chat, id string, k Kind, mediaKey []byte, dst string) (err error) {
 	if err := safe(chat, id); err != nil {

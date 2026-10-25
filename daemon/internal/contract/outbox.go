@@ -98,9 +98,9 @@ func (b *outbox) submit(m chatstore.Message) {
 	}()
 }
 
-// sendMedia decrypts the stored file to a plain copy for the upload and removes the copy after.
+// sendMedia decrypts the stored file to its own plain copy for the upload and removes the copy after.
 func (b *outbox) sendMedia(m chatstore.Message, ref whatsapp.Media, timer int64) error {
-	path, err := b.store.Plain(m.Chat, m.ID, extension(ref), ref.Kind, ref.Key)
+	path, err := b.store.UploadCopy(m.Chat, m.ID, ref.Kind, ref.Key)
 	if err != nil {
 		return err
 	}
