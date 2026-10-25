@@ -7,16 +7,19 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
-// SetRecipients freezes the Recipients of a tracked Message. A Message that has Recipients already keeps them.
+// SetRecipients freezes the Recipients of a tracked Message. The set is final, also when it is empty.
 func (s *Store) SetRecipients(chat, id string, rs []whatsapp.Participant) error {
 	return s.inTx(func(tx *sql.Tx) error {
-		var open bool // tracked, and no Recipients yet
-		if err := tx.QueryRow(`SELECT track_recipients = 1 AND NOT EXISTS (SELECT 1 FROM recipients WHERE chat_jid = ?1 AND id = ?2)
+		var open bool // tracked, and no set yet
+		if err := tx.QueryRow(`SELECT track_recipients = 1 AND recipients_set = 0
 			FROM messages WHERE chat_jid = ?1 AND id = ?2`, chat, id).Scan(&open); err != nil && err != sql.ErrNoRows {
 			return err
 		}
 		if !open {
 			return nil
+		}
+		if _, err := tx.Exec(`UPDATE messages SET recipients_set = 1 WHERE chat_jid = ? AND id = ?`, chat, id); err != nil {
+			return err
 		}
 		for _, r := range rs {
 			if _, err := tx.Exec(`INSERT OR IGNORE INTO recipients (chat_jid, id, phone, lid) VALUES (?, ?, ?, ?)`, chat, id, r.Phone, r.LID); err != nil {
@@ -45,8 +48,15 @@ func (s *Store) RecordReceipt(chat, id, sender, state string) (bool, error) {
 }
 
 // Combined is the lowest state that every Recipient reached: delivered, read or played, or "" when one has reached none.
-// known is false while the Message has no Recipients: the set is not stored yet, or it is empty.
+// known is false until the set is frozen. A frozen empty set is known, and the Message never moves.
 func (s *Store) Combined(chat, id string) (state string, known bool, err error) {
+	err = s.db.QueryRow(`SELECT recipients_set = 1 FROM messages WHERE chat_jid = ? AND id = ?`, chat, id).Scan(&known)
+	if err == sql.ErrNoRows || !known {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
 	var rs []whatsapp.Participant
 	if err := s.scan(`SELECT phone, lid FROM recipients WHERE chat_jid = ? AND id = ?`, []any{chat, id}, func(r *sql.Rows) error {
 		var x whatsapp.Participant
@@ -54,7 +64,7 @@ func (s *Store) Combined(chat, id string) (state string, known bool, err error) 
 		rs = append(rs, x)
 		return err
 	}); err != nil || len(rs) == 0 {
-		return "", false, err
+		return "", known, err
 	}
 	reached := map[string]int{} // sender -> highest index in stateOrder
 	if err := s.scan(`SELECT sender, state FROM group_receipts WHERE chat_jid = ? AND id = ?`, []any{chat, id}, func(r *sql.Rows) error {

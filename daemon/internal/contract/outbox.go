@@ -24,6 +24,7 @@ type sendPort interface {
 	Send(chat, id, text string, quote *whatsapp.Quote, timer int64) error
 	SendMedia(chat, id string, m whatsapp.Media, plain *os.File, caption string, timer int64) error
 	GroupParticipants(chat string) ([]whatsapp.Participant, error)
+	PhoneOf(lid string) string
 }
 
 // messageKey names a Message across Chats, for the maps that track work per Message.
@@ -135,7 +136,7 @@ func (b *outbox) done(r sendResult) bool {
 	switch {
 	case r.err == nil:
 		ok := b.move(r.chat, r.id, func() (bool, error) { return b.chats.Advance(r.chat, r.id, whatsapp.StateSent) })
-		if chat, err := b.chats.Chat(r.chat); err == nil && chat.Kind == whatsapp.KindGroup {
+		if b.isGroup(r.chat) {
 			b.freeze(r.chat, r.id)
 		}
 		return ok
@@ -222,7 +223,7 @@ func (b *outbox) reacted(ev whatsapp.Reaction) bool {
 
 func (b *outbox) receipt(ev whatsapp.Receipt) bool {
 	for _, id := range ev.IDs {
-		if ev.Sender != "" {
+		if b.isGroup(ev.Chat) {
 			if !b.groupReceipt(ev, id) {
 				return false
 			}
@@ -235,35 +236,50 @@ func (b *outbox) receipt(ev whatsapp.Receipt) bool {
 	return true
 }
 
+// isGroup tells that a stored Chat is a Group Chat.
+func (b *outbox) isGroup(chat string) bool {
+	c, err := b.chats.Chat(chat)
+	return err == nil && c.Kind == whatsapp.KindGroup
+}
+
 // groupReceipt keeps a receipt of a Group Chat and moves the Message to the state that every Recipient reached.
+// The receipt counts for the sender ID and for the phone JID of a LID, so it matches a Recipient by either ID.
 // Without the set, it tries the Participant lookup again: a failed lookup has no timer.
 func (b *outbox) groupReceipt(ev whatsapp.Receipt, id string) bool {
-	tracked, err := b.chats.RecordReceipt(ev.Chat, id, ev.Sender, ev.State)
-	if err != nil {
-		fmt.Fprintln(b.logOut, "chat store write failed")
-		return true
+	tracked := false
+	for _, sender := range []string{ev.Sender, b.port.PhoneOf(ev.Sender)} {
+		if sender == "" {
+			continue
+		}
+		t, err := b.chats.RecordReceipt(ev.Chat, id, sender, ev.State)
+		if err != nil {
+			fmt.Fprintln(b.logOut, "chat store write failed")
+			return true
+		}
+		tracked = tracked || t
 	}
 	if !tracked {
 		return true
 	}
-	if _, known, err := b.chats.Combined(ev.Chat, id); err == nil && !known {
+	ok, known := b.advanceGroup(ev.Chat, id)
+	if ok && !known {
 		b.freeze(ev.Chat, id)
-		return true
 	}
-	return b.advanceGroup(ev.Chat, id)
+	return ok
 }
 
 // advanceGroup moves a Message of a Group Chat to the state that every Recipient reached.
-func (b *outbox) advanceGroup(chat, id string) bool {
+// known is false while the set is not frozen.
+func (b *outbox) advanceGroup(chat, id string) (ok, known bool) {
 	state, known, err := b.chats.Combined(chat, id)
 	if err != nil {
 		fmt.Fprintln(b.logOut, "chat store read failed")
-		return true
+		return true, true
 	}
 	if !known || state == "" {
-		return true
+		return true, known
 	}
-	return b.move(chat, id, func() (bool, error) { return b.chats.Advance(chat, id, state) })
+	return b.move(chat, id, func() (bool, error) { return b.chats.Advance(chat, id, state) }), true
 }
 
 // freeze starts the lookup of the Recipients of a Message in a Group Chat. The lookup runs off the Daemon loop.
@@ -286,9 +302,15 @@ func (b *outbox) participantsDone(r participantsResult) bool {
 		fmt.Fprintln(b.logOut, "group lookup failed") // the next receipt of the Message tries again
 		return true
 	}
+	for i, p := range r.participants { // a receipt can name the other ID than GetGroupInfo gave
+		if p.Phone == "" && p.LID != "" {
+			r.participants[i].Phone = b.port.PhoneOf(p.LID)
+		}
+	}
 	if err := b.chats.SetRecipients(r.chat, r.id, r.participants); err != nil {
 		fmt.Fprintln(b.logOut, "chat store write failed")
 		return true
 	}
-	return b.advanceGroup(r.chat, r.id)
+	ok, _ := b.advanceGroup(r.chat, r.id)
+	return ok
 }

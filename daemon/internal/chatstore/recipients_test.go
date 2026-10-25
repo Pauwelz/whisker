@@ -69,8 +69,14 @@ func TestCombinedOfAnEmptySetNeverMoves(t *testing.T) {
 		t.Fatal(err)
 	}
 	receipt(t, s, ann.Phone, whatsapp.StateRead)
+	if state, known := combined(t, s); state != "" || !known {
+		t.Errorf("empty set: state = %q, known = %v; want empty and known", state, known)
+	}
+	if err := s.SetRecipients(group, "m1", []whatsapp.Participant{ann}); err != nil {
+		t.Fatal(err)
+	}
 	if state, _ := combined(t, s); state != "" {
-		t.Errorf("empty set: state = %q, want empty", state)
+		t.Errorf("a later set changed the empty set: state = %q", state)
 	}
 }
 

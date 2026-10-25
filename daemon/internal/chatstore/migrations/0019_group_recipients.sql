@@ -1,7 +1,9 @@
 -- The Delivery State of a Message in a Group Chat is the lowest state that every Recipient reached.
 -- track_recipients is 1 for a Message that whisker sent, or that another device of the user sent while whisker was linked.
 ALTER TABLE messages ADD COLUMN track_recipients INTEGER NOT NULL DEFAULT 0;
--- The Participants of the Group Chat when the send succeeded. An empty set has no row.
+-- recipients_set is 1 once the set of Recipients is frozen. An empty set is final: it has no row.
+ALTER TABLE messages ADD COLUMN recipients_set INTEGER NOT NULL DEFAULT 0;
+-- The Participants of the Group Chat when the send succeeded.
 CREATE TABLE recipients (
 	chat_jid TEXT NOT NULL,
 	id TEXT NOT NULL,

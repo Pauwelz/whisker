@@ -151,6 +151,55 @@ func TestHistorySyncMessageOfAGroupIgnoresReceipts(t *testing.T) {
 	}
 }
 
+func TestVoiceNoteIsPlayedOnlyAfterEveryRecipientPlayedIt(t *testing.T) {
+	r := groupRunner(t, ann, bob)
+	r.sendTo(crew)
+	r.waitLookups(1)
+	r.port.Emit(receiptFrom(ann.Phone, whatsapp.StatePlayed))
+	r.port.Emit(receiptFrom(bob.Phone, whatsapp.StateRead))
+	r.expectFrame(`"state":"read"`)
+	r.port.Emit(receiptFrom(bob.LID, whatsapp.StatePlayed))
+	r.expectFrame(`"state":"played"`)
+}
+
+func TestEmptyGroupStaysSentAndIsNotLookedUpAgain(t *testing.T) {
+	r := groupRunner(t)
+	r.sendTo(crew)
+	r.waitLookups(1)
+	r.expectQuiet()
+	r.port.Emit(receiptFrom(ann.Phone, whatsapp.StateRead))
+	r.expectQuiet()
+	if got := r.port.GroupLookups(); got != 1 {
+		t.Errorf("group lookups = %d, want 1: an empty set is final", got)
+	}
+}
+
+func TestGroupReceiptWithoutASenderMovesNothing(t *testing.T) {
+	r := groupRunner(t, ann)
+	r.sendTo(crew)
+	r.waitLookups(1)
+	r.port.Emit(whatsapp.Receipt{Chat: crew, IDs: []string{"fake-1"}, State: whatsapp.StateRead})
+	r.expectQuiet()
+}
+
+func TestParticipantWithOnlyALIDMatchesAReceiptFromThePhone(t *testing.T) {
+	r := groupRunner(t, whatsapp.Participant{LID: ann.LID})
+	r.port.SetPhones(map[string]string{ann.LID: ann.Phone})
+	r.sendTo(crew)
+	r.waitLookups(1)
+	r.port.Emit(receiptFrom(ann.Phone, whatsapp.StateRead))
+	r.expectFrame(`"state":"read"`)
+}
+
+func TestParticipantWithOnlyAPhoneMatchesAReceiptFromTheLID(t *testing.T) {
+	r := groupRunner(t, whatsapp.Participant{Phone: ann.Phone})
+	r.port.SetPhones(map[string]string{ann.LID: ann.Phone})
+	r.sendTo(crew)
+	r.waitLookups(1)
+	r.port.Emit(receiptFrom(ann.LID, whatsapp.StateRead))
+	r.expectFrame(`"state":"read"`)
+}
+
 func TestDirectChatReceiptIsUnchanged(t *testing.T) {
 	r := groupRunner(t)
 	r.sendTo("9@s.whatsapp.net")
