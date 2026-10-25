@@ -134,6 +134,8 @@ Item {
     id: menu
     active: row.optionsOpen
     anchors.top: line.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
     sourceComponent: ChatOptions { chat: row.chat; panel: row.panel }
   }
 }

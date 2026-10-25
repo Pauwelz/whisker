@@ -1042,12 +1042,11 @@ function chatTimeLabel(lastActive, nowSeconds) {
   return at.getDate() + " " + MONTHS[at.getMonth()]
 }
 
-// The mute choices of the Chat menu. `seconds` is -1 for ever.
-// `short` is the label of the inline choice on a Chat line.
+// The mute choices of the Chat menu and the Chat line. `seconds` is -1 for ever.
 var MUTE_CHOICES = [
-  { label: "8 hours", short: "8h", seconds: 8 * 3600 },
-  { label: "1 week", short: "1w", seconds: 7 * 86400 },
-  { label: "always", short: "always", seconds: -1 }
+  { label: "8h", seconds: 8 * 3600 },
+  { label: "1w", seconds: 7 * 86400 },
+  { label: "always", seconds: -1 }
 ]
 
 // The mute end time of a choice, in Unix seconds as `chat.mute` takes it: -1 for ever.
@@ -1066,18 +1065,16 @@ function muteLeftLabel(chat, nowSeconds) {
   return Math.max(1, Math.floor(left / 60)) + "m left"
 }
 
-// The Chat menu: Pin or Unpin, Mark as read or unread, then the mute choices or Unmute.
-// An option has `pinned`, `unread` or `until`.
+// The Chat menu, one line of links: pin or unpin, mark as read or unread, then "mute" and its choices, or unmute.
+// An item has `text` and `option`; `option` has `pinned`, `unread` or `until`, or is null for the "mute" label.
 function chatOptions(chat, nowSeconds) {
   var options = [
-    { label: chat.pinned ? "Unpin" : "Pin", pinned: !chat.pinned },
-    { label: chat.unread ? "Mark as read" : "Mark as unread", unread: !chat.unread }
+    chatRowButtons(chat).pin,
+    { text: chat.unread ? "mark as read" : "mark as unread", option: { unread: !chat.unread } }
   ]
   if (chat.muted)
-    return options.concat([{ label: "Unmute (" + muteLeftLabel(chat, nowSeconds) + ")", until: UNMUTE.until }])
-  return options.concat(MUTE_CHOICES.map(function(choice) {
-    return { label: "Mute " + choice.label, until: muteEnd(choice, nowSeconds) }
-  }))
+    return options.concat([{ text: "unmute (" + muteLeftLabel(chat, nowSeconds) + ")", option: UNMUTE }])
+  return options.concat([{ text: "mute", option: null }], chatRowMuteChoices(nowSeconds))
 }
 
 // The hover buttons of a Chat line. `option` is what a click chooses.
@@ -1092,7 +1089,7 @@ function chatRowButtons(chat) {
 // The mute choices that replace the hover buttons after a click on mute.
 function chatRowMuteChoices(nowSeconds) {
   return MUTE_CHOICES.map(function(choice) {
-    return { text: choice.short, option: { until: muteEnd(choice, nowSeconds) } }
+    return { text: choice.label, option: { until: muteEnd(choice, nowSeconds) } }
   })
 }
 

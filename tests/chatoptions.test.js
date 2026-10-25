@@ -17,39 +17,41 @@ test("muteEnd turns a choice into an absolute end time", () => {
   assert.equal(State.muteEnd(always, NOW), -1);
 });
 
-test("an unmuted Chat offers Pin and the three mute choices", () => {
+const texts = (options) => plain(options.map((o) => o.text));
+const option = (options, text) => plain(options.find((o) => o.text === text).option);
+
+test("an unmuted Chat offers pin, mark as unread, and mute with the three choices", () => {
   const options = State.chatOptions(ann, NOW);
-  assert.deepEqual(plain(options.map((o) => o.label)), ["Pin", "Mark as unread", "Mute 8 hours", "Mute 1 week", "Mute always"]);
-  assert.equal(options[0].pinned, true);
-  assert.deepEqual(plain(options.slice(2).map((o) => o.until)), [NOW + 28800, NOW + 604800, -1]);
+  assert.deepEqual(texts(options), ["pin", "mark as unread", "mute", "8h", "1w", "always"]);
+  assert.deepEqual(option(options, "pin"), { pinned: true });
+  assert.equal(option(options, "mute"), null); // a label, not a choice
+  assert.deepEqual(plain(options.slice(3).map((o) => o.option.until)), [NOW + 28800, NOW + 604800, -1]);
 });
 
-test("a pinned and muted Chat offers Unpin and Unmute with the time left", () => {
+test("a pinned and muted Chat offers unpin and unmute with the time left", () => {
   const hours = State.chatOptions({ ...ann, pinned: true, muted: true, mutedUntil: NOW + 3 * 3600 + 5 }, NOW);
-  assert.deepEqual(plain(hours.map((o) => o.label)), ["Unpin", "Mark as unread", "Unmute (3h left)"]);
-  assert.equal(hours[0].pinned, false);
-  assert.equal(hours[2].until, 0);
-  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: -1 }, NOW)[2].label, "Unmute (for ever)");
-  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: NOW + 2 * 86400 }, NOW)[2].label, "Unmute (2d left)");
-  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: NOW + 10 }, NOW)[2].label, "Unmute (1m left)");
+  assert.deepEqual(texts(hours), ["unpin", "mark as unread", "unmute (3h left)"]);
+  assert.deepEqual(option(hours, "unpin"), { pinned: false });
+  assert.deepEqual(option(hours, "unmute (3h left)"), { until: 0 });
+  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: -1 }, NOW)[2].text, "unmute (for ever)");
+  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: NOW + 2 * 86400 }, NOW)[2].text, "unmute (2d left)");
+  assert.equal(State.chatOptions({ ...ann, muted: true, mutedUntil: NOW + 10 }, NOW)[2].text, "unmute (1m left)");
 });
 
 test("a choice becomes a pin or a mute request", () => {
-  const [pin, , mute] = State.chatOptions(ann, NOW);
-  assert.deepEqual(JSON.parse(State.chatOptionRequest(4, ann.jid, pin)),
+  const options = State.chatOptions(ann, NOW);
+  assert.deepEqual(JSON.parse(State.chatOptionRequest(4, ann.jid, option(options, "pin"))),
     { jsonrpc: "2.0", id: 4, method: "chat.pin", params: { chat: ann.jid, pinned: true } });
-  assert.deepEqual(JSON.parse(State.chatOptionRequest(5, ann.jid, mute)),
+  assert.deepEqual(JSON.parse(State.chatOptionRequest(5, ann.jid, option(options, "8h"))),
     { jsonrpc: "2.0", id: 5, method: "chat.mute", params: { chat: ann.jid, until: NOW + 28800 } });
   assert.deepEqual(JSON.parse(State.chatOptionRequest(6, ann.jid, State.UNMUTE)).params, { chat: ann.jid, until: 0 });
 });
 
-test("the menu offers Mark as read on an unread Chat, and both marks make a markUnread request", () => {
-  const [, unread] = State.chatOptions(ann, NOW);
-  assert.equal(unread.label, "Mark as unread");
+test("the menu offers mark as read on an unread Chat, and both marks make a markUnread request", () => {
+  const unread = option(State.chatOptions(ann, NOW), "mark as unread");
   assert.deepEqual(JSON.parse(State.chatOptionRequest(7, ann.jid, unread)),
     { jsonrpc: "2.0", id: 7, method: "chat.markUnread", params: { chat: ann.jid, unread: true } });
-  const [, read] = State.chatOptions({ ...ann, unread: true }, NOW);
-  assert.equal(read.label, "Mark as read");
+  const read = option(State.chatOptions({ ...ann, unread: true }, NOW), "mark as read");
   assert.equal(JSON.parse(State.chatOptionRequest(8, ann.jid, read)).params.unread, false);
 });
 
