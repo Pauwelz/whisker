@@ -168,8 +168,8 @@ func (s *Store) addPending(chat, id, text string, quote *whatsapp.Quote, m *what
 		if err := tx.QueryRow(`SELECT timer FROM chats WHERE jid = ?`, chat).Scan(&timer); err != nil {
 			return err
 		}
-		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, expires_at)
-			VALUES (?, ?, '', 1, ?, ?, ?, ?, ?, ?, ?)`,
+		_, err = tx.Exec(`INSERT INTO messages (chat_jid, id, sender_jid, from_me, time, text, state, quote_id, quote_sender, quote_text, expires_at, track_recipients)
+			VALUES (?, ?, '', 1, ?, ?, ?, ?, ?, ?, ?, 1)`,
 			chat, id, now, text, whatsapp.StatePending, q.ID, q.Sender, q.Text, expiry(now, timer))
 		if err != nil || m == nil {
 			return err
@@ -560,6 +560,11 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
 	}
 	if known > 0 {
 		return nil
+	}
+	if ev.Message.FromMe { // History Sync Messages never get this: see Combined
+		if _, err := tx.Exec(`UPDATE messages SET track_recipients = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
+			return err
+		}
 	}
 	// With "Keep chats archived" off, a new Message unarchives its Chat. The live bit stops a later History Sync from archiving it again.
 	if _, err := tx.Exec(`UPDATE chats SET archived = 0, live_flags = live_flags | ? WHERE jid = ? AND archived = 1

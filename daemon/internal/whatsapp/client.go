@@ -93,6 +93,43 @@ func (c *Client) OwnUsers() []string {
 	}
 	return []string{c.cli.Store.GetJID().User, c.cli.Store.GetLID().User}
 }
+
+// isOwn tells that a JID is a device of the user, by phone JID or LID.
+func (c *Client) isOwn(jid types.JID) bool {
+	return jid.User != "" && slices.Contains(c.OwnUsers(), jid.User)
+}
+
+func (c *Client) GroupMembers(chat string) ([]Member, error) {
+	jid, err := types.ParseJID(chat)
+	if err != nil {
+		return nil, err
+	}
+	if !c.cli.IsConnected() {
+		return nil, ErrOffline
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	info, err := c.cli.GetGroupInfo(ctx, jid)
+	if err != nil {
+		return nil, offline(err)
+	}
+	var members []Member
+	for _, p := range info.Participants {
+		m := Member{Phone: p.PhoneNumber.ToNonAD().String(), LID: p.LID.ToNonAD().String()}
+		// The primary JID is one of the two IDs: fill the one that the fields leave empty.
+		switch p.JID.Server {
+		case types.DefaultUserServer:
+			m.Phone = p.JID.ToNonAD().String()
+		case types.HiddenUserServer:
+			m.LID = p.JID.ToNonAD().String()
+		}
+		if !c.isOwn(p.JID) && !c.isOwn(p.PhoneNumber) && !c.isOwn(p.LID) {
+			members = append(members, m)
+		}
+	}
+	return members, nil
+}
+
 func (c *Client) Logout() error {
 	ctx, cancel := context.WithTimeout(context.Background(), pairTimeout)
 	defer cancel()
@@ -511,14 +548,19 @@ func (c *Client) handle(evt any) {
 		}
 		c.events <- NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Message: c.messageOf(evt.Info, evt.Message, body)}
 	case *events.Receipt:
-		// shortcut: a Group Chat needs every recipient to reach a state, and that is not tracked yet, so its receipts are skipped.
-		if state := receiptState(evt.Type); state != "" && !evt.IsGroup {
-			ids := make([]string, len(evt.MessageIDs))
-			for i, id := range evt.MessageIDs {
-				ids[i] = id
-			}
-			c.events <- Receipt{Chat: c.chatOf(evt.MessageSource).String(), IDs: ids, State: state}
+		state := receiptState(evt.Type)
+		if state == "" || (evt.IsGroup && c.isOwn(evt.Sender)) {
+			return
 		}
+		ids := make([]string, len(evt.MessageIDs))
+		for i, id := range evt.MessageIDs {
+			ids[i] = id
+		}
+		r := Receipt{Chat: c.chatOf(evt.MessageSource).String(), IDs: ids, State: state}
+		if evt.IsGroup {
+			r.Sender = evt.Sender.ToNonAD().String() // a phone JID or a LID: the chat store matches both
+		}
+		c.events <- r
 	case *events.PairSuccess:
 		c.events <- PairSuccess{}
 	case *events.PairError:

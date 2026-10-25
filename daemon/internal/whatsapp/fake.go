@@ -53,12 +53,38 @@ type Fake struct {
 	pictures       map[string]string // chat -> "id|content"; a missing Chat has no picture
 	pictureReq     []string          // "chat:knownID" of each ProfilePicture call
 	gate           chan struct{}     // while set, Send waits
+	groups         map[string][]Member
+	groupErr       error
+	groupLookups   int
 }
 
 // SetOwn sets the user parts of the user's own IDs.
 func (f *Fake) SetOwn(users ...string) { f.mu.Lock(); f.own = users; f.mu.Unlock() }
 
 func (f *Fake) OwnUsers() []string { f.mu.Lock(); defer f.mu.Unlock(); return f.own }
+
+// SetGroup presets the members that GroupMembers returns for a Group Chat.
+func (f *Fake) SetGroup(chat string, members ...Member) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.groups == nil {
+		f.groups = map[string][]Member{}
+	}
+	f.groups[chat] = members
+}
+
+// SetGroupError makes GroupMembers fail with err. Pass nil to stop failing.
+func (f *Fake) SetGroupError(err error) { f.mu.Lock(); f.groupErr = err; f.mu.Unlock() }
+
+// GroupLookups counts the GroupMembers calls.
+func (f *Fake) GroupLookups() int { f.mu.Lock(); defer f.mu.Unlock(); return f.groupLookups }
+
+func (f *Fake) GroupMembers(chat string) ([]Member, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.groupLookups++
+	return f.groups[chat], f.groupErr
+}
 
 // SetPhones presets the local LID store: LID to phone JID.
 func (f *Fake) SetPhones(phones map[string]string) { f.mu.Lock(); f.phones = phones; f.mu.Unlock() }

@@ -48,12 +48,13 @@ type session struct {
 	read         *reader // clears Read Markers and sends Read Receipts
 	pres         *presenter
 	loader       *mediaLoader
-	sent         <-chan sendResult  // the results of the sends
-	mediaDone    <-chan mediaResult // the results of the Media downloads
-	expiryTick   <-chan time.Time   // fires when the sweep of Disappearing Messages is due
-	retryConnect <-chan time.Time   // fires when a failed connect of a linked Profile is due again
-	muteTick     <-chan time.Time   // fires when the next Mute ends, so the bar count moves
-	muteAt       int64              // the Mute end that muteTick waits for
+	sent         <-chan sendResult    // the results of the sends
+	mediaDone    <-chan mediaResult   // the results of the Media downloads
+	membersDone  <-chan membersResult // the results of the Group Chat member lookups
+	expiryTick   <-chan time.Time     // fires when the sweep of Disappearing Messages is due
+	retryConnect <-chan time.Time     // fires when a failed connect of a linked Profile is due again
+	muteTick     <-chan time.Time     // fires when the next Mute ends, so the bar count moves
+	muteAt       int64                // the Mute end that muteTick waits for
 }
 
 // open opens the Profile and sends `ready`, or tells the Plugin that the keyring is unavailable.
@@ -82,6 +83,7 @@ func (s *session) open() int {
 		}
 		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, notices.frame, autoDownloads)
 		s.sent = s.box.results
+		s.membersDone = s.box.members
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)
 		s.mediaDone = s.loader.results
 		// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
@@ -141,7 +143,7 @@ func (s *session) unlink(by string) int {
 	s.port.Disconnect()
 	s.wipeMedia()
 	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader = false, nil, nil, nil, nil, nil, nil, nil, nil
-	s.sent, s.mediaDone, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, 0
+	s.sent, s.membersDone, s.mediaDone, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, nil, 0
 	s.attn.Set(s.attn.Open(), "") // the Chat is gone with the Profile
 	if err := s.profile.Delete(); err != nil {
 		fmt.Fprintln(s.logOut, "profile delete failed")
