@@ -143,10 +143,13 @@ func TestFailedThumbnailIsNotRetried(t *testing.T) {
 	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) || strings.Contains(f, "thumbnail") {
 		t.Fatalf("frame = %s, want the page without a thumbnail", f)
 	}
+	r.waitLog("thumbnail download failed")
+	r.send(listVideoChat) // after the failure: no second try
+	r.nextFrame()
 	if n := r.port.ThumbnailDownloads(); n != 1 {
 		t.Errorf("thumbnail downloads = %d, want 1", n)
 	}
-	if _, _, logs := r.finish(); !strings.Contains(logs, "thumbnail download failed") || strings.Contains(logs, "gone") {
+	if _, _, logs := r.finish(); strings.Contains(logs, "gone") {
 		t.Errorf("logs = %q, want the fixed text only", logs)
 	}
 }

@@ -82,7 +82,7 @@ type runner struct {
 	in      *io.PipeWriter
 	frames  chan string
 	done    chan int
-	errOut  bytes.Buffer
+	errOut  logBuffer
 	started bool
 
 	portMu   sync.Mutex
@@ -149,6 +149,28 @@ func (r *runner) send(line string) {
 	r.start()
 	if _, err := io.WriteString(r.in, line+"\n"); err != nil {
 		r.t.Fatal(err)
+	}
+}
+
+// logBuffer is the log of a running Daemon. A test may read it while the Daemon writes.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *logBuffer) Write(p []byte) (int, error) { b.mu.Lock(); defer b.mu.Unlock(); return b.buf.Write(p) }
+
+func (b *logBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.buf.String() }
+
+// waitLog waits until the log holds text: a result that sends no frame shows only there.
+func (r *runner) waitLog(text string) {
+	r.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(r.errOut.String(), text) {
+		if time.Now().After(deadline) {
+			r.t.Fatalf("logs = %q, want %q", r.errOut.String(), text)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
