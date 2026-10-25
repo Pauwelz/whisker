@@ -10,6 +10,7 @@ import (
 	_ "github.com/ncruces/go-sqlite3/driver"
 
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
@@ -421,6 +422,36 @@ func TestHistorySyncSetsTheDeliveryStateOfOwnMessages(t *testing.T) {
 	apply(t, s, batch(whatsapp.StateDelivered))
 	if got := state(); got != whatsapp.StateRead {
 		t.Errorf("a stale batch moved the state back: State = %q, want read", got)
+	}
+}
+
+// A later History Sync copy of a Message fills a thumbnail or thumbnail link that the first copy lacked.
+// What is stored already stays.
+func TestALaterCopyFillsAMissingThumbnail(t *testing.T) {
+	s, _ := newStore(t)
+	const jid = "a@s.whatsapp.net"
+	batch := func(md whatsapp.Media) whatsapp.HistorySync {
+		md.Kind, md.Key = media.Image, make([]byte, 32)
+		return whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: jid, LastActive: 1, Messages: []whatsapp.Message{
+			{ID: "m1", Time: 1, Media: &md},
+		}}}}
+	}
+	ref := func() chatstore.MediaRef {
+		t.Helper()
+		r, err := s.MediaOf(jid, "m1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	apply(t, s, batch(whatsapp.Media{}))
+	apply(t, s, batch(whatsapp.Media{Thumbnail: []byte("a"), ThumbDirectPath: "/t1", ThumbSHA256: []byte{1}, ThumbEncSHA256: []byte{2}}))
+	if r := ref(); string(r.Thumbnail) != "a" || r.ThumbDirectPath != "/t1" || r.ThumbSHA256[0] != 1 || r.ThumbEncSHA256[0] != 2 {
+		t.Fatalf("a later copy did not fill the gaps: %+v", r.Media)
+	}
+	apply(t, s, batch(whatsapp.Media{Thumbnail: []byte("b"), ThumbDirectPath: "/t2"}))
+	if r := ref(); string(r.Thumbnail) != "a" || r.ThumbDirectPath != "/t1" {
+		t.Errorf("a later copy replaced what was stored: %+v", r.Media)
 	}
 }
 

@@ -458,9 +458,15 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 		}
 	}
 	if m.Media != nil {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state, thumbnail, duration, gif,
+		// A later copy, for example from another History Sync batch, only fills a thumbnail or thumbnail link that is missing.
+		if _, err := tx.Exec(`INSERT INTO media (chat_jid, id, kind, mime, name, size, media_key, direct_path, file_sha256, file_enc_sha256, state, thumbnail, duration, gif,
 			thumb_direct_path, thumb_sha256, thumb_enc_sha256)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT (chat_jid, id) DO UPDATE SET
+				thumbnail = CASE WHEN length(COALESCE(media.thumbnail, x'')) = 0 THEN excluded.thumbnail ELSE media.thumbnail END,
+				thumb_sha256 = CASE WHEN media.thumb_direct_path = '' THEN excluded.thumb_sha256 ELSE media.thumb_sha256 END,
+				thumb_enc_sha256 = CASE WHEN media.thumb_direct_path = '' THEN excluded.thumb_enc_sha256 ELSE media.thumb_enc_sha256 END,
+				thumb_direct_path = CASE WHEN media.thumb_direct_path = '' THEN excluded.thumb_direct_path ELSE media.thumb_direct_path END`,
 			chat, m.ID, m.Media.Kind, m.Media.Mime, m.Media.Name, m.Media.Size, m.Media.Key, m.Media.DirectPath, m.Media.FileSHA256, m.Media.FileEncSHA256, mediaState, m.Media.Thumbnail, m.Media.Duration, m.Media.Gif,
 			m.Media.ThumbDirectPath, m.Media.ThumbSHA256, m.Media.ThumbEncSHA256); err != nil {
 			return err
