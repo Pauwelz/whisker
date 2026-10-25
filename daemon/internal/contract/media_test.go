@@ -150,3 +150,28 @@ func TestFailedThumbnailIsNotRetried(t *testing.T) {
 		t.Errorf("logs = %q, want the fixed text only", logs)
 	}
 }
+
+// A synced image without any thumbnail downloads when it is listed: its chip shows the file instead.
+func TestListedImageWithoutAnyThumbnailDownloads(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetDownload("pixels", nil)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: mediaChat, LastActive: 5, Messages: []whatsapp.Message{
+		{ID: "i1", Sender: mediaChat, Time: 5, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Key: make([]byte, 32)}},
+		{ID: "d1", Sender: mediaChat, Time: 6, Media: &whatsapp.Media{Kind: media.Document, Mime: "application/pdf", Key: make([]byte, 32)}},
+	}}}})
+	r.nextFrame() // chatsChanged
+	r.send(listVideoChat)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) {
+		t.Fatalf("frame = %s, want the page", f)
+	}
+	if f := r.nextFrame(); !strings.Contains(f, `"id":"i1"`) || !strings.Contains(f, `"ready"`) {
+		t.Fatalf("frame = %s, want the image ready", f)
+	}
+	if n := r.port.Downloads(); n != 1 {
+		t.Errorf("downloads = %d, want 1: the document waits for a click", n)
+	}
+}

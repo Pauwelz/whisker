@@ -298,7 +298,7 @@ func (s *session) chatMessages(req *request) outcome {
 		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
 	}
 	reply := resultReply(req.ID, map[string]any{"chat": p.Chat, "messages": page.Messages, "more": page.More, "offset": offset})
-	return outcome{reply, func() int { s.loader.thumbnails(p.Chat, page.Messages); return keepGoing }}
+	return outcome{reply, func() int { s.loader.previews(p.Chat, page.Messages); return keepGoing }}
 }
 
 // chatSend stores the text as a pending Message. The follow-up sends it after the reply.

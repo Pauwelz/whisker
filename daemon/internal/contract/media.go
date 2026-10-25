@@ -23,7 +23,7 @@ type downloadPort interface {
 // mediaLoader downloads Media and hands out paths to plain copies.
 // Images, stickers and voice notes download when the Message arrives (the chat store marks them downloading).
 // Other Media downloads on `media.download`. It runs on the Daemon loop; only the downloads run on other goroutines.
-// It also fetches the separate thumbnail of listed Media that came without an inline one.
+// Listed Media without an inline thumbnail gets a preview: WhatsApp's separate thumbnail, or else, for an image, the file.
 // Logs hold fixed texts only: never a Chat, a name or a path.
 type mediaLoader struct {
 	chats    *chatstore.Store
@@ -76,16 +76,22 @@ func (l *mediaLoader) autoStart(ev whatsapp.NewMessage) {
 	}
 }
 
-// thumbnails fetches the separate thumbnail of each listed Message whose Media came without an inline one.
+// previews gives each listed Message whose Media came without an inline thumbnail a preview.
+// It fetches WhatsApp's separate thumbnail. Without one, an image that is not downloaded downloads, as a live image does;
+// the Plugin then shows the file as the thumbnail.
 // shortcut: all fetches of a page start at once; a page holds at most maxChatsLimit Messages. Add a limit if WhatsApp throttles.
-func (l *mediaLoader) thumbnails(chat string, msgs []chatstore.Message) {
+func (l *mediaLoader) previews(chat string, msgs []chatstore.Message) {
 	for _, m := range msgs {
 		key := chat + "\x00" + m.ID
 		if m.Media == nil || len(m.Media.Thumbnail) > 0 || l.thumbTried[key] {
 			continue
 		}
 		ref, err := l.chats.MediaOf(chat, m.ID)
-		if err != nil || ref.ThumbDirectPath == "" {
+		if err != nil {
+			continue
+		}
+		if ref.ThumbDirectPath == "" {
+			l.autoImage(chat, m.ID, ref)
 			continue
 		}
 		l.thumbTried[key] = true
@@ -93,6 +99,18 @@ func (l *mediaLoader) thumbnails(chat string, msgs []chatstore.Message) {
 			data, err := l.port.DownloadThumbnail(ref.Media)
 			l.results <- mediaResult{chat: chat, id: id, err: err, thumbnail: true, data: data}
 		}(m.ID)
+	}
+}
+
+// autoImage downloads an image that is not downloaded. A failed one waits for a click: its retry link shows.
+func (l *mediaLoader) autoImage(chat, id string, ref chatstore.MediaRef) {
+	if ref.Kind != media.Image || ref.State != chatstore.MediaNone {
+		return
+	}
+	if changed, err := l.chats.BeginDownload(chat, id); err != nil {
+		fmt.Fprintln(l.logOut, "chat store write failed")
+	} else if changed {
+		l.start(chat, id)
 	}
 }
 
@@ -226,3 +244,4 @@ var mimeExtensions = map[string]string{
 	"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif",
 	"video/mp4": ".mp4", "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "application/pdf": ".pdf",
 }
+
