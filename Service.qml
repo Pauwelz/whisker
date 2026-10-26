@@ -277,6 +277,10 @@ Item {
       opener.startDetached()
       return
     }
+    if (mimeProbe.running) { // one probe at a time: a second Open asks, so it never takes the answer of the first
+      confirmOpen = { message: message, path: path }
+      return
+    }
     mimeProbe.message = message
     mimeProbe.path = path
     mimeProbe.command = Media.mimeProbeCommand(path)
@@ -288,6 +292,8 @@ Item {
     id: mimeProbe
     property var message: null
     property string path: ""
+    // A probe that fails (no `file` binary, a bad exit code) asks.
+    onExited: function(exitCode) { if (exitCode !== 0) root.confirmOpen = { message: message, path: path } }
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
