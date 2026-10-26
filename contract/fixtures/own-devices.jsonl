@@ -1,5 +1,5 @@
 {"dir":"whatsapp","linked":true}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
 {"dir":"whatsapp","event":{"kind":"ownDevices","chat":"9@s.whatsapp.net","ids":[0,3],"notice":{"id":"sys-d1","time":10,"system":{"kind":"device"}}}}
 {"dir":"whatsapp","event":{"kind":"ownDevices","chat":"9@s.whatsapp.net","ids":[0,3],"notice":{"id":"sys-d2","time":11,"system":{"kind":"device"}}}}
