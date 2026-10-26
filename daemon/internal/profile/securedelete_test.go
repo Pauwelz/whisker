@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -96,7 +97,7 @@ func TestExpireLeavesNoResidue(t *testing.T) {
 	assertGone(t, p, key, marker)
 }
 
-func TestBothStoresUseSecureDelete(t *testing.T) {
+func TestDsnSetsSecureDelete(t *testing.T) {
 	p, key := openProfile(t)
 	defer p.Close()
 	hexKey := hex.EncodeToString(key)
@@ -163,6 +164,7 @@ func TestNewStoreRunsNoVacuum(t *testing.T) {
 	}
 }
 
+// Guards against a future VFS that writes plain temp files: today the adiantum VFS encrypts them too.
 func TestVacuumWritesNoPlainTempFile(t *testing.T) {
 	const marker = "residue-marker-temp-6a01"
 	p, _ := oldStore(t, marker)
@@ -182,4 +184,21 @@ func TestVacuumWritesNoPlainTempFile(t *testing.T) {
 			t.Errorf("%s holds the marker", f)
 		}
 	}
+}
+
+func TestFailedVacuumRunsAgainAtTheNextOpen(t *testing.T) {
+	const marker = "residue-marker-retry-3c9e"
+	p, key := oldStore(t, marker)
+	p.vacuumHook = func() error { return errors.New("disk full") }
+	if err := p.Open(); err == nil {
+		t.Fatal("Open succeeded although VACUUM failed")
+	}
+	p.vacuumHook = nil
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	if !p.vacuumed {
+		t.Error("the Open after a failed VACUUM did not run it again")
+	}
+	assertGone(t, p, key, marker)
 }

@@ -28,7 +28,8 @@ type Profile struct {
 	device *sqlstore.Container
 	chat   *sql.DB
 
-	vacuumed bool // the last Open ran the one-time VACUUM; the tests read it
+	vacuumed   bool         // the last Open ran the one-time VACUUM; the tests read it
+	vacuumHook func() error // the tests make VACUUM fail with it
 }
 
 func New(dir string, keys *keystore.Store) *Profile { return &Profile{Dir: dir, keys: keys} }
@@ -100,16 +101,17 @@ func (p *Profile) openStores(key []byte) (err error) {
 		p.Close()
 		return err
 	}
-	if err := chatstore.Migrate(p.chat); err != nil {
-		p.Close()
-		return err
-	}
+	// VACUUM runs before Migrate: the version reaches 25 only when both stores are clean, so a failed VACUUM runs again at the next Open.
 	p.vacuumed = before > 0 && before < vacuumVersion
 	if p.vacuumed {
 		if err := p.vacuum(hexKey); err != nil {
 			p.Close()
 			return err
 		}
+	}
+	if err := chatstore.Migrate(p.chat); err != nil {
+		p.Close()
+		return err
 	}
 	return nil
 }
@@ -120,6 +122,11 @@ const vacuumVersion = 25
 
 // vacuum rewrites both stores once, which drops the old free space. VACUUM cannot run in a migration transaction.
 func (p *Profile) vacuum(hexKey string) error {
+	if p.vacuumHook != nil {
+		if err := p.vacuumHook(); err != nil {
+			return err
+		}
+	}
 	for _, name := range []string{"chat.db", "device.db"} {
 		db, err := sql.Open("sqlite3", dsn(filepath.Join(p.Dir, name), hexKey))
 		if err != nil {
