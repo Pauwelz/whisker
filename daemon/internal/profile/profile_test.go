@@ -69,7 +69,7 @@ func TestReopenWithTheSameKey(t *testing.T) {
 	p.Close()
 }
 
-func TestLostKeyDeletesTheUnreadableProfile(t *testing.T) {
+func TestLostKeyMovesTheUnreadableProfileAside(t *testing.T) {
 	fake := keystore.NewFake()
 	p := newProfile(t, fake)
 	if err := p.Open(); err != nil {
@@ -86,6 +86,23 @@ func TestLostKeyDeletesTheUnreadableProfile(t *testing.T) {
 	fresh, _ := os.ReadFile(filepath.Join(p.Dir, "device.db"))
 	if bytes.Equal(old, fresh) {
 		t.Error("the old stores are still there")
+	}
+	assertAside(t, p, old)
+}
+
+// assertAside checks that the old device store lives on in one <dir>.unreadable-* directory.
+func assertAside(t *testing.T, p *profile.Profile, old []byte) {
+	t.Helper()
+	dirs, _ := filepath.Glob(p.Dir + ".unreadable-*")
+	if len(dirs) != 1 {
+		t.Fatalf("unreadable directories = %v, want one", dirs)
+	}
+	kept, err := os.ReadFile(filepath.Join(dirs[0], "device.db"))
+	if err != nil || !bytes.Equal(kept, old) {
+		t.Errorf("the old device store did not move aside: %v", err)
+	}
+	if !p.MovedAside() {
+		t.Error("MovedAside = false")
 	}
 }
 
@@ -256,5 +273,61 @@ func TestStoreStaysEncryptedInAPathWithURLCharacters(t *testing.T) {
 	}
 	if bytes.Contains(data, []byte("SQLite format 3")) {
 		t.Error("chat.db is not encrypted")
+	}
+}
+
+// A key in the keyring that opens nothing moves the stores aside too.
+func TestWrongKeyMovesTheProfileAside(t *testing.T) {
+	fake := keystore.NewFake()
+	p := newProfile(t, fake)
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
+	old, _ := os.ReadFile(filepath.Join(p.Dir, "device.db"))
+	fake.Set(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
+	assertAside(t, p, old)
+}
+
+// Log out removes the set-aside Profiles too.
+func TestDeleteRemovesTheUnreadableProfiles(t *testing.T) {
+	fake := keystore.NewFake()
+	p := newProfile(t, fake)
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
+	fake.Delete()
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
+	if err := p.Delete(); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := filepath.Glob(p.Dir + "*"); len(left) != 0 || p.MovedAside() {
+		t.Errorf("left after Delete: %v", left)
+	}
+}
+
+// A key that exists before the first start may come from another program: Open replaces it.
+func TestKeyWithoutStoreFilesIsReplaced(t *testing.T) {
+	fake := keystore.NewFake()
+	planted := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32))
+	fake.Set(planted)
+	p := newProfile(t, fake)
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	if got, _ := fake.Get(); got == planted || got == "" {
+		t.Error("the planted key is still in the keyring")
+	}
+	if p.MovedAside() {
+		t.Error("nothing was there to set aside")
 	}
 }

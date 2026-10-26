@@ -818,6 +818,14 @@ test("chatRemoved takes the Chat out of the list and closes it when it is open",
   assert.equal(Daemon.refreshesChats(frame), true);
 });
 
+test("the Settings notice for a Profile set aside shows for profileMovedAside true only", () => {
+  const ready = (params) => Daemon.applyFrame(Daemon.initialState(), { method: "ready", params });
+  assert.match(Daemon.profileNotice(ready({ profileMovedAside: true })), /whisker\.unreadable-/);
+  assert.equal(Daemon.profileNotice(ready({})), "");
+  const later = Daemon.applyFrame(ready({ profileMovedAside: true }), { method: "disconnected", params: {} });
+  assert.notEqual(Daemon.profileNotice(later), "");
+});
+
 test("the Settings notice shows for keyringPlain true only", () => {
   const ready = (params) => Daemon.applyFrame(Daemon.initialState(), { method: "ready", params });
   assert.match(Daemon.keyringNotice(ready({ keyringPlain: true })), /no password/);

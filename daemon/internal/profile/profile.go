@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/ncruces/go-sqlite3"
 	_ "github.com/ncruces/go-sqlite3/driver"       // registers the "sqlite3" database/sql driver
@@ -57,8 +59,10 @@ func (p *Profile) Media() *media.Store {
 func (p *Profile) Device() *sqlstore.Container { return p.device }
 
 // Open loads the store key and opens both stores with it.
-// A store that the key cannot open is unreadable. This happens when the key is new but the Profile directory exists (lost key),
-// and when the key is in the keyring but is wrong. Open then deletes the old stores and starts a fresh Profile.
+// A store that the key cannot open is unreadable. This happens when the key is new but store files exist (lost key),
+// and when the key is in the keyring but is wrong. Open never deletes such a Profile: it renames the Profile directory
+// to <dir>.unreadable-<time> and starts a fresh Profile (see MovedAside).
+// A key that exists while no store file does may come from another program, so Open replaces it.
 // A keyring error leaves the Profile alone and returns keystore.ErrUnavailable.
 // Then Open gives the Media store its name key and renames the Media files of the old layout.
 func (p *Profile) Open() error {
@@ -77,8 +81,13 @@ func (p *Profile) openKeyed() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if created {
-		if err := p.removeData(); err != nil {
+	switch {
+	case created:
+		if err := p.setAside(); err != nil {
+			return nil, err
+		}
+	case !p.hasStores():
+		if key, err = p.keys.Replace(); err != nil {
 			return nil, err
 		}
 	}
@@ -87,7 +96,10 @@ func (p *Profile) openKeyed() ([]byte, error) {
 		return key, err
 	}
 	// Wrong key: replace it, because the old one opens nothing.
-	if err := p.Delete(); err != nil {
+	if err := p.setAside(); err != nil {
+		return nil, err
+	}
+	if err := p.keys.Delete(); err != nil {
 		return nil, err
 	}
 	key, _, err = p.keys.Load()
@@ -171,19 +183,72 @@ func (p *Profile) Close() {
 	}
 }
 
-// Delete is the one routine that deletes a Profile: the stores, the Media and the store key.
+// Delete is the one routine that deletes a Profile: the stores, the Media, the unreadable Profiles and the store key.
 // Profile Settings live in $XDG_CONFIG_HOME and stay.
 func (p *Profile) Delete() error {
-	if err := p.removeData(); err != nil {
+	p.Close()
+	if err := os.RemoveAll(p.Dir); err != nil {
 		return err
+	}
+	old, err := p.unreadable()
+	if err != nil {
+		return err
+	}
+	for _, dir := range old {
+		if err := os.RemoveAll(dir); err != nil {
+			return err
+		}
 	}
 	return p.keys.Delete()
 }
 
-// removeData closes the stores and removes the Profile directory. Delete and Open (lost key) share it.
-func (p *Profile) removeData() error {
+// unreadablePrefix starts the name of a Profile directory that Open set aside.
+const unreadableSuffix = ".unreadable-"
+
+func (p *Profile) unreadablePrefix() string { return filepath.Base(p.Dir) + unreadableSuffix }
+
+// unreadable lists the Profile directories that Open set aside, next to the Profile directory.
+func (p *Profile) unreadable() ([]string, error) {
+	entries, err := os.ReadDir(filepath.Dir(p.Dir))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), p.unreadablePrefix()) {
+			dirs = append(dirs, filepath.Join(filepath.Dir(p.Dir), e.Name()))
+		}
+	}
+	return dirs, nil
+}
+
+// MovedAside tells whether an unreadable Profile waits next to the Profile directory. Log out removes it.
+func (p *Profile) MovedAside() bool {
+	dirs, _ := p.unreadable()
+	return len(dirs) > 0
+}
+
+// hasStores tells whether a store file exists.
+func (p *Profile) hasStores() bool {
+	for _, name := range []string{"device.db", "chat.db"} {
+		if _, err := os.Stat(filepath.Join(p.Dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// setAside closes the stores and renames a Profile that holds store files to <dir>.unreadable-<time>.
+// Without store files there is no chat to keep, so it removes the directory (it can only hold Media that nothing can read).
+func (p *Profile) setAside() error {
 	p.Close()
-	return os.RemoveAll(p.Dir)
+	if !p.hasStores() {
+		return os.RemoveAll(p.Dir)
+	}
+	return os.Rename(p.Dir, p.Dir+unreadableSuffix+time.Now().UTC().Format("20060102T150405.000000"))
 }
 
 // dsn opens an adiantum-encrypted file. whatsmeow needs foreign keys on. Setting any _pragma drops the default busy timeout.

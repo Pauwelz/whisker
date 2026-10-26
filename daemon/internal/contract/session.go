@@ -103,7 +103,11 @@ func (s *session) open() int {
 		s.scheduleMuteEnd()
 		s.pres = newPresenter(s.port, s.prefs, &s.attn, s.logOut)
 		s.ready = true
-		if !s.send(notification("ready", map[string]any{"keyringPlain": KeyringPlain()})) || !s.startPort() {
+		params := map[string]any{"keyringPlain": KeyringPlain()}
+		if s.profile.MovedAside() {
+			params["profileMovedAside"] = true
+		}
+		if !s.send(notification("ready", params)) || !s.startPort() {
 			return ExitError
 		}
 	case errors.Is(err, keystore.ErrUnavailable):

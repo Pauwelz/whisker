@@ -97,13 +97,15 @@ const qrScale = 8
 // main sets it; tests replace it.
 var KeyringPlain = func() bool { return false }
 
-// Profile is what Run needs from the Profile: open the stores, the chat store, and delete the Profile.
+// Profile is what Run needs from the Profile: open the stores, the chat store, delete the Profile,
+// and tell whether Open set an unreadable Profile aside.
 // Open returns keystore.ErrUnavailable when the keyring does not answer. Chat is valid after Open.
 type Profile interface {
 	Open() error
 	Chat() *sql.DB
 	Media() *media.Store
 	Delete() error
+	MovedAside() bool
 }
 
 // NewPort makes the WhatsApp port for the Profile that Open just opened.

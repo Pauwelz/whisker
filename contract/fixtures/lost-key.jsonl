@@ -1,3 +1,3 @@
 {"dir":"profile","state":"unreadable"}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
-{"dir":"view","expect":{"screen":"ready"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false,"profileMovedAside":true}}}
+{"dir":"view","expect":{"screen":"ready","profileMovedAside":true}}

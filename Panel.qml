@@ -645,6 +645,15 @@ Panel {
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.body
             }
+            Text {
+              visible: text !== ""
+              width: parent.width
+              wrapMode: Text.Wrap
+              text: Daemon.profileNotice(root.view)
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
             PanelSectionHeader { text: "Privacy"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
             SettingChoice {
               label: "Read Receipts"
