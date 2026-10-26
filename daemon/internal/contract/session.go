@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -42,6 +43,7 @@ type session struct {
 	attn      attention.Attention // the pop-out state: it outlives the Profile, so a new link keeps it
 	noWlPaste bool                // wl-paste is missing; the Daemon logged it once
 	pasteDone chan pasteResult    // the results of the clipboard reads of draft.paste
+	current   json.RawMessage     // the id of the request in progress; guard answers it after a panic
 
 	ready            bool
 	port             whatsapp.Port

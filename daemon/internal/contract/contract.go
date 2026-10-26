@@ -67,11 +67,13 @@ const (
 	errPinLimit       = -32011
 	errTooManyFiles   = -32012
 	errNotSendable    = -32013
+	errInternal       = -32603
 )
 
 // The message of each application error. A code that has two messages has two constants.
 const (
 	msgParse          = "parse error"
+	msgInternal       = "internal error"
 	msgMethodNotFound = "method not found"
 	msgInvalidParams  = "invalid params"
 	msgInvalidPhone   = "invalid phone number"
@@ -142,39 +144,58 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 	}()
 
 	for {
-		var code int
+		var step func() int
 		select {
 		case ev := <-s.events:
-			code = s.onEvent(ev)
+			step = func() int { return s.onEvent(ev) }
 		case <-s.expiryTick:
-			code = exitIf(s.sweepExpired())
+			step = func() int { return exitIf(s.sweepExpired()) }
 		case r := <-s.mediaDone:
-			code = exitIf(s.loader.done(r))
+			step = func() int { return exitIf(s.loader.done(r)) }
 		case r := <-s.sent:
-			code = exitIf(s.box.done(r))
+			step = func() int { return exitIf(s.box.done(r)) }
 		case r := <-s.participantsDone:
-			code = exitIf(s.box.participantsDone(r))
+			step = func() int { return exitIf(s.box.participantsDone(r)) }
 		case r := <-s.pasteDone:
-			code = s.pasted(r)
+			step = func() int { return s.pasted(r) }
 		case e := <-s.historyEnded:
-			code = exitIf(s.hist.timedOut(e))
+			step = func() int { return exitIf(s.hist.timedOut(e)) }
 		case <-s.muteTick:
 			s.muteTick, s.muteAt = nil, 0
-			code = exitIf(s.send(notification("chatsChanged", nil)))
-			s.scheduleMuteEnd()
+			step = func() int {
+				code := exitIf(s.send(notification("chatsChanged", nil)))
+				s.scheduleMuteEnd()
+				return code
+			}
 		case <-s.retryConnect:
 			s.retryConnect = nil
-			code = exitIf(s.connect())
+			step = func() int { return exitIf(s.connect()) }
 		case line, ok := <-lines:
 			if !ok {
 				return exitCode(<-scanErr, logOut)
 			}
-			code = s.onLine(line)
+			step = func() int { return s.onLine(line) }
 		}
-		if code != keepGoing {
+		if code := s.guard(step); code != keepGoing {
 			return code
 		}
 	}
+}
+
+// guard runs one loop step. A panic in the step is logged without data and the Daemon keeps going.
+// A request that panicked gets an internal error.
+func (s *session) guard(step func() int) (code int) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(s.logOut, "internal error: panic in a loop step (%T)\n", r)
+			code = keepGoing
+			if s.current != nil && !s.send(errorReply(s.current, errInternal, msgInternal)) {
+				code = ExitError
+			}
+		}
+		s.current = nil
+	}()
+	return step()
 }
 
 // qrDataURI renders a WhatsApp QR code string as a PNG data: URI.

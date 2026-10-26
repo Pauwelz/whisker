@@ -256,7 +256,9 @@ func (s *Store) UploadCopy(chat, id string, k Kind, mediaKey []byte) (string, er
 	return f.Name(), nil
 }
 
-// Export writes a plain copy to dst (mode 0600) after the HMAC passed. On error dst is removed.
+// Export writes a plain copy to dst (mode 0600) after the HMAC passed.
+// It decrypts into a temp file next to dst and renames it onto dst. A symlink at dst is replaced, not followed.
+// On error the temp file goes and an existing dst stays as it was.
 func (s *Store) Export(chat, id string, k Kind, mediaKey []byte, dst string) (err error) {
 	path, err := s.file(chat, id)
 	if err != nil {
@@ -272,14 +274,14 @@ func (s *Store) Export(chat, id string, k Kind, mediaKey []byte, dst string) (er
 	if err != nil {
 		return err
 	}
-	out, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+	out, err := os.CreateTemp(filepath.Dir(dst), ".whisker-save-*") // mode 0600
 	if err != nil {
 		return err
 	}
 	defer func() {
 		out.Close()
 		if err != nil {
-			os.Remove(dst)
+			os.Remove(out.Name())
 		}
 	}()
 	if _, err = io.Copy(out, io.NewSectionReader(src, 0, size)); err != nil {
@@ -291,7 +293,13 @@ func (s *Store) Export(chat, id string, k Kind, mediaKey []byte, dst string) (er
 	if err = cbcutil.DecryptFile(cipherKey, iv, out); err != nil {
 		return fmt.Errorf("decrypt: %w", err)
 	}
-	return nil
+	if err = out.Sync(); err != nil {
+		return err
+	}
+	if err = out.Close(); err != nil {
+		return err
+	}
+	return os.Rename(out.Name(), dst)
 }
 
 // validate re-implements the unexported whatsmeow validateMedia: HMAC over IV and ciphertext, cut to 10 bytes.

@@ -619,7 +619,7 @@ Valid only after `keyringUnavailable`. The Daemon answers with an empty `result`
 
 ## Errors
 
-The Daemon answers a request with an `error` object. Application codes will join the standard ones here. An error may carry `data`; only -32013 on `chat.sendMedia` does.
+The Daemon answers a request with an `error` object. Application codes will join the standard ones here. An error may carry `data`; only -32013 on `chat.sendMedia` does. Error -32603 means a panic in the Daemon while it handled the request; the Daemon keeps running.
 
 | Code | Message | When |
 |---|---|---|
