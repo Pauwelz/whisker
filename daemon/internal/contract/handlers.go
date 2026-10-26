@@ -332,7 +332,7 @@ func (s *session) chatSend(req *request) outcome {
 		if err != nil || inert(q) {
 			return outcome{reply: s.storeOrInvalid(req.ID, err)}
 		}
-		quote = whatsappQuote(q.ID, q.Sender, q.Text)
+		quote = whatsappQuote(q.ID, q.Sender, q.RawText)
 	}
 	m, err := s.chats.AddPending(p.Chat, s.port.NewMessageID(), p.Text, quote)
 	reply, submit := s.messageReply(req.ID, m, err)

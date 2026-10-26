@@ -407,6 +407,7 @@ test("a Tombstone shows a fixed text, an edited Message shows (edited)", () => {
 test("Edit and Delete show for sent Messages of the user; Edit ends after 15 minutes", () => {
   assert.equal(Message.canEditMessage(sentMessage(), 1000 + 900), true);
   assert.equal(Message.canEditMessage(sentMessage(), 1000 + 901), false);
+  assert.equal(Message.canEditMessage(sentMessage({ mentions: ["@Ann"] }), 1000 + 900), false);
   assert.equal(Message.canRevokeMessage(sentMessage(), 1000 + 99999), true);
   for (const state of ["pending", "failed", ""]) assert.equal(Message.canRevokeMessage(sentMessage({ state })), false, state);
   assert.equal(Message.canRevokeMessage(sentMessage({ fromMe: false })), false);

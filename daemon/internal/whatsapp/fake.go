@@ -51,6 +51,7 @@ type Fake struct {
 	edits          []string
 	revokes        []string
 	quotes         []string
+	quoteTexts     []string
 	reactions      []string
 	online         []bool
 	subscribed     []string
@@ -270,6 +271,7 @@ func (f *Fake) Send(_, id, _ string, quote *Quote, timer int64) error {
 	f.timers = append(f.timers, timer)
 	if quote != nil {
 		f.quotes = append(f.quotes, id+":"+quote.ID)
+		f.quoteTexts = append(f.quoteTexts, quote.Text)
 	}
 	return nil
 }
@@ -308,6 +310,13 @@ func (f *Fake) React(_, id, _, emoji string) error {
 	}
 	f.reactions = append(f.reactions, id+":"+emoji)
 	return nil
+}
+
+// QuoteTexts lists the Quote text of each sent reply, in order.
+func (f *Fake) QuoteTexts() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.quoteTexts...)
 }
 
 // Quotes lists the sent replies as "id:quotedID", in order. Reactions lists the Reactions as "id:emoji".

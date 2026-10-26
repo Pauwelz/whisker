@@ -67,7 +67,7 @@ function canRevokeMessage(message) {
 }
 
 function canEditMessage(message, nowSeconds) {
-  return canRevokeMessage(message) && nowSeconds - message.time <= EDIT_WINDOW_SECONDS
+  return canRevokeMessage(message) && !(message.mentions && message.mentions.length) && nowSeconds - message.time <= EDIT_WINDOW_SECONDS
 }
 
 function editRequest(id, jid, messageId, text) {
