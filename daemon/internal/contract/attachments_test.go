@@ -141,18 +141,21 @@ func TestDraftSetChecksOnlyNewPathsAndRefusesFilesWithAQuote(t *testing.T) {
 	r.finish()
 }
 
-func TestSendMediaFailingOnTheSecondCopyStoresNothingAndKeepsTheFirstPastedImage(t *testing.T) {
+func TestSendMediaWithAnUnreadableSecondFileStoresNothingAndKeepsTheFirstPastedImage(t *testing.T) {
 	fakeClipboard(t, imageScript)
 	r := linkedRunner(t)
 	pasted := pastedPath(t, r, 1)
 	unreadable := filepath.Join(t.TempDir(), "locked")
-	if err := os.WriteFile(unreadable, []byte("x"), 0o000); err != nil {
+	if err := os.WriteFile(unreadable, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	setAttachments(t, r, 2, []string{pasted, unreadable})
+	if err := os.Chmod(unreadable, 0); err != nil { // unreadable after the attach: the open at send time fails
+		t.Fatal(err)
+	}
 	sendMedia(r, 3, []string{pasted, unreadable}, "look")
-	if f := r.nextFrame(); !strings.Contains(f, "-32009") {
-		t.Fatalf("frame = %s, want a media copy failure", f)
+	if f := r.nextFrame(); !strings.Contains(f, "-32013") {
+		t.Fatalf("frame = %s, want an unsendable file", f)
 	}
 	if !exists(pasted) {
 		t.Error("the pasted image of the first path is gone")
@@ -232,6 +235,22 @@ func TestSendMediaKeepsADocumentByteExact(t *testing.T) {
 	_, upload := uploadAfterConnect(t, r, writeFile(t, "a.bin", in))
 	if !strings.Contains(upload, "|document|") || !strings.HasSuffix(upload, string(in)) {
 		t.Errorf("upload = %q, want the unchanged bytes as a document", upload)
+	}
+	r.finish()
+}
+
+func TestSendMediaWithAValidFileThenABrokenImageRollsBack(t *testing.T) {
+	r := linkedRunner(t)
+	good := writeFile(t, "a.txt", []byte("hello"))
+	bad := writeFile(t, "bad.jpg", []byte("not a jpeg"))
+	sendMedia(r, 1, []string{good, bad}, "")
+	want := `"data":{"paths":` + mustJSON([]string{bad}) + `}`
+	if f := r.nextFrame(); !strings.Contains(f, "-32013") || !strings.Contains(f, want) {
+		t.Fatalf("frame = %s, want -32013 for %s", f, bad)
+	}
+	r.send(`{"jsonrpc":"2.0","id":3,"method":"chat.messages","params":{"chat":"1@s.whatsapp.net"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages":[]`) {
+		t.Errorf("frame = %s, want the first Message rolled back", f)
 	}
 	r.finish()
 }
