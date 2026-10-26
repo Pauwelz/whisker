@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.Commons
 import qs.Ui
 import "state/Media.js" as Media
@@ -226,25 +227,47 @@ Item {
               { label: "cancel", run: function() { line.panel.whiskerService.cancelLaunch() } }
             ]
           }
-          // Save as: type an absolute path, then press Enter. Escape cancels.
-          TextEdit {
+          // Save as: a path that starts as ~/Downloads/<name>. Enter saves, Escape cancels.
+          Column {
             visible: line.isMessage && line.panel.savingId === line.message.id
             width: parent.width
-            color: line.panel.contentForeground
-            font.family: line.panel.contentFontFamily
-            font.pixelSize: Style.font.body
-            onVisibleChanged: if (visible) forceActiveFocus()
-            Keys.onPressed: function(event) {
-              if (event.key === Qt.Key_Escape) {
-                line.panel.savingId = ""
-              } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                line.panel.whiskerService.saveMedia(line.message, text.trim())
-                line.panel.savingId = ""
-                text = ""
-              } else {
-                return
+            spacing: Style.space(2)
+            Text {
+              textFormat: Text.PlainText
+              text: "Save to · ⏎ save · esc cancel"
+              opacity: 0.6
+              color: line.panel.contentForeground
+              font.family: line.panel.contentFontFamily
+              font.pixelSize: Style.font.caption
+            }
+            TextEdit {
+              width: parent.width
+              color: line.panel.contentForeground
+              font.family: line.panel.contentFontFamily
+              font.pixelSize: Style.font.body
+              onVisibleChanged: if (visible) {
+                text = Media.defaultSavePath(line.message)
+                cursorPosition = text.length
+                forceActiveFocus()
               }
-              event.accepted = true
+              Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Escape) {
+                  line.panel.savingId = ""
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                  line.panel.whiskerService.saveMedia(line.message, Media.savePath(text, Quickshell.env("HOME")))
+                  line.panel.savingId = ""
+                } else {
+                  return
+                }
+                event.accepted = true
+              }
+              Rectangle { // an underline, so the path reads as a field
+                anchors.top: parent.bottom
+                width: parent.width
+                height: 1
+                color: line.panel.contentForeground
+                opacity: 0.4
+              }
             }
           }
         }

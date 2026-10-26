@@ -14,6 +14,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- Save as now starts with `~/Downloads/<file name>` and says "Save to · ⏎ save · esc cancel" above the path. Media without a name gets `<kind>-<id>` and an extension from its type. A path that starts with `~` means your home folder.
 - The README now says to Log out before `omarchy plugin remove`. The docs now say that a mention comes from the sender's mention list, that the store key crosses the session bus, and how sent Media is stored.
 - When the clipboard holds copied files and other text, Ctrl+V now asks "Attach N files from <folder>?" (each folder in full) with attach, paste text and cancel. Escape also cancels, and keeps the Chat open. Before, it attached the files at once. A file manager copy also asks, because a hostile clipboard owner can offer the same types.
 - The README and the architecture now say that Omarchy keeps the text of each notification in plain text for up to 24 h, also after the message is revoked, deleted or expires. Turn Show preview off to keep message text out of that history.

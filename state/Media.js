@@ -153,7 +153,28 @@ function mediaOpenRequest(id, message) {
   return Common.request(id, "media.open", { chat: message.chat, id: message.id })
 }
 
-// `path` is the file the user chose in the Save as dialog.
+// The path the Save as field starts with: ~/Downloads and the file name. Media without a name gets "<kind>-<id>"
+// and an extension from its MIME type. A "/" in a name cannot leave the folder.
+// shortcut: always ~/Downloads, not XDG_DOWNLOAD_DIR; read user-dirs.dirs when someone asks.
+function defaultSavePath(message) {
+  var media = message.media || {}
+  var name = String(media.name || "").replace(/\//g, "_").trim()
+  if (!name) {
+    var sub = String(media.mime || "").split(";")[0].split("/")[1] || ""
+    var ext = sub === "jpeg" ? "jpg" : /^[a-z0-9]+$/.test(sub) ? sub : ""
+    name = (media.kind || "file") + "-" + String(message.id).replace(/[^A-Za-z0-9_-]/g, "") + (ext ? "." + ext : "")
+  }
+  return "~/Downloads/" + name
+}
+
+// The typed Save as path with a leading "~" made absolute. The Daemon takes absolute paths only.
+function savePath(text, home) {
+  var path = String(text).trim()
+  if (path === "~" || path.indexOf("~/") === 0) return home + path.substring(1)
+  return path
+}
+
+// `path` is the file the user chose in the Save as field, made absolute by savePath.
 function mediaSaveRequest(id, message, path) {
   return Common.request(id, "media.save", { chat: message.chat, id: message.id, path: path })
 }

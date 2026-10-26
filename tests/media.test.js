@@ -98,3 +98,12 @@ test("fileUrl encodes each path segment", () => {
   assert.equal(Media.fileUrl("/run/m.jpg"), "file:///run/m.jpg");
   assert.equal(Media.fileUrl("/run/a#b?c d/m.jpg"), "file:///run/a%23b%3Fc%20d/m.jpg");
 });
+
+test("Save as starts in ~/Downloads with the file name, and ~ becomes the home folder", () => {
+  assert.equal(Media.defaultSavePath({ id: "m1", media: { kind: "document", name: "a/b.pdf" } }), "~/Downloads/a_b.pdf");
+  assert.equal(Media.defaultSavePath({ id: "3A.B", media: { kind: "image", mime: "image/jpeg" } }), "~/Downloads/image-3AB.jpg");
+  assert.equal(Media.defaultSavePath({ id: "v", media: { kind: "voice", mime: "audio/ogg; codecs=opus" } }), "~/Downloads/voice-v.ogg");
+  assert.equal(Media.savePath(" ~/Downloads/a.pdf ", "/home/u"), "/home/u/Downloads/a.pdf");
+  assert.equal(Media.savePath("/tmp/a.pdf", "/home/u"), "/tmp/a.pdf");
+  assert.equal(Media.savePath("~user/a", "/home/u"), "~user/a");
+});
