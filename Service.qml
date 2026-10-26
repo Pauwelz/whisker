@@ -387,11 +387,10 @@ Item {
     }
   }
 
-  // EOF on stdin lets the Daemon wipe the plain Media copies before Quickshell kills it. The start wipe covers a lost race.
-  Component.onDestruction: daemon.stdinEnabled = false
-
   Process {
     id: daemon
+    // EOF on stdin lets the Daemon wipe the plain Media copies before Quickshell kills it. The start wipe covers a lost race.
+    Component.onDestruction: stdinEnabled = false
     command: [root.daemonPath]
     stdinEnabled: true
     stdout: SplitParser {

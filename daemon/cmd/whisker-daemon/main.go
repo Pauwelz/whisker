@@ -86,7 +86,7 @@ func run(frames io.Writer) int {
 }
 
 // stdinUntilSignal reads stdin, and ends like EOF on SIGTERM, SIGINT or SIGHUP.
-// It also ignores SIGPIPE, so a closed stdout gives a write error and Run returns.
+// It also ignores SIGPIPE, so a broken stderr gives a write error instead of SIGPIPE.
 // Run then returns normally, so it wipes the plain copies of Media.
 func stdinUntilSignal() io.Reader {
 	pr, pw := io.Pipe()
