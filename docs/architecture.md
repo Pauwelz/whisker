@@ -91,7 +91,9 @@ Other local users can read the arguments of every process (`/proc/<pid>/cmdline`
 
 Notification text leaves the encrypted stores. Omarchy's notification service saves the summary, the body and the click command of each notification in plain text in `~/.local/state/omarchy/notifications/live.json` and `history.json`, for up to 24 h. With "Show preview" on (the default), that is the Chat name, the sender and the message text. With it off, it is the Chat name and "New message". whisker does not withdraw a notification when a Message is revoked, deleted or expires: Omarchy moves a toast into its history after a few seconds, so a withdrawal cannot remove the text.
 
-On a default Omarchy install, the login keyring has no password, and gnome-keyring stores it in plain text in `~/.local/share/keyrings/`. A backup of `~/.local/share` then holds the stores and their key. The README tells users to set a password on the login keyring for real protection at rest.
+On a default Omarchy install, the default keyring (`Default_keyring`) has no password, and gnome-keyring stores it in plain text in `~/.local/share/keyrings/`. A backup of `~/.local/share` then holds the stores and their key. So the store encryption protects against backups, sync tools and sandboxed apps only when the keyring has a password. A sandboxed app that can reach `org.freedesktop.secrets` can read the item from any unlocked collection.
+
+The Daemon checks the header of the default keyring file (`keystore.PlainKeyring`) on each start and sends `keyringPlain` in `ready`. The Plugin then shows a notice in Settings. The README tells users to set a password and, after a possible leak, to Log out and link again.
 
 Deletion: both stores use `secure_delete(1)`, so SQLite overwrites a deleted row in the store file. On the first start after the update, `Profile.Open` runs `VACUUM` once on both stores to clear old free space. The `VACUUM` copy stays in memory (`temp_store(2)`). The rollback journal is a separate file. The filesystem can keep its (encrypted) blocks until it reuses them.
 

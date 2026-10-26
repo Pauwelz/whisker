@@ -1,0 +1,3 @@
+{"dir":"keyring","state":"plain"}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":true}}}
+{"dir":"view","expect":{"screen":"ready","keyringPlain":true}}

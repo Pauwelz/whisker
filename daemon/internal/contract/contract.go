@@ -93,6 +93,10 @@ const (
 // qrScale is the pixel size of one QR module.
 const qrScale = 8
 
+// KeyringPlain tells whether the keyring that holds the store key has no password. The Daemon asks on each start, before `ready`.
+// main sets it; tests replace it.
+var KeyringPlain = func() bool { return false }
+
 // Profile is what Run needs from the Profile: open the stores, the chat store, and delete the Profile.
 // Open returns keystore.ErrUnavailable when the keyring does not answer. Chat is valid after Open.
 type Profile interface {

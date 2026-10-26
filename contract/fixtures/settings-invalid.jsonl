@@ -1,4 +1,4 @@
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"settings.set","params":{"readReceipts":"sometimes","sendOnline":false}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"error":{"code":-32004,"message":"invalid setting"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"settings.get"}}

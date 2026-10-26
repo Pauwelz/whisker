@@ -809,3 +809,19 @@ test("chatRemoved takes the Chat out of the list and closes it when it is open",
   assert.equal(Daemon.applyFrame(other, frame).openChat.jid, "2@s.whatsapp.net");
   assert.equal(Daemon.refreshesChats(frame), true);
 });
+
+test("the Settings notice shows for keyringPlain true only", () => {
+  const ready = (params) => Daemon.applyFrame(Daemon.initialState(), { method: "ready", params });
+  assert.match(Daemon.keyringNotice(ready({ keyringPlain: true })), /no password/);
+  assert.equal(Daemon.keyringNotice(ready({ keyringPlain: false })), "");
+  assert.equal(Daemon.keyringNotice(ready({})), "");
+  assert.equal(Daemon.keyringNotice(ready(undefined)), "");
+});
+
+test("the keyring notice stays through later frames and ends with a new ready", () => {
+  let state = Daemon.applyFrame(Daemon.initialState(), { method: "ready", params: { keyringPlain: true } });
+  state = Daemon.applyFrame(state, { method: "linked" });
+  assert.notEqual(Daemon.keyringNotice(state), "");
+  state = Daemon.applyFrame(state, { method: "ready", params: { keyringPlain: false } });
+  assert.equal(Daemon.keyringNotice(state), "");
+});

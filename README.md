@@ -60,14 +60,16 @@ whisker keeps your Profile, the local copy of your WhatsApp account, in these pl
 |---|---|
 | `$XDG_DATA_HOME/whisker` (default `~/.local/share/whisker`) | The encrypted device store, chat store and media. |
 | `$XDG_CONFIG_HOME/whisker` (default `~/.config/whisker`) | Your settings, as plain `settings.json`. |
-| The login keyring, item `whisker` / `store-key` | The key that opens the stores. |
+| The default keyring, item `whisker` / `store-key` | The key that opens the stores. |
 
 A pasted image waits in `$XDG_RUNTIME_DIR/whisker/pasted` (in memory) until you send or remove it.
 
 Log out in the pop-out deletes the Profile and the key. It keeps your settings. `omarchy plugin remove` does not delete any of these.
 To delete everything by hand, remove both folders and the keyring item.
 
-The key protects the stores only as well as your keyring. Set a password on the login keyring. Without one, a person with your disk can read the key.
+The key protects the stores only as well as your keyring. Set a password on the default keyring. Without one, a person with a copy of your files can read the key.
+On Omarchy, open Seahorse ("Passwords and Keys"), right-click the default keyring and choose "Change Password". whisker shows a notice in Settings while the default keyring has no password.
+Setting a password later does not change the store key. If a copy of your files may have leaked, select Log out in Settings and link again. Only that makes a new store key and removes the keys of the Companion Device.
 
 ## Keyboard shortcuts
 

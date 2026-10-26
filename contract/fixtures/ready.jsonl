@@ -1,2 +1,2 @@
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"view","expect":{"screen":"ready"}}

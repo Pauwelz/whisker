@@ -430,6 +430,9 @@ func (r *runner) setKeyring(state string) {
 		r.fake.Fail(errors.New("no secret service"))
 	case "ok":
 		r.fake.Fail(nil)
+	case "plain":
+		contract.KeyringPlain = func() bool { return true }
+		r.t.Cleanup(func() { contract.KeyringPlain = func() bool { return false } })
 	case "locked":
 		r.fake.Lock()
 	case "unlocked":

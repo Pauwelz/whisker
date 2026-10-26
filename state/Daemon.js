@@ -104,13 +104,23 @@ function parseLine(line) {
 }
 
 // Profile Settings live on disk, so every frame keeps them, including the ones that reset the rest.
+// `keyringPlain` comes with `ready` and holds until the next one.
 function applyFrame(state, frame) {
   var next = foldFrame(state, frame)
-  if (state.settings && !next.settings) {
-    if (next === state) return state
-    next.settings = state.settings
+  var keep = frame && frame.method === "ready" ? ["settings"] : ["settings", "keyringPlain"]
+  for (var i = 0; i < keep.length; i++) {
+    if (state[keep[i]] && !next[keep[i]]) {
+      if (next === state) return state
+      next[keep[i]] = state[keep[i]]
+    }
   }
   return next
+}
+
+// The Settings notice when the keyring that holds the store key has no password. Empty when there is nothing to say.
+var KEYRING_PLAIN_NOTICE = "Your keyring has no password. Anyone with a copy of your files can read your chats. See “Your data” in the README."
+function keyringNotice(state) {
+  return state && state.keyringPlain === true ? KEYRING_PLAIN_NOTICE : ""
 }
 
 // What each Daemon notification does to the Plugin. One row per method of docs/contract.md; the helpers below read this table.
@@ -119,7 +129,7 @@ function applyFrame(state, frame) {
 // A notification with no row changes nothing.
 var NOTIFICATIONS = {
   ready: {
-    fold: function (state) { return { screen: SCREEN.READY, reason: "", message: "The Daemon is ready.", canRetry: false } },
+    fold: function (state, params) { return { screen: SCREEN.READY, reason: "", message: "The Daemon is ready.", canRetry: false, keyringPlain: !!(params && params.keyringPlain) } },
     requestsSettings: true,
     resendsAttention: true
   },

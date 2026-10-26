@@ -1,5 +1,5 @@
 {"dir":"whatsapp","linked":true}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"settings.set","params":{"readReceipts":"onInteraction"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"readReceipts":"onInteraction","sendOnline":true,"sendTyping":true,"notifications":true,"notificationPreview":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
