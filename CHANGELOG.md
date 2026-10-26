@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- The bar widget loads again on Omarchy 4.0.x. Since 1.0.1 it used `ShellIpc`, which Omarchy added only in 4.5.0.
+
 ## [1.1.1] - 2026-10-26
 
 ### Security

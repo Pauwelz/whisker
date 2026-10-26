@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "state/ChatList.js" as ChatList
@@ -152,7 +153,7 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  ShellIpc {
+  IpcHandler { // not ShellIpc: Omarchy 4.0.x lacks it, and omarchy-shell falls back to qs ipc
     target: root.ipcTarget
 
     function open(): void { root.open() }
