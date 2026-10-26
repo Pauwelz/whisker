@@ -52,6 +52,10 @@ func (c *Client) handle(evt any) {
 		}
 		c.events <- NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Message: c.messageOf(evt.Info, evt.Message, body)}
 	case *events.Receipt:
+		if c.isOwn(evt.Sender) && (evt.Type == types.ReceiptTypeRead || evt.Type == types.ReceiptTypeReadSelf) {
+			c.events <- ReadElsewhere{Chat: c.chatOf(evt.MessageSource).String(), IDs: slices.Clone(evt.MessageIDs)}
+			return
+		}
 		state := receiptState(evt.Type)
 		if state == "" || (evt.IsGroup && c.isOwn(evt.Sender)) {
 			return

@@ -318,6 +318,13 @@ type ReadMarker struct {
 	Unread bool   `json:"unread"`
 }
 
+// ReadElsewhere says that the user read these incoming Messages of a Chat on another of their own devices.
+// That device sent the Read Receipt, so whisker sends none.
+type ReadElsewhere struct {
+	Chat string   `json:"chat"`
+	IDs  []string `json:"ids"`
+}
+
 // AppStateBatch holds the Pin, Archive, UnarchiveChats, Mute and ReadMarker events of one full App State sync, in order.
 type AppStateBatch struct {
 	Events []Event `json:"events"`
@@ -437,6 +444,7 @@ func (Archive) isEvent()        {}
 func (UnarchiveChats) isEvent() {}
 func (Mute) isEvent()           {}
 func (ReadMarker) isEvent()     {}
+func (ReadElsewhere) isEvent()  {}
 func (AppStateBatch) isEvent()  {}
 func (PictureChanged) isEvent() {}
 

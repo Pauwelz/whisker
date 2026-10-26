@@ -221,7 +221,7 @@ Params, all optional: `offset` (default 0), `limit` (default 50, at most 200), `
 - Without `query`, the list holds the archived Chats if `archived` is true, and all other Chats if not. With a `query`, `archived: false` searches all Chats, also the archived ones, and `archived: true` searches only the archived Chats. A Chat has `archived: true` when it is archived. The field is absent otherwise.
 - `muted` is true for a Muted Chat whose mute has not ended. `unread` is the Read Marker. `pinned`, `muted` and `unread` come from App State.
 - `mutedUntil` is the end of the mute in Unix seconds, `-1` for ever. It is present only when `muted` is true.
-- `unreadCount` is the number of live Messages that wait for a Read Receipt in an unread Chat. It is absent (0) for a read Chat. A Chat that the phone marked unread has none, so the Plugin shows a dot. `mention` is true when one of those Messages mentions the user. It is absent otherwise.
+- `unreadCount` counts the live Messages of other Participants in an unread Chat. Only Messages after the last clear of the Read Marker count. A Message that still waits for a Read Receipt does not count when it came before that clear (fixture `unread-count-after-open.jsonl`). It is absent (0) for a read Chat. A Chat that the phone marked unread has none, so the Plugin shows a dot. `mention` is true when one of those Messages mentions the user. It is absent otherwise.
 - `unreadChats` is the number of unread Chats that are not Muted or archived, and that the list shows (a Chat with no Message and no Draft is not listed), over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
 - `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
 - `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
@@ -316,6 +316,15 @@ When a Chat becomes attended, or a new Message arrives in it:
 2. Read Receipts go out when the policy says so (`daemon/internal/receiptpolicy`), one call per sender, so each sender in a Group Chat gets their own.
 
 A new Message of another Participant sets the Read Marker (`unread`) of its Chat, then step 1 clears it if the Chat is attended.
+
+The user can read Messages on another of their own devices, such as the phone. WhatsApp then sends a `read` or `read-self` receipt from the user's own account. The Daemon then does this, in Direct Chats and Group Chats and in every mode:
+
+- Those Messages leave `unreadCount`, and `chatsChanged` follows.
+- The Daemon sends no Read Receipt for them. A later interaction sends none either.
+- When no Message is left in `unreadCount`, the Read Marker clears.
+- A receipt for Messages that are not in `unreadCount` changes nothing. So a Chat that the phone marked unread stays unread.
+
+Fixtures: `read-elsewhere.jsonl` (Group Chat) and `read-elsewhere-direct.jsonl` (Direct Chat).
 
 | Read Receipts | Read Receipts are sent |
 |---|---|
@@ -651,7 +660,7 @@ Keys of a `whatsapp` line. Each line has exactly one:
 
 The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `archive`, `unarchiveChats`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
 
-The `event` kinds `newMessage`, `receipt`, `messageEdited`, `messageRevoked` and `reaction` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
+The `event` kinds `newMessage`, `receipt`, `readElsewhere`, `messageEdited`, `messageRevoked` and `reaction` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
 
 The `event` kind `chatAlias` (`lid`, `phone`) tells the Daemon that a LID and a phone JID are one contact.
 

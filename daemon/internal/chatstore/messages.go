@@ -622,16 +622,29 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
 	if !p.MarkUnread {
 		return nil
 	}
-	if _, err := tx.Exec(`UPDATE messages SET read_pending = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
+	if _, err := tx.Exec(`UPDATE messages SET read_pending = 1, in_unread_count = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
 		return err
 	}
 	_, err := tx.Exec(`UPDATE chats SET unread = 1, live_flags = live_flags | ? WHERE jid = ?`, flagUnread, ev.Chat)
 	return err
 }
 
-// ClearUnread clears the Read Marker of a Chat. It reports whether the marker was set.
+// ClearUnread clears the Read Marker of a Chat and its unreadCount. It reports whether the marker was set.
 func (s *Store) ClearUnread(chat string) (bool, error) {
-	return s.change(`UPDATE chats SET unread = 0, live_flags = live_flags | ? WHERE jid = ? AND unread = 1`, flagUnread, chat)
+	var cleared bool
+	err := s.inTx(func(tx *sql.Tx) error {
+		if err := clearUnreadCount(tx, chat); err != nil {
+			return err
+		}
+		res, err := tx.Exec(`UPDATE chats SET unread = 0, live_flags = live_flags | ? WHERE jid = ? AND unread = 1`, flagUnread, chat)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		cleared = n > 0
+		return err
+	})
+	return cleared, err
 }
 
 // Unreceipted is a Message of another Participant that waits for its Read Receipt.

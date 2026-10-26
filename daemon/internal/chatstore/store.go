@@ -50,6 +50,7 @@ type Page struct {
 }
 
 // Apply stores what an event of History Sync or App State carries. It reports false for any other event, which it ignores.
+// For a ReadElsewhere it reports false when the Chat list did not change.
 // shortcut: App State for a Chat that History Sync has not stored yet is dropped, upgrade if the phone sends it first.
 func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 	switch ev := ev.(type) {
@@ -68,8 +69,10 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 			}
 			return nil
 		})
-	case whatsapp.Pin, whatsapp.Archive, whatsapp.UnarchiveChats, whatsapp.Mute, whatsapp.ReadMarker:
+	case whatsapp.Pin, whatsapp.Archive, whatsapp.UnarchiveChats, whatsapp.Mute:
 		err = applyFlag(s.db, ev)
+	case whatsapp.ReadMarker: // It writes the Messages and the Chat, so it needs one transaction.
+		err = s.inTx(func(tx *sql.Tx) error { return applyFlag(tx, ev) })
 	case whatsapp.AppStateBatch:
 		err = s.inTx(func(tx *sql.Tx) error {
 			for _, e := range ev.Events {
@@ -79,6 +82,13 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 			}
 			return nil
 		})
+	case whatsapp.ReadElsewhere:
+		err = s.inTx(func(tx *sql.Tx) error {
+			var e error
+			stored, e = readElsewhere(tx, ev)
+			return e
+		})
+		return stored, err
 	case whatsapp.ChatTimer:
 		err = setFlag(s.db, "timer", flagTimer, ev.Chat, ev.Seconds)
 	default:
@@ -193,8 +203,8 @@ const (
 const selectChat = `
 	SELECT c.jid, c.kind, c.pinned, c.archived, c.unread, c.last_active,
 	       CASE WHEN ` + mutedNow + ` THEN c.muted_until ELSE 0 END, c.timer,
-	       CASE WHEN c.unread THEN (SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.read_pending = 1) ELSE 0 END,
-	       c.unread AND EXISTS (SELECT 1 FROM messages m WHERE m.chat_jid = c.jid AND m.read_pending = 1 AND m.mentions_me),
+	       CASE WHEN c.unread THEN (SELECT COUNT(*) FROM messages m WHERE m.chat_jid = c.jid AND m.in_unread_count = 1) ELSE 0 END,
+	       c.unread AND EXISTS (SELECT 1 FROM messages m WHERE m.chat_jid = c.jid AND m.in_unread_count = 1 AND m.mentions_me),
 	       c.subject, COALESCE(n.contact_name, ''), COALESCE(n.push_name, '')
 	FROM chats c LEFT JOIN names n ON n.jid = c.jid `
 
@@ -355,9 +365,47 @@ func applyFlag(db execer, ev whatsapp.Event) error {
 	case whatsapp.Mute:
 		return setFlag(db, "muted_until", flagMute, ev.JID, ev.Until)
 	case whatsapp.ReadMarker:
+		if !ev.Unread {
+			if err := clearUnreadCount(db, ev.JID); err != nil {
+				return err
+			}
+		}
 		return setFlag(db, "unread", flagUnread, ev.JID, boolInt(ev.Unread))
 	}
 	return nil
+}
+
+// readElsewhere stores that another device of the user read these Messages. They leave unreadCount and need no Read Receipt.
+// The Read Marker clears when no counted Message is left. It reports whether unreadCount changed.
+// A receipt for Messages that no longer count keeps the Read Marker, so a Chat that the phone marked unread stays unread.
+func readElsewhere(tx *sql.Tx, ev whatsapp.ReadElsewhere) (bool, error) {
+	counted := 0
+	for _, id := range ev.IDs {
+		res, err := tx.Exec(`UPDATE messages SET in_unread_count = 0 WHERE chat_jid = ? AND id = ? AND in_unread_count = 1`, ev.Chat, id)
+		if err != nil {
+			return false, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return false, err
+		}
+		counted += int(n)
+		if _, err := tx.Exec(`UPDATE messages SET read_pending = 0 WHERE chat_jid = ? AND id = ?`, ev.Chat, id); err != nil {
+			return false, err
+		}
+	}
+	if counted == 0 {
+		return false, nil
+	}
+	_, err := tx.Exec(`UPDATE chats SET unread = 0, live_flags = live_flags | ? WHERE jid = ? AND unread = 1
+		AND NOT EXISTS (SELECT 1 FROM messages WHERE chat_jid = ? AND in_unread_count = 1)`, flagUnread, ev.Chat, ev.Chat)
+	return true, err
+}
+
+// clearUnreadCount takes all Messages of a Chat out of unreadCount. It runs where the Read Marker clears.
+func clearUnreadCount(db execer, chat string) error {
+	_, err := db.Exec(`UPDATE messages SET in_unread_count = 0 WHERE chat_jid = ? AND in_unread_count = 1`, chat)
+	return err
 }
 
 // setFlag sets one live column of a Chat and marks it live. column is a fixed string from this file.

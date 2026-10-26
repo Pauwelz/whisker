@@ -7,6 +7,11 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- A Chat that you read on your phone, or on another linked device, now shows as read in whisker. whisker sends no Read Receipt of its own for those Messages.
+- The unread count in the Chat list no longer counts Messages that you already saw in whisker. Before, with Read Receipts "On interaction", a Message read in whisker counted again when the next Message came.
+
 ## [1.0.0] - 2026-10-26
 
 ### Added

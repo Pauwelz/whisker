@@ -497,6 +497,8 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.NewMessage](r.t, f, line.Event)
 		case "receipt":
 			emitJSON[whatsapp.Receipt](r.t, f, line.Event)
+		case "readElsewhere":
+			emitJSON[whatsapp.ReadElsewhere](r.t, f, line.Event)
 		case "messageEdited":
 			emitJSON[whatsapp.MessageEdited](r.t, f, line.Event)
 		case "messageRevoked":
