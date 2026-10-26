@@ -7,6 +7,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-26
+
 ### Changed
 
 - "(edited)" now shows on its own line under an edited Message, in the small, dimmed style of a Quote. Before, it was at the end of the text.
