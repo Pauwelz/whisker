@@ -367,6 +367,14 @@ test("the attention request carries the pop-out state and the shown Chat", () =>
   assert.equal(JSON.parse(Daemon.attentionRequest(5, false, direct.jid)).params.open, false);
 });
 
+test("a notification click asks the Daemon for the Chat of its token", () => {
+  assert.deepEqual(JSON.parse(Daemon.notificationOpenRequest(7, "ab12")), { jsonrpc: "2.0", id: 7, method: "notification.open", params: { token: "ab12" } });
+  assert.deepEqual(JSON.parse(JSON.stringify(Daemon.notificationOpened(7, { jsonrpc: "2.0", id: 7, result: { chat: direct.jid } }))), { action: "openChat", chat: direct.jid });
+  assert.deepEqual(JSON.parse(JSON.stringify(Daemon.notificationOpened(8, { jsonrpc: "2.0", id: 8, error: { code: -32010, message: "invalid chat" } }))), { action: "showList" });
+  assert.equal(Daemon.notificationOpened(7, { jsonrpc: "2.0", id: 9, result: {} }), null);
+  assert.equal(Daemon.notificationOpened(0, { jsonrpc: "2.0", id: 0, result: {} }), null);
+});
+
 test("the Plugin sends the pop-out state again when the Daemon is ready", () => {
   assert.equal(Daemon.resendsAttention({ method: "ready" }), true);
   assert.equal(Daemon.resendsAttention({ method: "linked" }), false);

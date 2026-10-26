@@ -82,8 +82,9 @@ type fixtureLine struct {
 	Notified      []notified `json:"notified"`      // dir "notified": the desktop notifications so far
 }
 
-// notified is one desktop notification in a fixture: the Chat name, the body and the Chat id of the click.
-type notified struct{ Summary, Body, Chat string }
+// notified is one desktop notification in a fixture: the Chat name and the body. The click token is random:
+// $TOKEN[n] in an `in` frame is the token of the nth notification.
+type notified struct{ Summary, Body string }
 
 // runner runs the Daemon on pipes, with a fake keyring, a manual clock and a Profile in a temp dir.
 type runner struct {
@@ -244,7 +245,7 @@ func TestFixtures(t *testing.T) {
 						text = string(line.Frame) // an object frame is sent as it is
 					}
 					text = strings.ReplaceAll(text, "$RUNTIME", r.runtime)
-					r.send(text)
+					r.send(r.expandTokens(text))
 				case "out":
 					r.start()
 					var want, got any
@@ -345,7 +346,7 @@ func TestFixtures(t *testing.T) {
 				case "notified":
 					got := []notified{}
 					for _, c := range r.desktop.Calls() {
-						got = append(got, notified(c))
+						got = append(got, notified{c.Summary, c.Body})
 					}
 					if want := append([]notified{}, line.Notified...); !reflect.DeepEqual(got, want) {
 						t.Errorf("notifications = %v, want %v", got, want)
@@ -401,6 +402,14 @@ func (r *runner) restart(t *testing.T, now *int64) {
 }
 
 var mediaToken = regexp.MustCompile(`\$MEDIA\[([^|\]]+)\|([^\]]+)\]`)
+
+// expandTokens turns $TOKEN[n] into the click token of the nth notification.
+func (r *runner) expandTokens(text string) string {
+	for i, n := range r.desktop.Calls() {
+		text = strings.ReplaceAll(text, fmt.Sprintf("$TOKEN[%d]", i), n.Token)
+	}
+	return text
+}
 
 // expand turns $MEDIA[chat|id] into the hashed folder and file name of that Media. It computes the names itself, as a check on the store.
 func (r *runner) expand(text string) string {

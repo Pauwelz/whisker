@@ -119,9 +119,22 @@ Item {
     if (Daemon.draftSetDue(view)) send(Draft.draftSetRequest, view.openChat.jid, view.openChat.draft)
   }
 
-  // Called by the IPC handler `openChat`, which a click on a notification runs.
-  function openChatByJid(jid) {
-    openChat(ChatList.chatByJid(view, jid))
+  // The request id of a notification click that waits for the Daemon, or 0.
+  property int notificationOpenId: 0
+
+  // Called by the IPC handler `openChat`, which a click on a notification runs. `token` is not a Chat id:
+  // the Daemon answers with the Chat, or with an error, and the answer opens it (see handleNotificationFrame).
+  function openNotification(token) {
+    notificationOpenId = nextRequestId
+    send(Daemon.notificationOpenRequest, token)
+  }
+
+  function handleNotificationFrame(frame) {
+    var step = Daemon.notificationOpened(notificationOpenId, frame)
+    if (!step) return
+    notificationOpenId = 0
+    if (step.action === "openChat") openChat(ChatList.chatByJid(view, step.chat))
+    else if (view.openChat) closeChat() // an unknown token (after a Daemon restart) opens the Chat list
   }
 
   // Ends what belongs to the open Chat. The Daemon deletes the plain Media copies of the Chat.
@@ -404,6 +417,7 @@ Item {
         if (removesOpenChat) root.syncAttention()
         if (draftSetDue) root.send(Draft.draftSetRequest, root.view.openChat.jid, Draft.draftOf(root.view))
         root.handleMediaFrame(frame)
+        root.handleNotificationFrame(frame)
         var pasted = Draft.pastedAttachment(root.view, frame)
         if (pasted !== null && pasted.length === 0) root.pasteText()
         else if (pasted !== null) root.changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(root.view), pasted) })

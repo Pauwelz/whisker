@@ -155,8 +155,8 @@ Panel {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function openChat(jid: string): void {
-      if (root.whiskerService) root.whiskerService.openChatByJid(jid)
+    function openChat(token: string): void {
+      if (root.whiskerService) root.whiskerService.openNotification(token)
       root.open()
     }
   }

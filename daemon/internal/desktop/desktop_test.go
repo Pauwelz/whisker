@@ -5,14 +5,17 @@ import (
 	"testing"
 )
 
-func TestHintsRunOpenChatWithTheChatAsOneWord(t *testing.T) {
-	h, err := hints(Notification{Chat: `a b"@g.us`})
+func TestHintsRunOpenChatWithTheTokenAsOneWord(t *testing.T) {
+	h, err := hints(Notification{Summary: "Crew", Body: "491234@g.us", Token: `a b"c`})
 	if err != nil {
 		t.Fatal(err)
 	}
 	click := h[hintClick]
-	if got, want := click.Value(), `["omarchy-shell","pauwelz.whisker","openChat","a b\"@g.us"]`; got != want {
+	if got, want := click.Value(), `["omarchy-shell","pauwelz.whisker","openChat","a b\"c"]`; got != want {
 		t.Errorf("click hint = %v, want %v", got, want)
+	}
+	if s := click.Value().(string); strings.ContainsAny(s, "@") || strings.ContainsAny(s, "0123456789") {
+		t.Errorf("click hint %q holds an @ or a digit of the Chat id", s)
 	}
 	if got := click.Signature().String(); got != "s" {
 		t.Errorf("click signature = %q, want s", got)

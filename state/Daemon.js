@@ -362,6 +362,19 @@ function attentionRequest(id, open, jid) {
   return Common.request(id, "attention.set", { open: open, chat: jid || "" })
 }
 
+// The request for a click on a notification. `token` is the opaque word of the click command, never a Chat id.
+function notificationOpenRequest(id, token) {
+  return Common.request(id, "notification.open", { token: token })
+}
+
+// What a frame means for the click that waits for the answer `pendingId`. Returns null for any other frame,
+// { action: "openChat", chat } for the Chat of the token, or { action: "showList" } for an error (an unknown token).
+function notificationOpened(pendingId, frame) {
+  if (!pendingId || !frame || frame.id !== pendingId) return null
+  if (frame.result && frame.result.chat) return { action: "openChat", chat: frame.result.chat }
+  return { action: "showList" }
+}
+
 // True when the Plugin must send the pop-out state again after this frame: a new Daemon starts with a closed pop-out.
 function resendsAttention(frame) {
   var effects = effectsOf(frame)
