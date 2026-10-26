@@ -19,6 +19,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- A timed-out keyring Delete can no longer remove the store key of a Profile that you link later. Before, the Delete kept running in the background. Now every keyring call waits for the call before it.
 - A `#`, `?` or `%` in the data path no longer turns off store encryption. Before, the Daemon put the path unescaped in the SQLite URI, so such a path ended the file name early and dropped the encryption setting. Now the Daemon escapes the path.
 - A click on a notification no longer puts the Chat id in a process argument. Before, the click command was `omarchy-shell pauwelz.whisker openChat <chat id>`, so other local users could read the phone number or group id in `/proc`. Omarchy also saved it in its notification history for up to 24 h. Now the command holds a random token, and the Daemon looks up the Chat. After a Daemon restart, an old notification opens the Chat list. The architecture now lists what whisker still passes in arguments: the path of a plain Media copy and the URL of a map link.
 - Settings now shows a notice when the keyring that holds the store key has no password, because then a copy of your files holds the key. The README and the architecture notes now say what the store encryption protects in that case.
