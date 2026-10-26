@@ -9,6 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- A revoke by a group admin now turns the Message into a Tombstone that says "This message was deleted by admin". The Daemon applies it only after a live check shows the revoker as admin, and it keeps the Message when the check fails. A History Sync cannot name the revoked Message, so it does not apply admin revokes.
 - A Show preview setting hides the message text in notifications.
 
 ### Changed

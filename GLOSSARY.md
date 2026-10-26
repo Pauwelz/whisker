@@ -85,7 +85,7 @@ A `:name:` that the user types in the Draft text for one emoji, such as `:thumbs
 _Avoid_: Emoji code, alias, emoticon
 
 **Tombstone**:
-The placeholder that stays in the Chat timeline when a Message is revoked for everyone. It replaces the text and the Media, and it keeps the position of the Message.
+The placeholder that stays in the Chat timeline when a Message is revoked for everyone. It replaces the text and the Media, and it keeps the position of the Message. When a group admin revoked the Message, the Tombstone says "This message was deleted by admin".
 _Avoid_: Soft delete, redacted message, retracted message
 
 **Delivery State**:

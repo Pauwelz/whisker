@@ -61,3 +61,18 @@ func TestRevokeByTheAuthorMakesATombstoneAndDeletesTheMedia(t *testing.T) {
 		})
 	}
 }
+
+func TestRevokeByAdminMakesAnAdminTombstoneOnlyForTheAuthor(t *testing.T) {
+	s, _ := newStore(t)
+	live(t, s, whatsapp.Message{ID: "x", Sender: annJID, Time: 1, Text: "real", Media: pic("t")})
+	if changed, err := s.RevokeByAdmin(colGroup, "x", bobJID); err != nil || changed {
+		t.Fatalf("RevokeByAdmin(not the author) = %v, %v; want false, nil", changed, err)
+	}
+	if changed, err := s.RevokeByAdmin(colGroup, "x", annJID); err != nil || !changed {
+		t.Fatalf("RevokeByAdmin = %v, %v; want true, nil", changed, err)
+	}
+	m, _ := s.Message(colGroup, "x")
+	if !m.Revoked || !m.RevokedByAdmin || m.Text != "" || m.Media != nil {
+		t.Errorf("Message = %+v; want an admin Tombstone without Media", m)
+	}
+}

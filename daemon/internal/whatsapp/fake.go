@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -66,7 +67,8 @@ type Fake struct {
 	groupErr       error
 	groupLookups   int
 	groupGate      chan struct{} // while set, GroupParticipants waits
-	historyAnswer  int           // Messages in the answer to RequestHistory; -1 is no answer
+	admins         map[string][]string
+	historyAnswer  int // Messages in the answer to RequestHistory; -1 is no answer
 	historyReqs    []string
 }
 
@@ -100,6 +102,19 @@ func (f *Fake) GroupParticipants(chat string) ([]Participant, error) {
 		<-gate
 	}
 	return participants, err
+}
+
+// SetGroupAdmins presets the users that IsGroupAdmin accepts for each Group Chat. SetGroupError makes it fail too.
+func (f *Fake) SetGroupAdmins(admins map[string][]string) {
+	f.mu.Lock()
+	f.admins = admins
+	f.mu.Unlock()
+}
+
+func (f *Fake) IsGroupAdmin(chat, user string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Contains(f.admins[chat], user), f.groupErr
 }
 
 // HoldGroupLookup makes GroupParticipants wait until the test calls it again with false.

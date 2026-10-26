@@ -159,6 +159,8 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			step = func() int { return exitIf(s.box.done(r)) }
 		case r := <-s.participantsDone:
 			step = func() int { return exitIf(s.box.participantsDone(r)) }
+		case r := <-s.adminRevokeDone:
+			step = func() int { return exitIf(s.box.adminRevokeDone(r)) }
 		case r := <-s.pasteDone:
 			step = func() int { return s.pasted(r) }
 		case e := <-s.historyEnded:

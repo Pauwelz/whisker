@@ -404,6 +404,14 @@ test("only a map link opens", () => {
   assert.equal(Message.linkCommand(url + " ; rm").length, 0);
 });
 
+test("an admin Tombstone says that an admin deleted the Message, in the timeline and in a Quote", () => {
+  const admin = sentMessage({ revoked: true, revokedByAdmin: true, text: "" });
+  assert.equal(Message.messageBody(admin), "This message was deleted by admin");
+  assert.equal(Message.messageBody(sentMessage({ revoked: true, text: "" })), "This message was deleted");
+  const reply = sentMessage({ quote: { id: "q", sender: "2@s.whatsapp.net", verified: true, revoked: true, revokedByAdmin: true, text: "" } });
+  assert.equal(Message.quoteView(reply).text, "This message was deleted by admin");
+});
+
 test("a Tombstone shows a fixed text, an edited Message shows (edited)", () => {
   assert.equal(Message.messageBody(sentMessage({ revoked: true, text: "" })), "This message was deleted");
   assert.equal(Message.messageBody(sentMessage()), "hi");

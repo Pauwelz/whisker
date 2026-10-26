@@ -405,7 +405,7 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 - `mentions` lists the mentioned names, each as `@name` (name rule). `text` already holds them: the Daemon replaces `@<number>`. Only Messages with a mention have the key.
 - `mentionsMe` is true when the Message mentions the user. The sender's mention list decides this, as in WhatsApp, also when `text` has no "@". Such a Message breaks through a mute or an archive. Only such Messages have the key. Fixture: `notify-mention-muted.jsonl`.
 - `senderPush` is true when `senderName` is a Push Name: the user has no phone contact for the sender. Only such Messages have the key. The Plugin shows "~" and the phone number from `sender`.
-- `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
+- `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline. `revokedByAdmin` is true when a group admin made the Tombstone (also in a `quote`). Only such Messages have the key. The Plugin then shows "This message was deleted by admin".
 - `system` is true for a System Message: a change to the Chat. Only such Messages have the key. `text` holds the line, such as `Jef Cools added Robert Maes and Ann`. `sender`, `senderName` and `fromMe` name who made the change, and `state` is empty. See System Messages below.
 - `media` is present only for a Message with Media, see Media below. It never holds a path or bytes.
 - Error -32003 means the chat store failed.
@@ -509,7 +509,7 @@ The Plugin turns a mute choice into an absolute `until`. Fixtures: `chat-pin.jso
 
 Params: `chat` and `id`. Same rules as `chat.edit`, without the 15 minute limit. The Daemon revokes the Message for everyone. It becomes a Tombstone: the store empties the text (and, with Media, the cached Media) and keeps the position. The Daemon answers `{"message": {...}}` and sends `messageChanged` with `revoked: true`.
 
-A revoke from the phone or from the other Participant arrives as `messageChanged` with `revoked: true`. The Daemon applies it only when the revoker is the author of the Message (the `sender` and `fromMe` of the `messageRevoked` event, checked as for an edit). A revoke by anyone else changes nothing and sends nothing. Revokes by a group admin are not applied. A revoke of an unknown or revoked Message sends nothing. Errors as for `chat.edit`. Fixture: `chat-revoke.jsonl`.
+A revoke from the phone or from the other Participant arrives as `messageChanged` with `revoked: true`. The Daemon applies it only when the revoker is the author of the Message (the `sender` and `fromMe` of the `messageRevoked` event, checked as for an edit). A revoke by anyone else changes nothing and sends nothing. A revoke by a group admin in a Group Chat applies only when the revoke names the stored author of the Message and a live `GetGroupInfo` lookup shows the revoker as admin or super admin. The Daemon caches no admin list. A failed lookup, or a revoker who is not an admin, changes nothing. The Message becomes a Tombstone with `revokedByAdmin: true`. A History Sync does not carry the target of an admin revoke, so it stays out. Fixture: `chat-revoke-admin.jsonl`. A revoke of an unknown or revoked Message sends nothing. Errors as for `chat.edit`. Fixture: `chat-revoke.jsonl`.
 
 ### `chat.deleteForMe`
 
@@ -707,6 +707,8 @@ Keys of a `whatsapp` line. Each line has exactly one:
 | `pictures` | An object of Chat to `"id\|content"`: the Profile pictures that `chat.picture` finds. A Chat that is not in it has no picture. `sendError` makes the call fail. |
 | `phones` | An object of LID to phone JID: what the local LID store holds. The Daemon reads it on `connected`. |
 | `historyAnswer` | The number of Messages in the answer to each `chat.requestHistory` that reaches the fake port. The answer is an on-demand batch of older Messages. 0 is an empty batch. Without this line, the phone does not answer. `sendError` makes the call fail. |
+| `groupAdmins` | An object of Group Chat to a list of user IDs: the admins that the live check of an admin revoke finds. |
+| `groupError` | `offline`, or empty: the live admin check fails, or works again (empty). |
 | `hold` | `true` makes the fake port hold every `chat.send` until a `hold` line with `false`. A fixture uses it to end a send after other events. |
 | `download` | The plain Media that the next downloads write. |
 | `downloadError` | Any text, or empty: the fake port fails every download with that error, or works again (empty). |

@@ -64,6 +64,7 @@ type session struct {
 	sent             <-chan sendResult         // the results of the sends
 	mediaDone        <-chan mediaResult        // the results of the Media downloads
 	participantsDone <-chan participantsResult // the results of the Group Chat Participant lookups
+	adminRevokeDone  <-chan adminRevokeResult  // the results of the admin checks of admin revokes
 	historyEnded     <-chan historyEnd         // the requests of On-Demand History Sync that got no answer
 	expiryTick       <-chan time.Time          // fires when the sweep of Disappearing Messages is due
 	retryConnect     <-chan time.Time          // fires when a failed connect of a linked Profile is due again
@@ -95,6 +96,7 @@ func (s *session) open() int {
 		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, s.notices.show, autoDownloads)
 		s.sent = s.box.results
 		s.participantsDone = s.box.participants
+		s.adminRevokeDone = s.box.adminRevokes
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)
 		s.mediaDone = s.loader.results
 		s.hist = newHistory(s.port, s.send, s.logOut)
@@ -159,7 +161,7 @@ func (s *session) unlink(by string) int {
 	dropAllPasted() // the Drafts go with the Profile
 	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader, s.hist = false, nil, nil, nil, nil, nil, nil, nil, nil, nil
 	s.pastedPending = nil
-	s.sent, s.participantsDone, s.mediaDone, s.historyEnded, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, nil, nil, 0
+	s.sent, s.participantsDone, s.adminRevokeDone, s.mediaDone, s.historyEnded, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, nil, nil, nil, 0
 	s.attn.Set(s.attn.Open(), "") // the Chat is gone with the Profile
 	if err := s.profile.Delete(); err != nil {
 		fmt.Fprintln(s.logOut, "profile delete failed")

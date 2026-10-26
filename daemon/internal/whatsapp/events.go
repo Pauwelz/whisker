@@ -260,7 +260,13 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 			c.events <- edit
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
-		c.events <- MessageRevoked{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe}
+		ev := MessageRevoked{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe}
+		// An admin revoke: the stanza sender is the admin, the key Participant is the author.
+		if author, err := types.ParseJID(pm.GetKey().GetParticipant()); err == nil && evt.Info.Edit == types.EditAttributeAdminRevoke &&
+			evt.Info.IsGroup && !evt.Info.IsFromMe && !pm.GetKey().GetFromMe() {
+			ev.Admin, ev.Sender = ev.Sender, c.phone(author).String()
+		}
+		c.events <- ev
 	case pm.GetType() == waE2E.ProtocolMessage_EPHEMERAL_SETTING:
 		src := evt.Info.MessageSource
 		if src.IsGroup { // any member can send this; only GroupInfo carries the server's say on a group timer

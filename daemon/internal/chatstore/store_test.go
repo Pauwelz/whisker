@@ -756,6 +756,9 @@ func TestMigrationDropsAnOversizedStoredThumbnail(t *testing.T) {
 	if _, err := db.Exec(`UPDATE media SET thumbnail = zeroblob(?) WHERE id = 'big'`, whatsapp.MaxThumbnailBytes+1); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Exec("ALTER TABLE messages DROP COLUMN revoked_by_admin"); err != nil { // undo the step that Migrate runs again
+		t.Fatal(err)
+	}
 	if _, err := db.Exec("PRAGMA user_version = 22"); err != nil { // the version before the cap
 		t.Fatal(err)
 	}
@@ -802,6 +805,9 @@ func TestMigrationCleansStoredNamesOnce(t *testing.T) {
 		}
 	}
 	for range 2 { // the second run must change nothing
+		if _, err := db.Exec("ALTER TABLE messages DROP COLUMN revoked_by_admin"); err != nil { // undo the step that Migrate runs again
+			t.Fatal(err)
+		}
 		if _, err := db.Exec("PRAGMA user_version = 23"); err != nil {
 			t.Fatal(err)
 		}

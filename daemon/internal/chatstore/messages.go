@@ -32,6 +32,8 @@ type Message struct {
 	State      string `json:"state"`
 	Edited     bool   `json:"edited"`
 	Revoked    bool   `json:"revoked"` // a Tombstone: the text is empty
+	// RevokedByAdmin is true when a group admin made the Tombstone.
+	RevokedByAdmin bool `json:"revokedByAdmin,omitempty"`
 	// Media is nil for a text Message. It never holds a path or bytes: paths come from media.open.
 	Media     *MediaInfo `json:"media,omitempty"`
 	Quote     *Quote     `json:"quote,omitempty"`
@@ -62,8 +64,10 @@ type Quote struct {
 	// Verified is true when the quoted Message is stored.
 	Verified bool `json:"verified"`
 	// Revoked is true when the quoted Message is a Tombstone. Text is then empty.
-	Revoked bool   `json:"revoked,omitempty"`
-	Text    string `json:"text"`
+	Revoked bool `json:"revoked,omitempty"`
+	// RevokedByAdmin is true when a group admin made the Tombstone.
+	RevokedByAdmin bool   `json:"revokedByAdmin,omitempty"`
+	Text           string `json:"text"`
 }
 
 // Reaction is the emoji of one Participant on a Message. Sender is empty for the user.
@@ -110,9 +114,9 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 
 // Timeline order: by time, then by arrival (rowid), so two Messages in one second keep their order.
 const selectMessage = `
-	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
+	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, m.revoked_by_admin, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
 		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, ''),
-	       qm.id IS NOT NULL, COALESCE(qm.from_me, 0), COALESCE(qm.revoked, 0), COALESCE(qm.sender_jid, ''), COALESCE(qm.text, ''),
+	       qm.id IS NOT NULL, COALESCE(qm.from_me, 0), COALESCE(qm.revoked, 0), COALESCE(qm.revoked_by_admin, 0), COALESCE(qm.sender_jid, ''), COALESCE(qm.text, ''),
 	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at, m.mentions_me, COALESCE(md.thumbnail, x''), COALESCE(md.duration, 0), COALESCE(md.played, 0), COALESCE(md.gif, 0),
 	       m.system_kind, m.system_targets, m.system_value
 	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN messages qm ON qm.chat_jid = m.chat_jid AND qm.id = m.quote_id AND qm.system_kind = ''
@@ -248,7 +252,17 @@ func (s *Store) Edit(ev whatsapp.MessageEdited, window time.Duration) (bool, err
 // Only the author can revoke: fromMe and sender must match the stored Message, as for Edit.
 // A Tombstone keeps no Media: the Media row goes, and so does the stored file (through RemoveMedia).
 func (s *Store) Revoke(chat, id, sender string, fromMe bool) (bool, error) {
-	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1, mentions = '', mentions_me = 0 WHERE chat_jid = ? AND id = ? AND revoked = 0 AND `+authorSQL, chat, id, boolInt(fromMe), sender)
+	return s.revoke(chat, id, sender, fromMe, false)
+}
+
+// RevokeByAdmin is Revoke for a revoke by a group admin that the caller checked. author is the author that the revoke names:
+// it must be the stored author. The Tombstone records the admin.
+func (s *Store) RevokeByAdmin(chat, id, author string) (bool, error) {
+	return s.revoke(chat, id, author, false, true)
+}
+
+func (s *Store) revoke(chat, id, sender string, fromMe, byAdmin bool) (bool, error) {
+	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1, revoked_by_admin = ?, mentions = '', mentions_me = 0 WHERE chat_jid = ? AND id = ? AND revoked = 0 AND `+authorSQL, boolInt(byAdmin), chat, id, boolInt(fromMe), sender)
 	if err != nil || !changed {
 		return changed, err
 	}
@@ -422,8 +436,8 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 		var stored struct{ sender, text string } // the quoted Message, when it is stored
 		var mi MediaInfo
 		var sys whatsapp.System
-		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push,
-			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &q.Verified, &q.FromMe, &q.Revoked, &stored.sender, &stored.text, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played, &mi.Gif,
+		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &m.RevokedByAdmin, &contact, &push,
+			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &q.Verified, &q.FromMe, &q.Revoked, &q.RevokedByAdmin, &stored.sender, &stored.text, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played, &mi.Gif,
 			&sys.Kind, &targets, &sys.Value); err != nil {
 			return nil, err
 		}

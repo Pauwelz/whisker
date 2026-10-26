@@ -71,3 +71,36 @@ func TestRevokeCarriesTheSender(t *testing.T) {
 		t.Errorf("emitted %+v, want %+v", got, want)
 	}
 }
+
+// An admin revoke carries the admin in the stanza and the author in the key. A plain revoke with the same
+// attribute outside a group, or a key from the user, stays an author revoke.
+func TestAdminRevokeNamesTheAuthorAndTheAdmin(t *testing.T) {
+	revoke := func(edit types.EditAttribute, group, keyFromMe bool) MessageRevoked {
+		c := systemClient()
+		evt := &events.Message{
+			Info: types.MessageInfo{MessageSource: types.MessageSource{Chat: sysGroup, Sender: jef, IsGroup: group}, Timestamp: sysAt, Edit: edit},
+			Message: &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+				Type: waE2E.ProtocolMessage_REVOKE.Enum(),
+				Key:  &waCommon.MessageKey{ID: proto.String("m1"), FromMe: proto.Bool(keyFromMe), Participant: proto.String("3202@s.whatsapp.net")},
+			}},
+		}
+		if !c.handleProtocol(evt) {
+			t.Fatal("handleProtocol = false; want the revoke consumed")
+		}
+		return (<-c.events).(MessageRevoked)
+	}
+	want := MessageRevoked{Chat: sysGroup.String(), ID: "m1", Sender: "3202@s.whatsapp.net", Admin: jef.String()}
+	if got := revoke(types.EditAttributeAdminRevoke, true, false); got != want {
+		t.Errorf("admin revoke = %+v, want %+v", got, want)
+	}
+	author := MessageRevoked{Chat: sysGroup.String(), ID: "m1", Sender: jef.String()}
+	for name, got := range map[string]MessageRevoked{
+		"sender revoke":   revoke(types.EditAttributeSenderRevoke, true, false),
+		"no group":        revoke(types.EditAttributeAdminRevoke, false, false),
+		"key from the me": revoke(types.EditAttributeAdminRevoke, true, true),
+	} {
+		if got != author {
+			t.Errorf("%s = %+v, want %+v", name, got, author)
+		}
+	}
+}
