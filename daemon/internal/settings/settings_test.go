@@ -86,3 +86,43 @@ func TestBrokenFileIsAnError(t *testing.T) {
 		t.Error("Get on a broken file must fail")
 	}
 }
+
+func TestUnknownModeLoadsAsOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	os.WriteFile(path, []byte(`{"readReceipts":"Off"}`), 0o600)
+	if got, err := settings.New(path).Get(); err != nil || got.ReadReceipts != "off" {
+		t.Errorf("Get = %+v, %v; want readReceipts off", got, err)
+	}
+}
+
+func TestSetRepairsABrokenFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	os.WriteFile(path, []byte("{"), 0o600)
+	s := settings.New(path)
+	on := true
+	if _, err := s.Set(settings.Update{Notifications: &on}); err != nil {
+		t.Fatal(err)
+	}
+	// Only the changed key is sent, so the rest must be the most private values.
+	want := settings.Settings{ReadReceipts: "off", Notifications: true, AutoDownloadLimit: "5mb"}
+	if got, err := s.Get(); err != nil || got != want {
+		t.Errorf("Get = %+v, %v; want %+v", got, err, want)
+	}
+}
+
+func TestSaveKeepsASymlinkTarget(t *testing.T) {
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	os.WriteFile(victim, []byte("keep"), 0o600)
+	os.Symlink(victim, filepath.Join(dir, "settings.json.tmp"))
+	off := false
+	if _, err := settings.New(filepath.Join(dir, "settings.json")).Set(settings.Update{SendOnline: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(victim); string(raw) != "keep" {
+		t.Errorf("victim = %q, want it untouched", raw)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".settings-*")); len(left) != 0 {
+		t.Errorf("temp files left: %v", left)
+	}
+}

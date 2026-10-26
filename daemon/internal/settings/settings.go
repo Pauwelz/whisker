@@ -6,6 +6,7 @@ package settings
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -33,6 +34,9 @@ var autoDownloadBytes = map[string]int64{
 
 // ErrInvalid means a setting has a value that is not allowed.
 var ErrInvalid = errors.New("invalid setting")
+
+// errBroken means the settings file does not parse.
+var errBroken = errors.New("settings file does not parse")
 
 // Settings are the v1 Profile Settings. The JSON tags are the wire names.
 type Settings struct {
@@ -70,6 +74,11 @@ func Defaults() Settings {
 	return Settings{ReadReceipts: ReadReceiptsOnOpen, SendOnline: true, SendTyping: true, Notifications: true, NotificationPreview: true, AutoDownload: true, AutoDownloadLimit: AutoDownloadLimit5MB}
 }
 
+// mostPrivate returns the settings that share the least. They replace a file that does not parse.
+func mostPrivate() Settings {
+	return Settings{ReadReceipts: ReadReceiptsOff, Notifications: true, AutoDownloadLimit: AutoDownloadLimit5MB}
+}
+
 func validMode(m string) bool {
 	return m == ReadReceiptsOff || m == ReadReceiptsOnOpen || m == ReadReceiptsOnInteraction
 }
@@ -95,7 +104,11 @@ func (s *Store) Set(u Update) (Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cur, err := s.load()
-	if err != nil {
+	// A file that does not parse is replaced, so the user can repair it from the Plugin.
+	// The keys the update leaves out take the most private values, not the defaults.
+	if errors.Is(err, errBroken) {
+		cur = mostPrivate()
+	} else if err != nil {
 		return cur, err
 	}
 	if u.ReadReceipts != nil {
@@ -138,11 +151,11 @@ func (s *Store) load() (Settings, error) {
 		return cur, err
 	}
 	if err := json.Unmarshal(raw, &cur); err != nil {
-		return Defaults(), err
+		return Defaults(), fmt.Errorf("%w: %w", errBroken, err)
 	}
-	// A hand-edited file with a bad mode falls back to the default.
+	// A hand-edited file with a bad mode falls back to the most private one.
 	if !validMode(cur.ReadReceipts) {
-		cur.ReadReceipts = Defaults().ReadReceipts
+		cur.ReadReceipts = ReadReceiptsOff
 	}
 	if _, ok := autoDownloadBytes[cur.AutoDownloadLimit]; !ok {
 		cur.AutoDownloadLimit = Defaults().AutoDownloadLimit
@@ -159,9 +172,23 @@ func (s *Store) save(cur Settings) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+	// CreateTemp uses O_EXCL and a random name, so it never follows a planted symlink.
+	f, err := os.CreateTemp(filepath.Dir(s.path), ".settings-*.json")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	_, err = f.Write(raw)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), s.path)
+	}
+	if err != nil {
+		os.Remove(f.Name())
+	}
+	return err
 }

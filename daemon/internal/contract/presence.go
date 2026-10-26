@@ -45,8 +45,8 @@ func (p *presenter) connected() {
 func (p *presenter) sync() {
 	prefs, err := p.prefs.Get()
 	if err != nil {
-		fmt.Fprintln(p.logOut, "settings failed") // no Presence without a readable setting
-		return
+		fmt.Fprintln(p.logOut, "settings failed") // no Online without a readable setting; Unavailable still goes out
+		prefs = settings.Settings{}
 	}
 	if want := p.attn.Open() && prefs.SendOnline; !p.known || want != p.online {
 		if err := p.port.SendPresence(want); err != nil {

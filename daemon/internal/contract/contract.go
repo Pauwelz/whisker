@@ -162,8 +162,9 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 		case e := <-s.historyEnded:
 			code = exitIf(s.hist.timedOut(e))
 		case <-s.muteTick:
+			ended := Clock.Now().Unix() >= s.muteAt // a capped wait ends early
 			s.muteTick, s.muteAt = nil, 0
-			code = exitIf(s.send(notification("chatsChanged", nil)))
+			code = exitIf(!ended || s.send(notification("chatsChanged", nil)))
 			s.scheduleMuteEnd()
 		case <-s.retryConnect:
 			s.retryConnect = nil

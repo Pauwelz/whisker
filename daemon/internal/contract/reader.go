@@ -55,7 +55,7 @@ func (r *reader) attend(t receiptpolicy.Trigger) bool {
 	if chat == "" {
 		return false
 	}
-	seen := r.counted(chat) // before ClearUnread, which empties the list
+	seen, silent := r.counted(chat) // before ClearUnread, which empties the list
 	cleared, err := r.chats.ClearUnread(chat)
 	if err != nil {
 		fmt.Fprintln(r.logOut, "chat store write failed")
@@ -64,24 +64,40 @@ func (r *reader) attend(t receiptpolicy.Trigger) bool {
 			fmt.Fprintln(r.logOut, "read marker failed")
 		}
 	}
-	if err == nil {
+	if err == nil && silent {
+		r.dropPending(chat, seen)
+	} else if err == nil {
 		r.readSelf(chat, seen)
 	}
 	r.receipts(chat, t)
 	return cleared
 }
 
-// counted lists the Messages that leave unreadCount when the Read Marker clears, if the mode wants read-self receipts for them.
-func (r *reader) counted(chat string) []chatstore.Unreceipted {
+// counted lists the Messages that leave unreadCount when the Read Marker clears.
+// The mode wants read-self receipts for them, or it is 'off' (silent): then no receipt goes out at all.
+func (r *reader) counted(chat string) (list []chatstore.Unreceipted, silent bool) {
 	prefs, err := r.prefs.Get()
-	if err != nil || !receiptpolicy.SelfDue(prefs.ReadReceipts) {
-		return nil
+	silent = err == nil && prefs.ReadReceipts == settings.ReadReceiptsOff
+	if err != nil || !(silent || receiptpolicy.SelfDue(prefs.ReadReceipts)) {
+		return nil, false
 	}
-	list, err := r.chats.Counted(chat)
+	list, err = r.chats.Counted(chat)
 	if err != nil {
 		fmt.Fprintln(r.logOut, "chat store read failed")
 	}
-	return list
+	return list, silent
+}
+
+// dropPending clears the wait for a Read Receipt of these Messages without sending one.
+// A later switch to another mode must not send Read for what the user read while it was 'off'.
+func (r *reader) dropPending(chat string, list []chatstore.Unreceipted) {
+	ids := make([]string, len(list))
+	for i, u := range list {
+		ids[i] = u.ID
+	}
+	if err := r.chats.Receipted(chat, ids); err != nil {
+		fmt.Fprintln(r.logOut, "chat store write failed")
+	}
 }
 
 // readSelf sends a read-self receipt for these Messages, one call per sender.

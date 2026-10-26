@@ -332,11 +332,11 @@ The Daemon owns the settings in `$XDG_CONFIG_HOME/whisker/settings.json` (defaul
 
 `notificationPreview` on: a notification shows the sender and the text. Off: the summary stays the Chat name and the body is `New message`. It has no effect while `notifications` is off.
 
-A missing file or a missing key gives the default. Error -32004 means the settings file is unreadable. Fixture: `settings-defaults.jsonl`.
+A missing file or a missing key gives the default. An unknown `readReceipts` value loads as `off`. Error -32004 means the settings file is unreadable. Auto-download is off while the file does not parse. Fixture: `settings-defaults.jsonl`.
 
 ### `settings.set`
 
-Params: any of the settings above. A key that is left out stays as it is. The Daemon saves the file, then answers with the full settings (same shape as `settings.get`). A value that is not allowed (for example an unknown `readReceipts` mode) changes nothing and gives error -32004. Fixtures: `settings-set.jsonl`, `settings-invalid.jsonl`.
+Params: any of the settings above. A key that is left out stays as it is. The Daemon saves the file, then answers with the full settings (same shape as `settings.get`). A value that is not allowed (for example an unknown `readReceipts` mode) changes nothing and gives error -32004. A file that does not parse is replaced: the keys left out take the most private values (`readReceipts` `off`, `sendOnline`, `sendTyping`, `notificationPreview` and `autoDownload` false), not the defaults. Fixtures: `settings-set.jsonl`, `settings-invalid.jsonl`.
 
 ### `profile.logout`
 
