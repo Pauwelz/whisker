@@ -1,9 +1,9 @@
 {"dir":"whatsapp","linked":true}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
 {"dir":"view","expect":{"screen":"linked"}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"profile.logout"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"unlinked","params":{"by":"user"}}}
 {"dir":"view","expect":{"screen":"linking","reason":"logged-out","message":"You logged out. Link whisker again."}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}

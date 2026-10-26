@@ -66,6 +66,7 @@ func run(frames io.Writer) int {
 		}
 		dataDir = filepath.Join(home, ".local", "share")
 	}
+	contract.KeyringPlain = func() bool { return keystore.PlainKeyring(dataDir) }
 	configDir := os.Getenv("XDG_CONFIG_HOME")
 	if configDir == "" {
 		home, err := os.UserHomeDir()

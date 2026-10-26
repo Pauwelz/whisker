@@ -5,5 +5,5 @@
 {"dir":"keyring","state":"unlocked"}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"keyring.retry"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"view","expect":{"screen":"ready","canRetry":false}}

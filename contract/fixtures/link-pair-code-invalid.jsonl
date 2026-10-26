@@ -1,4 +1,4 @@
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"whatsapp","pairError":"invalid-phone"}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"link.pairCode","params":{"phone":"12"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"invalid phone number"}}}

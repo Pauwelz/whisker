@@ -1,4 +1,4 @@
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"whatsapp","event":{"kind":"linkFailed","reason":"timeout"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"linkFailed","params":{"reason":"timeout"}}}
 {"dir":"view","expect":{"screen":"linking","reason":"timeout","canRetry":true}}

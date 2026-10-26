@@ -1,6 +1,6 @@
 {"dir":"whatsapp","linked":true}
 {"dir":"whatsapp","phones":{"232@lid":"32470@s.whatsapp.net"}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"De Gazetten","lastActive":10,"messages":[{"id":"m1","sender":"232@lid","time":10,"text":"Mogguh"}]}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}

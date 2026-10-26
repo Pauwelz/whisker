@@ -1,5 +1,5 @@
 {"dir":"whatsapp","linked":true}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","lastActive":30,"unread":true},{"jid":"2@s.whatsapp.net","lastActive":20,"unread":true,"archived":true},{"jid":"3@s.whatsapp.net","lastActive":10}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}

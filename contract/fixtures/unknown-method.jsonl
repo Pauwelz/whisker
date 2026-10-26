@@ -1,4 +1,4 @@
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"nope"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"method not found"}}}
 {"dir":"in","frame":"not json"}

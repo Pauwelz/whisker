@@ -1,4 +1,4 @@
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
 {"dir":"whatsapp","pairCode":"ABCD-1234"}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"link.pairCode","params":{"phone":"31612345678"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"code":"ABCD-1234"}}}
