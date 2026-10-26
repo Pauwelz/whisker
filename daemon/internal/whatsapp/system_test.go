@@ -153,6 +153,23 @@ func TestLiveTimerChangeIsASystemMessageInEveryChat(t *testing.T) {
 	}
 }
 
+func TestGroupMemberCannotSetTheTimerByProtocolMessage(t *testing.T) {
+	c := systemClient()
+	forged := &events.Message{
+		Info: types.MessageInfo{MessageSource: types.MessageSource{Chat: sysGroup, Sender: jef, IsGroup: true}, Timestamp: sysAt},
+		Message: &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+			Type: waE2E.ProtocolMessage_EPHEMERAL_SETTING.Enum(), EphemeralExpiration: proto.Uint32(0),
+		}},
+	}
+	if !c.handleProtocol(forged) {
+		t.Error("handleProtocol = false; want the forged setting consumed")
+	}
+	close(c.events)
+	for ev := range c.events {
+		t.Errorf("emitted %+v; want no event", ev)
+	}
+}
+
 // stub is one History Sync stub of the group, by Jef unless participant says otherwise.
 func stub(typ waWeb.WebMessageInfo_StubType, participant string, fromMe bool, params ...string) *waHistorySync.HistorySyncMsg {
 	return &waHistorySync.HistorySyncMsg{Message: &waWeb.WebMessageInfo{

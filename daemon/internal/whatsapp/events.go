@@ -166,11 +166,13 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
 		c.events <- MessageRevoked{Chat: chat, ID: id}
 	case pm.GetType() == waE2E.ProtocolMessage_EPHEMERAL_SETTING:
-		c.events <- ChatTimer{Chat: chat, Seconds: int64(pm.GetEphemeralExpiration())}
-		if src := evt.Info.MessageSource; !src.IsGroup { // a Group Chat gets its System Message from GroupInfo
-			jid := c.chatOf(src)
-			c.emitSystem(jid, c.systemMessage(jid, src.Sender, src.SenderAlt, SystemTimer, nil, strconv.FormatUint(uint64(pm.GetEphemeralExpiration()), 10), evt.Info.Timestamp))
+		src := evt.Info.MessageSource
+		if src.IsGroup { // any member can send this; only GroupInfo carries the server's say on a group timer
+			return true
 		}
+		c.events <- ChatTimer{Chat: chat, Seconds: int64(pm.GetEphemeralExpiration())}
+		jid := c.chatOf(src)
+		c.emitSystem(jid, c.systemMessage(jid, src.Sender, src.SenderAlt, SystemTimer, nil, strconv.FormatUint(uint64(pm.GetEphemeralExpiration()), 10), evt.Info.Timestamp))
 	default:
 		return false
 	}

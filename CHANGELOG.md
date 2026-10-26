@@ -23,6 +23,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - A sender can no longer crash the Daemon with a large "separate thumbnail" link. The Daemon stops a thumbnail download at 256 KiB, times it out after 30 seconds, and runs at most three at once. It drops a larger thumbnail, also an inline one, and does not fetch an oversized link again. An update removes oversized thumbnails that chat.db already holds.
 - A sender can no longer crash or stall the Daemon with a long mention list. The Daemon now keeps at most 256 different mentions per Message, and only those whose `@<number>` is in the text. It also replaces names in the text in one pass, so a push name that holds `@<number>` cannot grow the text. Before, one small Message could exhaust the memory of the Daemon.
 
+- A member of a group can no longer change the Disappearing timer of the group for your Messages. The Daemon now ignores the timer setting that a member sends in a group. It takes the group timer only from the group info of the server. Before, a member could turn the timer off, so your Messages stayed, or set it to a few seconds, so the Daemon deleted them.
+
 ## [1.0.1] - 2026-10-26
 
 ### Changed
