@@ -61,3 +61,32 @@ func TestRevokeByTheAuthorMakesATombstoneAndDeletesTheMedia(t *testing.T) {
 		})
 	}
 }
+
+func TestRevokeByAdminMakesAnAdminTombstoneOnlyForTheAuthor(t *testing.T) {
+	s, _ := newStore(t)
+	live(t, s, whatsapp.Message{ID: "x", Sender: annJID, Time: 1, Text: "real", Media: pic("t")})
+	if changed, err := s.RevokeByAdmin(colGroup, "x", bobJID, false); err != nil || changed {
+		t.Fatalf("RevokeByAdmin(not the author) = %v, %v; want false, nil", changed, err)
+	}
+	if changed, err := s.RevokeByAdmin(colGroup, "x", annJID, false); err != nil || !changed {
+		t.Fatalf("RevokeByAdmin = %v, %v; want true, nil", changed, err)
+	}
+	m, _ := s.Message(colGroup, "x")
+	if !m.Revoked || !m.RevokedByAdmin || m.Text != "" || m.Media != nil {
+		t.Errorf("Message = %+v; want an admin Tombstone without Media", m)
+	}
+}
+
+func TestRevokeByAdminOfTheUsersOwnMessage(t *testing.T) {
+	s, _ := newStore(t)
+	live(t, s, whatsapp.Message{ID: "x", FromMe: true, Time: 1, Text: "mine"})
+	if changed, err := s.RevokeByAdmin(colGroup, "x", annJID, false); err != nil || changed {
+		t.Fatalf("RevokeByAdmin(another author) = %v, %v; want false, nil", changed, err)
+	}
+	if changed, err := s.RevokeByAdmin(colGroup, "x", "", true); err != nil || !changed {
+		t.Fatalf("RevokeByAdmin(fromMe) = %v, %v; want true, nil", changed, err)
+	}
+	if m, _ := s.Message(colGroup, "x"); !m.Revoked || !m.RevokedByAdmin {
+		t.Errorf("Message = %+v; want an admin Tombstone", m)
+	}
+}

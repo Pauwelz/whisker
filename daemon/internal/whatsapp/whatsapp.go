@@ -94,6 +94,9 @@ type Port interface {
 	// GroupParticipants lists the Participants of a Group Chat, without the user. It returns ErrOffline when there is no connection.
 	// It can block for a long time: call it off the Daemon loop.
 	GroupParticipants(chat string) ([]Participant, error)
+	// IsGroupAdmin asks WhatsApp now whether one of the IDs (phone JID or LID of one user) is an admin or super admin of a Group Chat.
+	// It returns ErrOffline when there is no connection. It can block for a long time: call it off the Daemon loop.
+	IsGroupAdmin(chat string, users ...string) (bool, error)
 	// OwnUsers lists the user parts of the user's own IDs (phone number and LID). It is empty while unlinked.
 	OwnUsers() []string
 	// Events delivers events in order. The channel stays open until the process ends.
@@ -404,11 +407,16 @@ type MessageEdited struct {
 
 // MessageRevoked means a stored Message was revoked for everyone.
 // Sender and FromMe name the revoker: only the author can revoke a Message.
+// For a revoke by a group admin, Sender and FromMe name the author that the revoke names (FromMe: the user)
+// and Admin is the revoker, which is not checked yet. AdminAlt is the other ID of the revoker, if WhatsApp gave one.
 type MessageRevoked struct {
 	Chat   string `json:"chat"`
 	ID     string `json:"id"`
 	Sender string `json:"sender"`
 	FromMe bool   `json:"fromMe"`
+	Admin  string `json:"admin,omitempty"`
+	// AdminAlt is the other ID of the revoker: its LID or its phone JID.
+	AdminAlt string `json:"adminAlt,omitempty"`
 }
 
 // Reaction means a Participant, or another device of the user, set or removed a Reaction on a stored Message.

@@ -24,6 +24,7 @@ type sendPort interface {
 	Send(chat, id, text string, quote *whatsapp.Quote, timer int64) error
 	SendMedia(chat, id string, m whatsapp.Media, plain *os.File, caption string, timer int64) error
 	GroupParticipants(chat string) ([]whatsapp.Participant, error)
+	IsGroupAdmin(chat string, users ...string) (bool, error)
 	PhoneOf(lid string) string
 }
 
@@ -46,6 +47,7 @@ type outbox struct {
 	results       chan sendResult
 	participants  chan participantsResult   // the results of the Group Chat Participant lookups
 	looking       map[string]bool           // Messages whose Participant lookup runs
+	adminRevokes  chan adminRevokeResult    // the results of the admin checks of admin revokes
 	store         *media.Store              // holds the files of Media to send
 	incoming      func(whatsapp.NewMessage) // runs after a new Message is stored
 	notice        func(whatsapp.NewMessage) // shows the desktop notification of a new Message, if the policy says so
@@ -64,11 +66,17 @@ type participantsResult struct {
 	err          error
 }
 
+type adminRevokeResult struct {
+	ev    whatsapp.MessageRevoked
+	admin bool
+	err   error
+}
+
 func newOutbox(chats *chatstore.Store, port sendPort, store *media.Store, send func(map[string]any) bool, logOut io.Writer,
 	incoming func(whatsapp.NewMessage), notice func(whatsapp.NewMessage), autoDownloads func(size int64) bool) *outbox {
 	return &outbox{chats: chats, port: port, store: store, send: send, logOut: logOut, incoming: incoming, notice: notice, autoDownloads: autoDownloads,
 		inflight: map[string]bool{}, merged: map[string]string{}, results: make(chan sendResult, 64),
-		participants: make(chan participantsResult, 64), looking: map[string]bool{}}
+		participants: make(chan participantsResult, 64), looking: map[string]bool{}, adminRevokes: make(chan adminRevokeResult, 64)}
 }
 
 // submit starts the send of a pending Message. It does nothing offline, or while that Message is in flight.
@@ -238,7 +246,35 @@ func (b *outbox) edited(ev whatsapp.MessageEdited) bool {
 }
 
 func (b *outbox) revoked(ev whatsapp.MessageRevoked) bool {
+	if ev.Admin != "" {
+		b.checkAdmin(ev)
+		return true
+	}
 	return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Revoke(ev.Chat, ev.ID, ev.Sender, ev.FromMe) })
+}
+
+// checkAdmin starts the live admin check of an admin revoke. The lookup runs off the Daemon loop.
+// Only a revoke in a Group Chat can be an admin revoke. WhatsApp's say is trusted, nothing is cached.
+func (b *outbox) checkAdmin(ev whatsapp.MessageRevoked) {
+	if !b.isGroup(ev.Chat) {
+		return
+	}
+	go func() {
+		admin, err := b.port.IsGroupAdmin(ev.Chat, ev.Admin, ev.AdminAlt)
+		b.adminRevokes <- adminRevokeResult{ev, admin, err}
+	}()
+}
+
+// adminRevokeDone applies an admin revoke when the check found an admin. A failed check keeps the Message.
+func (b *outbox) adminRevokeDone(r adminRevokeResult) bool {
+	if r.err != nil {
+		fmt.Fprintln(b.logOut, "group lookup failed")
+		return true
+	}
+	if !r.admin {
+		return true
+	}
+	return b.move(r.ev.Chat, r.ev.ID, func() (bool, error) { return b.chats.RevokeByAdmin(r.ev.Chat, r.ev.ID, r.ev.Sender, r.ev.FromMe) })
 }
 
 func (b *outbox) reacted(ev whatsapp.Reaction) bool {

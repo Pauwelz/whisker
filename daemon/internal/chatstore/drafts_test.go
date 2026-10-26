@@ -49,6 +49,7 @@ func TestMigrateTurnsAnAttachmentPathIntoAList(t *testing.T) {
 		`CREATE TABLE drafts (chat_jid TEXT NOT NULL PRIMARY KEY, text TEXT NOT NULL, quote_id TEXT NOT NULL, edit_id TEXT NOT NULL, attachment TEXT NOT NULL DEFAULT '')`,
 		`INSERT INTO drafts VALUES ('one@s.whatsapp.net', 'a', '', '', '/x/y.png'), ('none@s.whatsapp.net', 'b', '', '', '')`,
 		`ALTER TABLE messages DROP COLUMN in_unread_count`, // undo the steps after version 20 that Migrate runs again
+		`ALTER TABLE messages DROP COLUMN revoked_by_admin`,
 		`PRAGMA user_version = 20`,
 	} {
 		if _, err := db.Exec(q); err != nil {

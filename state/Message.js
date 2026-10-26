@@ -7,12 +7,18 @@
 
 // The text of a Tombstone, shown at the position of the revoked Message.
 var TOMBSTONE_TEXT = "This message was deleted"
+var TOMBSTONE_ADMIN_TEXT = "This message was deleted by admin"
+
+// The Tombstone text of a Message or of a Quote: `revokedByAdmin` picks the admin text.
+function tombstoneText(item) {
+  return item.revokedByAdmin ? TOMBSTONE_ADMIN_TEXT : TOMBSTONE_TEXT
+}
 
 // WhatsApp lets the user edit a Message for 15 minutes. The Daemon enforces it; the Plugin only hides the button.
 var EDIT_WINDOW_SECONDS = 15 * 60
 
 function messageBody(message) {
-  return message.revoked ? TOMBSTONE_TEXT : message.text
+  return message.revoked ? tombstoneText(message) : message.text
 }
 
 // The only links the Plugin makes clickable: the map link of a location. Other text stays plain.
@@ -124,7 +130,7 @@ function quoteView(message) {
   var quote = message.quote
   if (!quote) return null
   var unverified = quote.verified === false
-  var text = String(quote.revoked ? TOMBSTONE_TEXT : quote.text).replace(/\s+/g, " ").trim()
+  var text = String(quote.revoked ? tombstoneText(quote) : quote.text).replace(/\s+/g, " ").trim()
   if (text.length > QUOTE_PREVIEW_LENGTH) text = text.slice(0, QUOTE_PREVIEW_LENGTH - 1) + "…"
   var view = { id: quote.id, sender: quote.fromMe && !unverified ? "You" : Timeline.senderLabel(Object.assign({}, quote, { fromMe: false })), text: text }
   if (unverified) {
