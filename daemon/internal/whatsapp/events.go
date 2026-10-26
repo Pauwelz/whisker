@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
@@ -41,13 +42,26 @@ func (c *Client) handle(evt any) {
 		c.emitSystem(chat, c.systemMessage(chat, types.EmptyJID, types.EmptyJID, SystemIdentity, nil, "", evt.Timestamp))
 	case *events.Disconnected:
 		c.events <- Disconnected{}
+	case *events.StreamReplaced: // another client took the session: connecting again would start a fight over it
+		c.events <- Disconnected{Reason: DisconnectReplaced}
+	case *events.TemporaryBan:
+		c.events <- Disconnected{Reason: DisconnectTemporaryBan}
+	case *events.ConnectFailure:
+		c.events <- Disconnected{Reason: DisconnectConnectFailure}
 	case *events.Message:
+		if ReservedID(evt.Info.ID) {
+			return
+		}
+		c.noteAddressing(evt.Info.Chat, evt.Info.AddressingMode)
 		c.emitLiveAlias(evt.Info.MessageSource)
 		if c.handleProtocol(evt) || c.handleSecretEdit(evt) {
 			return
 		}
 		chat := c.chatOf(evt.Info.MessageSource)
 		if r := evt.Message.GetReactionMessage(); r != nil {
+			if ReservedID(r.GetKey().GetID()) || !validReaction(r.GetText()) { // empty text removes
+				return
+			}
 			c.events <- Reaction{Chat: chat.String(), ID: r.GetKey().GetID(), Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
 			return
 		}
@@ -110,6 +124,7 @@ func (c *Client) handle(evt any) {
 			c.emitSystem(evt.JID, m)
 		}
 	case *events.JoinedGroup:
+		c.noteAddressing(evt.JID, evt.AddressingMode)
 		c.emitSystem(evt.JID, c.joinedGroupMessage(evt))
 	case *events.Pin:
 		c.emitFlag(Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}, evt.FromFullSync)
@@ -133,6 +148,39 @@ func (c *Client) handle(evt any) {
 		c.emitFlag(ReadMarker{JID: c.phone(evt.JID).String(), Unread: !evt.Action.GetRead()}, evt.FromFullSync)
 	}
 }
+
+// maxReactionRunes caps an incoming Reaction. The longest emoji sequences (ZWJ families) are about 11 runes.
+const maxReactionRunes = 16
+
+// validReaction tells that the text of an incoming Reaction is one emoji and no free text. Empty text removes a Reaction and is valid.
+// It accepts symbols (unicode.So), skin tones, ZWJ, variation selector, tag characters, regional indicators and keycaps.
+// shortcut: it does not check that the runes form a real emoji, so "©©©" passes; upgrade with an emoji table if that matters.
+func validReaction(text string) bool {
+	runes := []rune(text)
+	if len(runes) > maxReactionRunes {
+		return false
+	}
+	for i, r := range runes {
+		switch {
+		case r >= 0x2460 && r <= 0x24FF, r >= 0x1F100 && r <= 0x1F1E5, r >= 0x2800 && r <= 0x28FF: // enclosed letters and Braille spell words
+			return false
+		case unicode.Is(unicode.So, r), r >= 0x1F3FB && r <= 0x1F3FF, r == 0x200D, r == 0xFE0F, r >= 0xE0020 && r <= 0xE007F, r >= 0x1F1E6 && r <= 0x1F1FF:
+		case r == 0x20E3: // keycap: [0-9#*] FE0F? 20E3
+			if i == 0 || (runes[i-1] != 0xFE0F && !isKeycapBase(runes[i-1])) {
+				return false
+			}
+		case isKeycapBase(r):
+			if i+1 >= len(runes) || (runes[i+1] != 0xFE0F && runes[i+1] != 0x20E3) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isKeycapBase(r rune) bool { return (r >= '0' && r <= '9') || r == '#' || r == '*' }
 
 // emitOwnDevices reads the device list of the user's own account. whatsmeow sends no event when it changes.
 // It runs off the event loop: the call can block.
@@ -203,10 +251,13 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 		return false // the zero type of a missing ProtocolMessage is REVOKE
 	}
 	chat, id := c.chatOf(evt.Info.MessageSource).String(), pm.GetKey().GetID()
+	if ReservedID(id) && (pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT || pm.GetType() == waE2E.ProtocolMessage_REVOKE) {
+		return true
+	}
 	switch {
 	case pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT:
-		if text := messageText(pm.GetEditedMessage()); text != "" {
-			c.events <- MessageEdited{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text}
+		if edit, ok := c.editOf(evt, id, pm.GetEditedMessage()); ok {
+			c.events <- edit
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
 		c.events <- MessageRevoked{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe}
@@ -240,11 +291,24 @@ func (c *Client) handleSecretEdit(evt *events.Message) bool {
 	if inner := m.GetProtocolMessage().GetEditedMessage(); inner != nil { // the payload can hold the edit as a ProtocolMessage
 		m = inner
 	}
-	if text := messageText(m); text != "" {
-		c.events <- MessageEdited{Chat: c.chatOf(evt.Info.MessageSource).String(), ID: enc.GetTargetMessageKey().GetID(),
-			Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text}
+	if edit, ok := c.editOf(evt, enc.GetTargetMessageKey().GetID(), m); ok {
+		c.events <- edit
 	}
 	return true
+}
+
+// editOf is the MessageEdited that an event makes for the Message id, with m as its new content. It reports false for an edit without text or with a reserved target.
+func (c *Client) editOf(evt *events.Message, id string, m *waE2E.Message) (MessageEdited, bool) {
+	text := messageText(m)
+	if text == "" || ReservedID(id) {
+		return MessageEdited{}, false
+	}
+	mentions := mentionsOf(m)
+	return MessageEdited{
+		Chat: c.chatOf(evt.Info.MessageSource).String(), ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text,
+		Time:     evt.Info.Timestamp.Unix(), // the edit's own time, so an edit that arrives late still applies
+		Mentions: c.phoneStrings(MentionsIn(text, mentions)), MentionsMe: mentionsUser(mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+	}, true
 }
 
 // timerOf is the Disappearing timer in seconds that a Message carries in its ContextInfo, or 0.
@@ -414,7 +478,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 				}
 			}
 			parsed, err := c.cli.ParseWebMessage(jid, hm.GetMessage())
-			if err != nil {
+			if err != nil || ReservedID(parsed.Info.ID) {
 				continue
 			}
 			if body, ok := contentOf(parsed.Message, parsed.IsViewOnce); ok {
@@ -436,7 +500,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 func historyReactions(rs []*waWeb.Reaction, phone func(string) string) []HistoryReaction {
 	var out []HistoryReaction
 	for _, r := range rs {
-		if r.GetText() == "" {
+		if r.GetText() == "" || !validReaction(r.GetText()) { // the empty text of a removed Reaction is no entry
 			continue
 		}
 		key := r.GetKey()

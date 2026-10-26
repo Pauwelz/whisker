@@ -8,3 +8,8 @@
 {"dir":"whatsapp","event":{"kind":"disconnected"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"disconnected","params":{}}}
 {"dir":"view","expect":{"connection":"offline"}}
+{"dir":"whatsapp","event":{"kind":"connected"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
+{"dir":"whatsapp","event":{"kind":"disconnected","reason":"stream-replaced"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"disconnected","params":{"reason":"stream-replaced"}}}
+{"dir":"view","expect":{"connection":"offline","offlineReason":"stream-replaced"}}

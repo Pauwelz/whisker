@@ -22,6 +22,10 @@ func SystemID(chat, actor string, s System, time int64) string {
 	return "sys-" + hex.EncodeToString(sum[:12])
 }
 
+// ReservedID tells that an ID is in the space of SystemID. A remote Message, or the target of a remote Quote, edit, revoke or Reaction, must not use it:
+// the ID is a hash of public facts, so a Participant could pre-send a Message under it and hide the System Message.
+func ReservedID(id string) bool { return strings.HasPrefix(id, "sys-") }
+
 // systemMessage builds a System Message of a Chat. actor is who made the change (empty when unknown), alt its phone JID if known.
 // The actor and the targets become canonical phone JIDs, and the user becomes FromMe and the "" target, so SystemID matches across sources.
 func (c *Client) systemMessage(chat, actor, alt types.JID, kind string, targets []types.JID, value string, at time.Time) Message {

@@ -118,9 +118,17 @@ The Daemon sends these after `linked`. The Plugin starts as "connecting" after `
 | Notification | Params | Meaning |
 |---|---|---|
 | `connected` | none | The connection to WhatsApp is up. The Daemon then sends every `pending` Message. |
-| `disconnected` | none | The connection is down, or a connect of a linked Profile failed. The Plugin shows "Offline" and dims the bar icon. |
+| `disconnected` | `reason` (optional) | The connection is down, or a connect of a linked Profile failed. The Plugin shows "Offline" and dims the bar icon. `reason` is set when WhatsApp ended the session and the Daemon does not connect again by itself (see below). |
 
 After a failed connect of a linked Profile, the Daemon sends `disconnected` and connects again after 5 s, again and again. WhatsApp reconnects by itself after a connection that was up.
+
+Reasons of `disconnected`. The Go source of truth is `daemon/internal/whatsapp/whatsapp.go`. After any of them the Daemon does not connect again by itself.
+
+| Reason | Meaning |
+|---|---|
+| `stream-replaced` | Another client took over the session. A reconnect would start a fight over it. |
+| `temporary-ban` | WhatsApp banned the account for a while. |
+| `connect-failure` | WhatsApp refused the connection with a code that whatsmeow does not retry. |
 
 Fixture: `contract/fixtures/connection.jsonl`.
 
@@ -205,6 +213,7 @@ Fixtures: `disappearing-expire.jsonl`, `disappearing-expire-location.jsonl`, `di
 A System Message records a change to a Chat. The Daemon stores each one as a Message, from live events and from History Sync, and returns it in time order. These kinds exist: a Participant was added, joined using an invite link, left or was removed, was made an admin or no longer is. The subject, the description or the group icon changed. The group was created, or the Disappearing timer changed. Two kinds are about trust: the security code of a contact changed ("Security code changed", in the Direct Chat of the contact), and a new device was linked to the account of the user ("A new device was linked to your account", in the own Direct Chat). The timer kind applies to every Chat, the trust kinds to Direct Chats, the other kinds to Group Chats only. WhatsApp sends more kinds of change; the Daemon drops them.
 
 - The Daemon stores the change as data and builds `text` when it reads the Message, with the name rule. A later Phone Contact name replaces a number. The user is "You" at the start of the line and "you" in other places.
+- The Daemon drops an incoming Message with an ID that starts with `sys-`, in live events and in History Sync. It also drops a Quote, edit, revoke or Reaction that targets such an ID. A Participant cannot hide a System Message this way.
 - The ID is `sys-` and a hash of the change and its time in whole seconds. A live change and its History Sync copy have one ID, so the Chat shows it once.
 - A System Message is quiet: no notification, no Read Marker, and the Chat keeps its place in the Chat list. It never expires.
 - `chat.react`, `chat.edit`, `chat.revoke` and a `quote` of `chat.send` or `draft.set` refuse a System Message with -32006, as for an unknown Message.
@@ -456,15 +465,15 @@ Params: `chat`, `id` and `text` (not blank, at most 65536 characters). Valid onc
 
 Error -32006 means the Message cannot be edited (unknown, not the user's, not sent yet, a Tombstone, too old, has mentions, or a blank or too long text). Error -32007 means WhatsApp could not be reached (offline or a failed call): nothing changed. The call blocks the Daemon for up to 15 s.
 
-An edit from another device, or from another Participant, arrives as `messageChanged` with `edited: true`. The Daemon drops an edit from someone other than the author. Fixture: `chat-edit.jsonl`.
+An edit from another device, or from another Participant, arrives as `messageChanged` with `edited: true`. The Daemon drops an edit from someone other than the author. It also drops an edit that is more than 15 minutes (`EditWindow`) after the Message time. The time of the edit comes from the edit itself, not from the arrival, so a late delivery still applies. An applied edit also replaces the mentions and the mention flag of the Message. Fixture: `chat-edit.jsonl`.
 
 ### `chat.react`
 
-Params: `chat`, `id` and `emoji`. Valid once the Daemon is `ready` and linked. The `emoji` is one of the six defaults of WhatsApp (👍 ❤️ 😂 😮 😢 🙏), or empty to remove the Reaction. The Go list is `ReactionEmoji` in `daemon/internal/contract/react.go`; the Plugin mirrors it as `REACTION_EMOJI`.
+Params: `chat`, `id` and `emoji`. Valid once the Daemon is `ready` and linked. The `emoji` is one of the six defaults of WhatsApp (👍 ❤️ 😂 😮 😢 🙏), or empty to remove the Reaction. The Go list is `ReactionEmoji` in `daemon/internal/whatsapp/whatsapp.go`; the Plugin mirrors it as `REACTION_EMOJI`.
 
 A Participant has one Reaction per Message, so a new `emoji` replaces the old one. The Message can be anyone's, but not a Tombstone. The Daemon sends the Reaction to WhatsApp, stores it, answers `{"message": {...}}` and sends `messageChanged`.
 
-A Reaction from another device or another Participant arrives as `messageChanged` too. A Reaction on an unknown Message sends nothing. Error -32006 means an unknown or revoked Message or an emoji that is not allowed. Error -32007 means WhatsApp could not be reached: nothing changed. Fixtures: `chat-reaction.jsonl`, `read-reaction-quote.jsonl`.
+A Reaction from another device or another Participant arrives as `messageChanged` too. The Daemon drops an incoming Reaction whose text is not one emoji (symbols, skin tones, joined sequences, flags and keycaps, at most 16 characters), live and in History Sync. Any emoji is allowed there; only `chat.react` is limited to the six. A Reaction on an unknown Message sends nothing. Error -32006 means an unknown or revoked Message or an emoji that is not allowed. Error -32007 means WhatsApp could not be reached: nothing changed. Fixtures: `chat-reaction.jsonl`, `read-reaction-quote.jsonl`.
 
 ### `chat.markUnread`
 

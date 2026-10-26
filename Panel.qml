@@ -310,6 +310,7 @@ Panel {
         Text {
           visible: root.parts.banner
           width: parent.width
+          wrapMode: Text.Wrap
           text: Daemon.connectionBanner(root.view)
           color: root.view.connection === "offline" ? Color.urgent : root.contentForeground
           font.family: root.contentFontFamily

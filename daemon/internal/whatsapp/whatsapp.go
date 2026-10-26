@@ -390,12 +390,16 @@ type Receipt struct {
 
 // MessageEdited means a Participant, or another device of the user, changed the text of a stored Message.
 // Sender and FromMe name the editor: only the author can edit a Message.
+// Time is the time of the edit itself in Unix seconds, not of its delivery. Mentions and MentionsMe are those of the new text.
 type MessageEdited struct {
-	Chat   string `json:"chat"`
-	ID     string `json:"id"`
-	Sender string `json:"sender"`
-	FromMe bool   `json:"fromMe"`
-	Text   string `json:"text"`
+	Chat       string   `json:"chat"`
+	ID         string   `json:"id"`
+	Sender     string   `json:"sender"`
+	FromMe     bool     `json:"fromMe"`
+	Text       string   `json:"text"`
+	Time       int64    `json:"time"`
+	Mentions   []string `json:"mentions"`
+	MentionsMe bool     `json:"mentionsMe"`
 }
 
 // MessageRevoked means a stored Message was revoked for everyone.
@@ -454,8 +458,11 @@ type ChatAlias struct {
 }
 
 // Connected and Disconnected report the connection to WhatsApp.
+// Reason on Disconnected is empty for a plain drop, which whatsmeow reconnects by itself, or one of the Disconnect reasons below.
 type Connected struct{}
-type Disconnected struct{}
+type Disconnected struct {
+	Reason string `json:"reason"`
+}
 
 // OwnDevices is the device list of the user's own account, read on each connection. IDs are the device ids.
 // Notice is the System Message to store when the list holds a device that the Chat store has not seen. Failed means the call failed.
@@ -497,6 +504,16 @@ func (PictureChanged) isEvent() {}
 func (DeletedForMe) isEvent()   {}
 func (ChatCleared) isEvent()    {}
 func (ChatDeleted) isEvent()    {}
+
+// ReactionEmoji is the Reaction picker: the six default emoji of WhatsApp. The user can send only these. Incoming Reactions follow validReaction.
+var ReactionEmoji = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
+
+// Reasons for Disconnected. whatsmeow does not reconnect after any of them. docs/contract.md mirrors this list.
+const (
+	DisconnectReplaced       = "stream-replaced"
+	DisconnectTemporaryBan   = "temporary-ban"
+	DisconnectConnectFailure = "connect-failure"
+)
 
 // Reasons for LinkFailed. docs/contract.md mirrors this list.
 const (

@@ -185,9 +185,13 @@ func (b *outbox) connected() bool {
 	return true
 }
 
-func (b *outbox) disconnected() bool {
+func (b *outbox) disconnected(reason string) bool {
 	b.online = false
-	return b.send(notification("disconnected", nil))
+	var params map[string]any
+	if reason != "" {
+		params = map[string]any{"reason": reason}
+	}
+	return b.send(notification("disconnected", params))
 }
 
 // incomingMessage stores a new Message and tells the Plugin: the Message, the Chat list, and the desktop notification if the policy says so.
@@ -230,7 +234,7 @@ func (b *outbox) systemMessage(ev whatsapp.NewMessage) bool {
 }
 
 func (b *outbox) edited(ev whatsapp.MessageEdited) bool {
-	return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Edit(ev.Chat, ev.ID, ev.Sender, ev.FromMe, ev.Text) })
+	return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Edit(ev, EditWindow) })
 }
 
 func (b *outbox) revoked(ev whatsapp.MessageRevoked) bool {

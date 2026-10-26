@@ -2,7 +2,9 @@ package whatsapp
 
 import (
 	"context"
+	"reflect"
 	"testing"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waCommon"
@@ -44,7 +46,7 @@ func TestAnEncryptedEditOfAnotherPersonBecomesMessageEdited(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.handle(&events.Message{
-		Info: types.MessageInfo{ID: "m2", MessageSource: types.MessageSource{Chat: other, Sender: other}},
+		Info: types.MessageInfo{ID: "m2", MessageSource: types.MessageSource{Chat: other, Sender: other}, Timestamp: time.Unix(5000, 0)},
 		Message: &waE2E.Message{SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{
 			SecretEncType:    waE2E.SecretEncryptedMessage_MESSAGE_EDIT.Enum(),
 			TargetMessageKey: &waCommon.MessageKey{RemoteJID: proto.String(other.String()), FromMe: proto.Bool(false), ID: proto.String("m1")},
@@ -55,8 +57,27 @@ func TestAnEncryptedEditOfAnotherPersonBecomesMessageEdited(t *testing.T) {
 	if len(c.events) != 1 {
 		t.Fatalf("got %d events, want one MessageEdited", len(c.events))
 	}
-	want := MessageEdited{Chat: other.String(), ID: "m1", Sender: other.String(), Text: "fixed typo"}
-	if got := <-c.events; got != want {
+	want := MessageEdited{Chat: other.String(), ID: "m1", Sender: other.String(), Text: "fixed typo", Time: 5000}
+	if got := <-c.events; !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+// An edit carries its own time and the mentions of its new text, so the store can check the window and update the highlight.
+func TestAnEditCarriesItsTimeAndMentions(t *testing.T) {
+	c := systemClient()
+	edit := &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+		Text:        proto.String("hi @3160"),
+		ContextInfo: &waE2E.ContextInfo{MentionedJID: []string{sysOwn.String(), "9@s.whatsapp.net"}},
+	}}
+	evt := groupMessage("e1", &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+		Type: waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(), Key: &waCommon.MessageKey{ID: proto.String("m1")}, EditedMessage: edit,
+	}})
+	if !c.handleProtocol(evt) {
+		t.Fatal("handleProtocol = false")
+	}
+	got := (<-c.events).(MessageEdited)
+	if got.Time != sysAt.Unix() || !got.MentionsMe || !reflect.DeepEqual(got.Mentions, []string{sysOwn.String()}) {
+		t.Errorf("got %+v, want Time %d, MentionsMe and only the mention that the text holds", got, sysAt.Unix())
 	}
 }

@@ -7,8 +7,10 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +49,10 @@ type Client struct {
 
 	syncMu  sync.Mutex
 	pending []Event // the flag events of a full App State sync, until it completes
+
+	// lidGroups holds the addressing mode of each Group Chat that a live event or a joined-group event showed: true for LID.
+	// shortcut: only the current run knows it, so the first reply or Reaction in a group after a start, before any live event of it, still sends the phone JID. Upgrade with GetGroupInfo.
+	lidGroups sync.Map
 }
 
 // SetDeviceIdentity names the linked device "whisker (hostname)" on the phone. Call it once, before the first connect and pair.
@@ -225,6 +231,23 @@ func (c *Client) Lookup(phone string) (string, string, error) {
 // maxPictureBytes caps the preview download. A preview is a few KiB, so a larger body is not one.
 const maxPictureBytes = 512 << 10
 
+// errPicture is the one error of a failed picture download. Its text holds no URL.
+var errPicture = errors.New("picture download failed")
+
+// pictureURLOK tells that a picture URL is https on a WhatsApp CDN host. The URL comes from the server, so the Daemon checks it before it fetches.
+func pictureURLOK(u *url.URL) bool {
+	host := strings.ToLower(u.Hostname())
+	return u.Scheme == "https" && (strings.HasSuffix(host, ".whatsapp.net") || strings.HasSuffix(host, ".fbcdn.net"))
+}
+
+// pictureClient fetches pictures. A redirect must also stay on a WhatsApp CDN host. It keeps the limit of 10 redirects of the default client.
+var pictureClient = &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 || !pictureURLOK(req.URL) {
+		return errPicture
+	}
+	return nil
+}}
+
 func (c *Client) ProfilePicture(chat, knownID string) (string, []byte, error) {
 	jid, err := types.ParseJID(chat)
 	if err != nil {
@@ -244,21 +267,25 @@ func (c *Client) ProfilePicture(chat, knownID string) (string, []byte, error) {
 	case info == nil: // the known picture is still current
 		return knownID, nil, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, info.URL, nil)
-	if err != nil {
-		return "", nil, err
+	u, err := url.Parse(info.URL)
+	if err != nil || !pictureURLOK(u) {
+		return "", nil, errPicture
 	}
-	resp, err := http.DefaultClient.Do(req)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return "", nil, errors.New("picture download failed") // the error text holds the URL
+		return "", nil, errPicture
+	}
+	resp, err := pictureClient.Do(req)
+	if err != nil {
+		return "", nil, errPicture // the error text holds the URL
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", nil, errors.New("picture download failed")
+		return "", nil, errPicture
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxPictureBytes+1))
 	if err != nil || len(data) > maxPictureBytes {
-		return "", nil, errors.New("picture download failed")
+		return "", nil, errPicture
 	}
 	return info.ID, data, nil
 }
@@ -284,7 +311,7 @@ func (c *Client) kindOf(jid types.JID) string {
 // quoteOf is the Quote that a Message carries, or nil. The user's own JID maps to the empty sender.
 func (c *Client) quoteOf(m *waE2E.Message) *Quote {
 	ctx := m.GetExtendedTextMessage().GetContextInfo()
-	if ctx.GetStanzaID() == "" {
+	if ctx.GetStanzaID() == "" || ReservedID(ctx.GetStanzaID()) {
 		return nil
 	}
 	sender := c.phoneString(ctx.GetParticipant())

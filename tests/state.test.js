@@ -452,7 +452,7 @@ test("every notification with an effect is documented in docs/contract.md", () =
 });
 
 test("REACTION_EMOJI agrees with ReactionEmoji in Go", () => {
-  const go = fs.readFileSync(path.join(root, "daemon", "internal", "contract", "react.go"), "utf8");
+  const go = fs.readFileSync(path.join(root, "daemon", "internal", "whatsapp", "whatsapp.go"), "utf8");
   const list = /ReactionEmoji = \[\]string\{([^}]*)\}/.exec(go)[1];
   assert.deepEqual(Array.from(Message.REACTION_EMOJI), list.split(",").map((e) => JSON.parse(e.trim())));
 });
@@ -841,3 +841,11 @@ test("the keyring notice stays through later frames and ends with a new ready", 
   state = Daemon.applyFrame(state, { method: "ready", params: { keyringPlain: false } });
   assert.equal(Daemon.keyringNotice(state), "");
 });
+
+const linked = Daemon.applyFrame(Daemon.initialState(), { method: "linked" });
+test("the Offline banner shows why WhatsApp ended the session, and a connect clears it", () => {
+  let state = Daemon.applyFrame(Daemon.applyFrame(linked, { method: "connected" }), { method: "disconnected", params: { reason: "stream-replaced" } })
+  assert.match(Daemon.connectionBanner(state), /^Offline\n.*another device/)
+  assert.equal(Daemon.connectionBanner(Daemon.applyFrame(linked, { method: "disconnected" })), "Offline")
+  assert.equal(Daemon.connectionBanner(Daemon.applyFrame(state, { method: "connected" })), "")
+})

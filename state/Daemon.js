@@ -171,8 +171,8 @@ var NOTIFICATIONS = {
     }
   },
   chatsChanged: { refreshesChats: true },
-  connected: { fold: function (state) { return Common.withChanges(state, { connection: "online" }) } },
-  disconnected: { fold: function (state) { return Common.withChanges(state, { connection: "offline", activity: {} }) } },
+  connected: { fold: function (state) { return Common.withChanges(state, { connection: "online", offlineReason: "" }) } },
+  disconnected: { fold: function (state, params) { return Common.withChanges(state, { connection: "offline", offlineReason: (params && params.reason) || "", activity: {} }) } },
   messageExpired: { fold: Timeline.removeMessage },
   chatCleared: { fold: Timeline.clearMessages, refreshesChats: true },
   chatRemoved: { fold: ChatList.chatRemoved, refreshesChats: true },
@@ -325,10 +325,18 @@ function foldChatResult(state, frame) {
   return null
 }
 
-// "Connecting…" or "Offline" while the connection is not up, otherwise "".
+// Why the Daemon is offline, by the `reason` of `disconnected`. Mirror of the Disconnect reasons in docs/contract.md.
+var OFFLINE_REASONS = {
+  "stream-replaced": "WhatsApp is open on another device. Restart whisker to reconnect.",
+  "temporary-ban": "WhatsApp banned this account for a while.",
+  "connect-failure": "WhatsApp refused the connection."
+}
+
+// "Connecting…" or "Offline" (with the reason, when there is one) while the connection is not up, otherwise "".
 function connectionBanner(state) {
   if (state.connection === "connecting") return "Connecting…"
-  return state.connection === "offline" ? "Offline" : ""
+  if (state.connection !== "offline") return ""
+  return OFFLINE_REASONS[state.offlineReason] ? "Offline\n" + OFFLINE_REASONS[state.offlineReason] : "Offline"
 }
 
 // The bar icon dims unless the Plugin is ready or linked, and while offline.
