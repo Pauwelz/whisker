@@ -36,7 +36,7 @@ The Release workflow (`.github/workflows/release.yml`) does all release steps.
 The workflow stops before it changes anything when:
 
 - it does not run on `dev`,
-- V is not in SemVer form,
+- V does not match the SemVer regex from semver.org,
 - the tag `vV` already exists,
 - `CHANGELOG.md` has no entries under `[Unreleased]`.
 
@@ -44,7 +44,7 @@ Then it does the manual steps below in the same order, as `github-actions[bot]`.
 It pushes the release commit to `dev` before it publishes the release.
 If `dev` moved after the run started, this push fails and nothing is published.
 The release notes are the `[V]` section of `CHANGELOG.md`.
-A V with a `-`, such as `1.0.0-rc.1`, becomes a pre-release and does not move `main`.
+A V with a pre-release part, such as `1.0.0-rc.1`, becomes a pre-release and does not move `main`.
 
 ## Manual release steps
 

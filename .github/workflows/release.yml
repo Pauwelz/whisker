@@ -25,8 +25,11 @@ jobs:
       - name: Check the guards
         run: |
           [ "$GITHUB_REF" = refs/heads/dev ] || { echo "::error::Run the Release workflow from dev."; exit 1; }
-          echo "$V" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$' \
-            || { echo "::error::$V is not a SemVer version."; exit 1; }
+          # The regex from semver.org in ERE form. [[ =~ ]] matches the whole input, also one with a newline.
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
+          [[ "$V" =~ $semver ]] || { echo "::error::$V is not a SemVer version."; exit 1; }
+          # A pre-release part is group 4. A '-' in the build metadata does not count.
+          if [ -n "${BASH_REMATCH[4]}" ]; then echo PRERELEASE=true; else echo PRERELEASE=false; fi >> "$GITHUB_ENV"
           if git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null; then
             echo "::error::Tag v$V already exists."; exit 1
           fi
@@ -63,7 +66,7 @@ jobs:
 
       - name: Publish the release
         run: |
-          case "$V" in *-*) pre=--prerelease ;; *) pre= ;; esac
+          pre=; [ "$PRERELEASE" = false ] || pre=--prerelease
           scripts/release-notes.sh "$V" > "$RUNNER_TEMP/notes.md"
           gh release create "v$V" bin/whisker-daemon-linux-amd64 \
             --target "$(git rev-parse HEAD)" $pre \
@@ -83,5 +86,5 @@ jobs:
           [ "$(bin/whisker-daemon --version)" = "$V" ]
 
       - name: Fast-forward main
-        if: ${{ !contains(inputs.version, '-') }}
+        if: env.PRERELEASE == 'false'
         run: git push origin HEAD:main
