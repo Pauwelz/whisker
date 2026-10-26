@@ -2,6 +2,7 @@ package keystore
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,14 +17,19 @@ func PlainKeyring(dataHome string) bool {
 	dir := filepath.Join(dataHome, "keyrings")
 	name := "login"
 	if b, err := os.ReadFile(filepath.Join(dir, "default")); err == nil {
-		name = strings.TrimSpace(string(b))
+		if n := strings.TrimSpace(string(b)); n != "" {
+			name = n
+		}
 	}
-	f, err := os.Open(filepath.Join(dir, filepath.Base(name)+".keyring"))
+	if name != filepath.Base(name) { // a name with a path could point outside the keyrings folder
+		return false
+	}
+	f, err := os.Open(filepath.Join(dir, name+".keyring"))
 	if err != nil {
 		return false
 	}
 	defer f.Close()
 	head := make([]byte, len(plainHeader))
-	n, _ := f.Read(head)
+	n, _ := io.ReadFull(f, head)
 	return bytes.Equal(head[:n], plainHeader)
 }

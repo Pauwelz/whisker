@@ -31,7 +31,9 @@ func TestPlainKeyring(t *testing.T) {
 		{"no default file falls back to login", map[string]string{"login.keyring": plain}, true},
 		{"the default file wins over login", map[string]string{"default": "other", "other.keyring": encrypted, "login.keyring": plain}, false},
 		{"missing keyring file", map[string]string{"default": "Default_keyring"}, false},
-		{"name with a path is not followed", map[string]string{"default": "../x"}, false},
+		{"relative path in the name is not followed", map[string]string{"default": "../x", "x.keyring": plain}, false},
+		{"absolute path in the name is not followed", map[string]string{"default": "/etc/x", "x.keyring": plain}, false},
+		{"empty default file falls back to login", map[string]string{"default": " \n", "login.keyring": plain}, true},
 		{"empty file", map[string]string{"login.keyring": ""}, false},
 	}
 	for _, tt := range tests {
