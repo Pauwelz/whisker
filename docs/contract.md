@@ -235,6 +235,8 @@ Params, all optional: `offset` (default 0), `limit` (default 50, at most 200), `
 - `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
 - Error -32003 means the chat store failed.
 
+The Daemon cleans every name that another person chooses before it stores the name: it removes control, line, paragraph and format characters (not ZWJ, ZWNJ or flag tag characters) and trims white space. A Push Name has at most 25 runes and a group subject at most 100. A Phone Contact name and a document file name are cleaned but not cut. A name that is empty after cleaning counts as no name.
+
 Name rule, resolved by the Daemon at list time. A Push Name is marked as "~ name +number" on every surface (`pushNameOnly` on a Chat, `senderPush` on a Message):
 
 1. A Group Chat shows its subject.

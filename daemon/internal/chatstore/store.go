@@ -344,7 +344,9 @@ func (s *Store) inTx(fn func(*sql.Tx) error) error {
 }
 
 // setName sets one name column. column is a fixed string from this file, never user input.
+// It cleans the name; a name that is empty after cleaning is stored as no name.
 func setName(db execer, column, jid, name string) error {
+	name = whatsapp.CleanName(name, nameCap(column))
 	_, err := db.Exec("INSERT INTO names (jid, "+column+") VALUES (?, ?) ON CONFLICT(jid) DO UPDATE SET "+column+" = excluded."+column, jid, name)
 	return err
 }
@@ -472,6 +474,14 @@ func kindOrDirect(kind string) string {
 func boolInt(b bool) int64 {
 	if b {
 		return 1
+	}
+	return 0
+}
+
+// nameCap is the rune cap of a name column: only a Push Name has one.
+func nameCap(column string) int {
+	if column == "push_name" {
+		return whatsapp.MaxPushName
 	}
 	return 0
 }

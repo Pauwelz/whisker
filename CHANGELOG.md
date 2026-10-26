@@ -18,6 +18,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- Names that other people choose are now cleaned before whisker stores them. This covers Push Names, Phone Contact names, group subjects and document file names. whisker removes newline, control, bidi and zero-width characters, so a name like "Mom" plus blank lines, or one that flips the text direction, can no longer change how the Chat list, the Chat header, the timeline or a notification looks. Emoji, Persian and Indic text, and flags such as England stay as they are. A Push Name has at most 25 characters and a group subject at most 100. An update cleans the names that chat.db already holds.
 - Only the author of a message can now delete it for everyone in whisker. Before, any member of a shared chat could make any message, including yours, show as deleted and remove its media.
 - A name that a stranger chose for themselves now shows as "~ name +number" in the Chat list, the Chat header and notifications, as it already did in the timeline. Before, anyone could appear as "Mom" there. Names with a phone contact and group names stay as they are.
 - Notifications no longer pass message text and names to a helper process, where other local users could read them.

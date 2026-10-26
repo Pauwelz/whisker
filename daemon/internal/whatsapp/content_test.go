@@ -128,3 +128,10 @@ func TestMediaOfTreatsAHugeFileLengthAsUnknown(t *testing.T) {
 		t.Errorf("Size = %d, want MaxInt64", got)
 	}
 }
+
+func TestDocumentNameIsCleaned(t *testing.T) {
+	m := mediaOf(&waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{FileName: proto.String("invoice‮fdp.desktop")}})
+	if m.Name != "invoicefdp.desktop" {
+		t.Errorf("Name = %q", m.Name)
+	}
+}

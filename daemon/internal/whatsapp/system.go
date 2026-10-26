@@ -90,7 +90,7 @@ func (c *Client) groupInfoMessages(evt *events.GroupInfo) []Message {
 		out = append(out, sys(SystemDemote, evt.Demote, ""))
 	}
 	if evt.Name != nil {
-		out = append(out, sys(SystemSubject, nil, evt.Name.Name))
+		out = append(out, sys(SystemSubject, nil, CleanName(evt.Name.Name, MaxGroupSubject)))
 	}
 	if evt.Topic != nil {
 		out = append(out, sys(SystemDescription, nil, deletedIf(evt.Topic.TopicDeleted)))
@@ -172,7 +172,7 @@ func (c *Client) stubMessage(chat types.JID, wm *waWeb.WebMessageInfo) (Message,
 	value := ""
 	switch kind {
 	case SystemSubject:
-		value = first
+		value = CleanName(first, MaxGroupSubject)
 	case SystemDescription:
 		value = deletedIf(first == "")
 	case SystemIcon:
