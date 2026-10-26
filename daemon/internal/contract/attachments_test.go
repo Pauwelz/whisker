@@ -238,3 +238,19 @@ func TestSendMediaKeepsADocumentByteExact(t *testing.T) {
 	}
 	r.finish()
 }
+
+func TestSendMediaWithAValidFileThenABrokenImageRollsBack(t *testing.T) {
+	r := linkedRunner(t)
+	good := writeFile(t, "a.txt", []byte("hello"))
+	bad := writeFile(t, "bad.jpg", []byte("not a jpeg"))
+	sendMedia(r, 1, []string{good, bad}, "")
+	want := `"data":{"paths":` + mustJSON([]string{bad}) + `}`
+	if f := r.nextFrame(); !strings.Contains(f, "-32013") || !strings.Contains(f, want) {
+		t.Fatalf("frame = %s, want -32013 for %s", f, bad)
+	}
+	r.send(`{"jsonrpc":"2.0","id":3,"method":"chat.messages","params":{"chat":"1@s.whatsapp.net"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages":[]`) {
+		t.Errorf("frame = %s, want the first Message rolled back", f)
+	}
+	r.finish()
+}

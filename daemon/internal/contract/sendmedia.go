@@ -50,7 +50,8 @@ func openSendable(path string) (*os.File, os.FileInfo, error) {
 	switch {
 	case err == nil:
 		f = os.NewFile(uintptr(fd), path)
-	case errors.Is(err, unix.ENOSYS): // an old kernel: O_NOFOLLOW still refuses a symlink in the last part
+	case errors.Is(err, unix.ENOSYS): // shortcut: a seccomp sandbox can return EPERM for openat2, upgrade if users report it
+		// an old kernel: O_NOFOLLOW still refuses a symlink in the last part
 		f, err = os.OpenFile(path, flags, 0)
 		if err != nil {
 			return nil, nil, err
@@ -64,6 +65,27 @@ func openSendable(path string) (*os.File, os.FileInfo, error) {
 		return nil, nil, errors.New("not sendable")
 	}
 	return f, st, nil
+}
+
+// exactReader reads one more byte than `want` and fails when the file is not exactly `want` bytes: it grew or shrank after the check.
+type exactReader struct {
+	r    io.Reader
+	want int64
+	n    int64
+}
+
+var errSizeChanged = errors.New("file size changed")
+
+func (e *exactReader) Read(p []byte) (int, error) {
+	if left := e.want + 1 - e.n; int64(len(p)) > left {
+		p = p[:left]
+	}
+	n, err := e.r.Read(p)
+	e.n += int64(n)
+	if e.n > e.want || (err == io.EOF && e.n != e.want) {
+		return n, errSizeChanged
+	}
+	return n, err
 }
 
 // statSendable checks a path with openSendable. `draft.set` and `draft.get` use it too, so all agree on what can be sent.
@@ -152,10 +174,10 @@ func (s *session) storeMedia(chat, path, caption string) (chatstore.Message, err
 	if sendableImages[m.Mime] {
 		m.Kind, m.Name = media.Image, ""
 	}
-	var plain io.Reader = io.LimitReader(f, maxSendBytes+1) // a file that grew since the open is cut
+	var plain io.Reader = &exactReader{r: f, want: st.Size()}
 	if m.Kind == media.Image {
-		raw, err := io.ReadAll(io.LimitReader(f, maxSendBytes+1))
-		if err != nil || len(raw) > maxSendBytes {
+		raw, err := io.ReadAll(&exactReader{r: f, want: st.Size()})
+		if err != nil {
 			return chatstore.Message{}, errMediaCopy
 		}
 		stripped, err := media.StripMetadata(m.Mime, raw)

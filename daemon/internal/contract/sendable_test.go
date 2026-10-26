@@ -1,8 +1,10 @@
 package contract
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -51,6 +53,19 @@ func TestOpenSendableRefusesAFIFOAndALinkToDevZeroWithoutBlocking(t *testing.T) 
 			}
 		case <-time.After(2 * time.Second):
 			t.Fatalf("openSendable blocked on %s", path)
+		}
+	}
+}
+
+func TestExactReaderRefusesAFileThatGrewOrShrank(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		data string
+		ok   bool
+	}{{"same", "abcd", true}, {"grew", "abcde", false}, {"shrank", "abc", false}} {
+		_, err := io.ReadAll(&exactReader{r: strings.NewReader(c.data), want: 4})
+		if (err == nil) != c.ok {
+			t.Errorf("%s: err = %v", c.name, err)
 		}
 	}
 }

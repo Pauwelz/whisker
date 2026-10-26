@@ -94,6 +94,13 @@ func (s *session) pasted(r pasteResult) int {
 		return fail(errChatStore, msgChatStore)
 	}
 	if len(r.files) > 0 {
+		for i, f := range r.files {
+			real, err := resolveSendable(f)
+			if err != nil {
+				return fail(errNotSendable, msgNotSendable)
+			}
+			r.files[i] = real
+		}
 		added := 0
 		for _, f := range r.files {
 			if !slices.Contains(stored.Attachments, f) {
@@ -102,13 +109,6 @@ func (s *session) pasted(r pasteResult) int {
 		}
 		if len(stored.Attachments)+added > maxAttachments {
 			return fail(errTooManyFiles, msgTooManyFiles)
-		}
-		for i, f := range r.files {
-			real, err := resolveSendable(f)
-			if err != nil {
-				return fail(errNotSendable, msgNotSendable)
-			}
-			r.files[i] = real
 		}
 		return reply(r.files...)
 	}
@@ -186,6 +186,9 @@ func pastedDir() string {
 	rt := os.Getenv("XDG_RUNTIME_DIR")
 	if rt == "" {
 		return ""
+	}
+	if real, err := filepath.EvalSymlinks(rt); err == nil {
+		rt = real // the Daemon refuses a path with a symlink, so the paste folder must be real
 	}
 	return filepath.Join(rt, "whisker", "pasted")
 }
