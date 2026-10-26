@@ -57,7 +57,13 @@ Item {
       Layout.maximumWidth: parent.width * 0.5
       elide: Text.ElideRight
       textFormat: Text.PlainText
-      text: row.chat.name
+      text: ChatList.chatName(row.chat)
+      font.bold: row.chat.unread
+    }
+    Mark {
+      visible: text !== ""
+      textFormat: Text.PlainText
+      text: ChatList.chatNumber(row.chat)
       font.bold: row.chat.unread
     }
     Mark {

@@ -65,8 +65,16 @@ func (n *notifier) show(ev whatsapp.NewMessage) {
 			body = mediaLabels[string(m.Media.Kind)]
 		}
 		if chat.Kind == whatsapp.KindGroup && m.SenderName != "" {
-			body = m.SenderName + ": " + body
+			sender := m.SenderName
+			if m.SenderPush {
+				sender = chatstore.MarkedName(sender, m.Sender)
+			}
+			body = sender + ": " + body
 		}
 	}
-	n.desktop.Notify(desktop.Notification{Summary: chat.Name, Body: body, Chat: chat.JID})
+	summary := chat.Name
+	if chat.PushNameOnly {
+		summary = chatstore.MarkedName(summary, chat.JID)
+	}
+	n.desktop.Notify(desktop.Notification{Summary: summary, Body: body, Chat: chat.JID})
 }

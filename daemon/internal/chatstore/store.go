@@ -25,13 +25,15 @@ func New(db *sql.DB, now func() time.Time) *Store { return &Store{db: db, now: n
 
 // Chat is one row of the Chat list. Name follows the name rule.
 type Chat struct {
-	JID        string `json:"jid"`
-	Kind       string `json:"kind"`
-	Name       string `json:"name"`
-	LastActive int64  `json:"lastActive"`
-	Pinned     bool   `json:"pinned"`
-	Archived   bool   `json:"archived,omitempty"`
-	Muted      bool   `json:"muted"`
+	JID  string `json:"jid"`
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	// PushNameOnly is true when Name is a Push Name: the Chat is not a Group Chat and the phone holds no contact name.
+	PushNameOnly bool  `json:"pushNameOnly,omitempty"`
+	LastActive   int64 `json:"lastActive"`
+	Pinned       bool  `json:"pinned"`
+	Archived     bool  `json:"archived,omitempty"`
+	Muted        bool  `json:"muted"`
 	// MutedUntil is the end of the Mute in Unix seconds, -1 for ever. It is absent when the Chat is not Muted.
 	MutedUntil int64 `json:"mutedUntil,omitempty"`
 	Unread     bool  `json:"unread"`
@@ -216,6 +218,7 @@ func scanChat(rows *sql.Rows) (Chat, error) {
 	}
 	c.Muted = c.MutedUntil != 0
 	c.Name = chatName(c.Kind, subject, contact, push, c.JID)
+	c.PushNameOnly = c.Kind != whatsapp.KindGroup && pushOnly(contact, push)
 	return c, nil
 }
 
@@ -310,6 +313,12 @@ func (s *Store) LIDs() ([]string, error) {
 func participantName(contact, push, jid string) string {
 	return cmp.Or(contact, push, phoneNumber(jid))
 }
+
+// pushOnly is true when the name rule ends at the Push Name: the phone holds no contact name.
+func pushOnly(contact, push string) bool { return contact == "" && push != "" }
+
+// MarkedName is how every surface shows a Push Name: "~ name +number". The "~" tells the user that the Participant chose the name.
+func MarkedName(name, jid string) string { return "~ " + name + " " + phoneNumber(jid) }
 
 // phoneNumber is the last step of the name rule. A JID is user[:device]@server.
 func phoneNumber(jid string) string {

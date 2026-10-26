@@ -6,7 +6,9 @@
 
 // Opens a Chat of the Chat list. `chat` is a Chat of the list: jid, name, kind. Messages arrive with chat.messages.
 function openChat(state, chat) {
-  return Common.withChanges(state, { openChat: { jid: chat.jid, name: chat.name, kind: chat.kind, messages: [], moreMessages: false } })
+  var open = { jid: chat.jid, name: chat.name, kind: chat.kind, messages: [], moreMessages: false }
+  if (chat.pushNameOnly) open.pushNameOnly = true
+  return Common.withChanges(state, { openChat: open })
 }
 
 function closeChat(state) {

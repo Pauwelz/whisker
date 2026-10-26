@@ -134,6 +134,16 @@ function chatSign(chat) {
   return CHAT_SIGNS[chat.kind] || CHAT_SIGNS.direct
 }
 
+// The name of a Chat on a line or in the header. A Push Name only gets "~" in front, and chatNumber shows the number after it.
+// A line elides the name and never the number, so they are two texts.
+function chatName(chat) {
+  return chat.pushNameOnly ? "~ " + chat.name : chat.name
+}
+
+function chatNumber(chat) {
+  return chat.pushNameOnly ? Timeline.phoneOf(chat.jid) : ""
+}
+
 var MAX_COUNT = 99
 
 // The unread mark: the count, a dot when the phone marked the Chat unread without a count, or "".
