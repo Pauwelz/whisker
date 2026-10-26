@@ -3,6 +3,7 @@ package keystore_test
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
@@ -77,5 +78,38 @@ func TestDeleteRemovesTheKeyAndAcceptsAMissingKey(t *testing.T) {
 	}
 	if _, err := fake.Get(); !errors.Is(err, keystore.ErrNotFound) {
 		t.Errorf("key still stored: %v", err)
+	}
+}
+
+// A Delete that timed out still waits in the keyring. A Load after it must not reach the keyring first,
+// or the late Delete removes the key of the new Profile.
+func TestLoadWaitsForATimedOutDelete(t *testing.T) {
+	fake := keystore.NewFake()
+	fake.Lock()
+	clock := clock.NewManual()
+	s := keystore.New(fake, clock)
+
+	deleted := make(chan error, 1)
+	go func() { deleted <- s.Delete() }()
+	for fake.Calls() != "delete" { // the Delete is blocked in the keyring
+		time.Sleep(time.Millisecond)
+	}
+	clock.Fire()
+	if err := <-deleted; !errors.Is(err, keystore.ErrUnavailable) {
+		t.Fatalf("Delete err = %v, want ErrUnavailable", err)
+	}
+
+	loaded := make(chan error, 1)
+	go func() { _, _, err := s.Load(); loaded <- err }()
+	clock.WaitTimer() // Load waits
+	if got := fake.Calls(); got != "delete" {
+		t.Errorf("keyring calls = %q, want only the waiting delete", got)
+	}
+	fake.Unlock()
+	if err := <-loaded; err != nil {
+		t.Fatalf("Load err = %v", err)
+	}
+	if got := fake.Calls(); got != "delete,get,set" {
+		t.Errorf("keyring calls = %q, want delete,get,set", got)
 	}
 }

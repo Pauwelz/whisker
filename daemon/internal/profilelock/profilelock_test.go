@@ -2,11 +2,40 @@ package profilelock_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/profilelock"
 )
+
+func TestCheckRuntimeDir(t *testing.T) {
+	good := t.TempDir()
+	if err := os.Chmod(good, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := profilelock.CheckRuntimeDir(good); err != nil {
+		t.Errorf("private directory refused: %v", err)
+	}
+	open := t.TempDir()
+	if err := os.Chmod(open, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(good, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(good, "link")
+	if err := os.Symlink(good, link); err != nil {
+		t.Fatal(err)
+	}
+	for name, dir := range map[string]string{"symlink": link, "relative": "run/user", "missing": filepath.Join(good, "none"), "open mode": open, "file": file} {
+		if err := profilelock.CheckRuntimeDir(dir); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
 
 func TestSecondAcquireFailsWithInUse(t *testing.T) {
 	dir := t.TempDir()

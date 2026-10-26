@@ -69,7 +69,7 @@ The media folder shows how many media files each chat has and their sizes. It sh
 
 A pasted image waits in `$XDG_RUNTIME_DIR/whisker/pasted` (in memory) until you send or remove it.
 
-Log out in the pop-out also unlinks the device from WhatsApp, and deletes the Profile and the key. It keeps your settings. `omarchy plugin remove` does not delete any of these.
+Log out in the pop-out also unlinks the device from WhatsApp, and deletes the Profile, any `whisker.unreadable-*` folder and the key. It keeps your settings. `omarchy plugin remove` does not delete any of these.
 To delete everything by hand, remove both folders and the keyring item.
 
 The key protects the stores only as well as your keyring. Set a password on the default keyring. Without one, a person with a copy of your files can read the key.

@@ -842,3 +842,33 @@ func mustJSON(v any) string {
 	}
 	return string(b)
 }
+
+// Only a Log out from Settings removes a Profile that Open set aside. An unlink from the phone keeps it.
+func TestOnlyUserLogoutRemovesTheSetAsideProfile(t *testing.T) {
+	for _, byUser := range []bool{false, true} {
+		r := newRunner(t)
+		aside := r.dir + ".unreadable-20260101T000000.000000"
+		if err := os.MkdirAll(aside, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		r.port.SetLinked(true)
+		r.start()
+		r.nextFrame() // ready
+		r.nextFrame() // linked
+		if byUser {
+			r.send(`{"jsonrpc":"2.0","id":1,"method":"profile.logout"}`)
+			r.nextFrame() // result
+		} else {
+			r.currentPort().Emit(whatsapp.LoggedOut{})
+		}
+		for _, want := range []string{"unlinked", "ready"} {
+			if f := r.nextFrame(); !strings.Contains(f, want) {
+				t.Fatalf("frame = %s, want %s", f, want)
+			}
+		}
+		if _, err := os.Stat(aside); (err == nil) == byUser {
+			t.Errorf("by user %v: set-aside folder exists = %v", byUser, err == nil)
+		}
+		r.finish()
+	}
+}

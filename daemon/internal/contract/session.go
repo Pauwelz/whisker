@@ -103,7 +103,11 @@ func (s *session) open() int {
 		s.scheduleMuteEnd()
 		s.pres = newPresenter(s.port, s.prefs, &s.attn, s.logOut)
 		s.ready = true
-		if !s.send(notification("ready", map[string]any{"keyringPlain": KeyringPlain()})) || !s.startPort() {
+		params := map[string]any{"keyringPlain": KeyringPlain()}
+		if s.profile.MovedAside() {
+			params["profileMovedAside"] = true
+		}
+		if !s.send(notification("ready", params)) || !s.startPort() {
 			return ExitError
 		}
 	case errors.Is(err, keystore.ErrUnavailable):
@@ -155,6 +159,12 @@ func (s *session) unlink(by string) int {
 	if err := s.profile.Delete(); err != nil {
 		fmt.Fprintln(s.logOut, "profile delete failed")
 		return ExitError
+	}
+	if by == "user" {
+		if err := s.profile.RemoveUnreadable(); err != nil {
+			fmt.Fprintln(s.logOut, "profile delete failed")
+			return ExitError
+		}
 	}
 	params := map[string]any{}
 	if by != "" {

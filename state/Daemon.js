@@ -104,10 +104,10 @@ function parseLine(line) {
 }
 
 // Profile Settings live on disk, so every frame keeps them, including the ones that reset the rest.
-// `keyringPlain` comes with `ready` and holds until the next one.
+// `keyringPlain` and `profileMovedAside` come with `ready` and hold until the next one.
 function applyFrame(state, frame) {
   var next = foldFrame(state, frame)
-  var keep = frame && frame.method === "ready" ? ["settings"] : ["settings", "keyringPlain"]
+  var keep = frame && frame.method === "ready" ? ["settings"] : ["settings", "keyringPlain", "profileMovedAside"]
   for (var i = 0; i < keep.length; i++) {
     if (state[keep[i]] && !next[keep[i]]) {
       if (next === state) return state
@@ -123,13 +123,19 @@ function keyringNotice(state) {
   return state && state.keyringPlain === true ? KEYRING_PLAIN_NOTICE : ""
 }
 
+// The Settings notice when the Daemon could not read the old Profile and set it aside. Log out removes it.
+var PROFILE_MOVED_ASIDE_NOTICE = "whisker could not open your old chats, so it started a new link. The old files are still on disk in a folder next to the whisker data folder, named “whisker.unreadable-” and a time. Log out removes them."
+function profileNotice(state) {
+  return state && state.profileMovedAside === true ? PROFILE_MOVED_ASIDE_NOTICE : ""
+}
+
 // What each Daemon notification does to the Plugin. One row per method of docs/contract.md; the helpers below read this table.
 //   fold(state, params): the new view state.
 //   refreshesChats, requestsSettings, resendsAttention: the Plugin sends that request after the frame.
 // A notification with no row changes nothing.
 var NOTIFICATIONS = {
   ready: {
-    fold: function (state, params) { return { screen: SCREEN.READY, reason: "", message: "The Daemon is ready.", canRetry: false, keyringPlain: !!(params && params.keyringPlain) } },
+    fold: function (state, params) { return { screen: SCREEN.READY, reason: "", message: "The Daemon is ready.", canRetry: false, keyringPlain: !!(params && params.keyringPlain), profileMovedAside: !!(params && params.profileMovedAside) } },
     requestsSettings: true,
     resendsAttention: true
   },
