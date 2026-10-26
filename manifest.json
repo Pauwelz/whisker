@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "pauwelz.whisker",
   "name": "whisker",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "Michel Pauwels",
   "license": "MIT",
   "description": "Read and reply to your WhatsApp chats from the Omarchy bar. whisker links to your phone as a companion device, like WhatsApp Web, through the open-source whatsmeow library. It keeps your messages encrypted on disk. Unofficial: not affiliated with WhatsApp or Meta.",
