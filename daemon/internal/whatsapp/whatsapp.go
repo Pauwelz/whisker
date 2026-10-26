@@ -121,6 +121,12 @@ func cleanPhone(phone string) (string, error) {
 	return digits, nil
 }
 
+// MaxThumbnailBytes caps a thumbnail, inline or separate. A thumbnail is a few KiB, so a larger body is not one.
+const MaxThumbnailBytes = 256 << 10
+
+// ErrThumbnailTooLarge means a thumbnail is above MaxThumbnailBytes. Code drops such a thumbnail and never cuts it.
+var ErrThumbnailTooLarge = errors.New("thumbnail too large")
+
 // ErrOffline means Send found no connection. The Message is not sent.
 var ErrOffline = errors.New("not connected")
 

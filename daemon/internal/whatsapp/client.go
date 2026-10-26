@@ -30,9 +30,11 @@ const (
 	sendTimeout = 90 * time.Second
 	// shortcut: one fixed limit for every download, upgrade to a size based limit if a large video times out.
 	downloadTimeout = 10 * time.Minute
-	editTimeout     = 15 * time.Second
-	uploadTimeout   = 10 * time.Minute
-	storeTimeout    = 5 * time.Second
+	// thumbnailTimeout bounds one separate thumbnail, which is at most MaxThumbnailBytes.
+	thumbnailTimeout = 30 * time.Second
+	editTimeout      = 15 * time.Second
+	uploadTimeout    = 10 * time.Minute
+	storeTimeout     = 5 * time.Second
 )
 
 // Client is the whatsmeow adapter: the only place whatsmeow types appear.
@@ -343,11 +345,17 @@ func (c *Client) Download(ref Media, dst *os.File) error {
 	return c.cli.DownloadMediaWithPathToFile(ctx, ref.DirectPath, ref.FileEncSHA256, ref.FileSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false, dst)
 }
 
-// DownloadThumbnail uses the media key and key type of the file itself; whatsmeow's own DownloadThumbnail knows only link previews.
+// DownloadThumbnail fails when the body is above MaxThumbnailBytes. It uses the media key and key type of the file itself; whatsmeow's own DownloadThumbnail knows only link previews.
 func (c *Client) DownloadThumbnail(ref Media) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), thumbnailTimeout)
 	defer cancel()
-	return c.cli.DownloadMediaWithPath(ctx, ref.ThumbDirectPath, ref.ThumbEncSHA256, ref.ThumbSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false)
+	f := &capFile{}
+	// whatsmeow's DownloadMediaWithPath reads the whole body into memory, so a capped File takes the stream.
+	err := c.cli.DownloadMediaWithPathToFile(ctx, ref.ThumbDirectPath, ref.ThumbEncSHA256, ref.ThumbSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false, f)
+	if err != nil {
+		return nil, err
+	}
+	return f.buf, nil
 }
 
 // phone is the phone JID of a user JID that whatsmeow gives out. Any alt that holds the phone JID wins over the LID store.

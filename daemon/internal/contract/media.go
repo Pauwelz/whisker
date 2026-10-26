@@ -14,6 +14,9 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
+// maxThumbnailFetches is the number of separate thumbnails that download at the same time.
+const maxThumbnailFetches = 3
+
 // downloadPort is what the mediaLoader needs from WhatsApp.
 type downloadPort interface {
 	Download(ref whatsapp.Media, dst *os.File) error
@@ -33,8 +36,9 @@ type mediaLoader struct {
 	logOut   io.Writer
 	inflight map[string]bool
 	results  chan mediaResult
-	// thumbTried holds the thumbnails fetched in this run, done or not: a failed one waits for the next run.
+	// thumbTried holds the thumbnails fetched in this run, done or not. An oversized one loses its link in the store.
 	thumbTried    map[string]bool
+	thumbSlots    chan struct{}         // limits the thumbnail downloads that run at once
 	autoDownloads func(size int64) bool // settings.Settings.AutoDownloads of the current settings
 }
 
@@ -53,7 +57,7 @@ func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Stor
 		fmt.Fprintln(logOut, "chat store write failed")
 	}
 	chats.RemoveMedia = store.Remove
-	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}, autoDownloads: autoDownloads}
+	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}, thumbSlots: make(chan struct{}, maxThumbnailFetches), autoDownloads: autoDownloads}
 }
 
 // start downloads the Media of a Message that is marked downloading. It does nothing while that Media is in flight.
@@ -80,7 +84,7 @@ func (l *mediaLoader) autoStart(ev whatsapp.NewMessage) {
 // previews gives each listed Message whose Media came without an inline thumbnail a preview.
 // It fetches WhatsApp's separate thumbnail. Without one, an image that is not downloaded downloads, as a live image does;
 // the Plugin then shows the file as the thumbnail.
-// shortcut: all fetches of a page start at once; a page holds at most maxChatsLimit Messages. Add a limit if WhatsApp throttles.
+// A page holds at most maxChatsLimit Messages. At most maxThumbnailFetches of them download at once.
 func (l *mediaLoader) previews(chat string, msgs []chatstore.Message) {
 	for _, m := range msgs {
 		key := messageKey(chat, m.ID)
@@ -97,6 +101,8 @@ func (l *mediaLoader) previews(chat string, msgs []chatstore.Message) {
 		}
 		l.thumbTried[key] = true
 		go func(id string) {
+			l.thumbSlots <- struct{}{}
+			defer func() { <-l.thumbSlots }()
 			data, err := l.port.DownloadThumbnail(ref.Media)
 			l.results <- mediaResult{chat: chat, id: id, err: err, thumbnail: true, data: data}
 		}(m.ID)
@@ -117,7 +123,14 @@ func (l *mediaLoader) autoImage(chat, id string, ref chatstore.MediaRef) {
 
 // thumbnailDone stores a fetched thumbnail and tells the Plugin. It returns false when a frame could not be written.
 func (l *mediaLoader) thumbnailDone(r mediaResult) bool {
-	if r.err != nil || len(r.data) == 0 {
+	tooLarge := errors.Is(r.err, whatsapp.ErrThumbnailTooLarge) || len(r.data) > whatsapp.MaxThumbnailBytes
+	if r.err != nil || len(r.data) == 0 || tooLarge {
+		// An oversized link is hostile: a later run does not fetch it again. Another failure is tried in the next run.
+		if tooLarge {
+			if err := l.chats.ClearThumbLink(r.chat, r.id); err != nil {
+				fmt.Fprintln(l.logOut, "chat store write failed")
+			}
+		}
 		fmt.Fprintln(l.logOut, "thumbnail download failed") // the error text could hold hosts
 		return true
 	}

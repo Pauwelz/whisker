@@ -2,10 +2,12 @@ package contract_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
@@ -154,6 +156,50 @@ func TestFailedThumbnailIsNotRetried(t *testing.T) {
 	}
 }
 
+// A thumbnail that failed for another reason than its size keeps its link, so the next run tries again.
+func TestFailedThumbnailIsTriedInTheNextRun(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetThumbnail("", errors.New("offline"))
+	startWithVideo(t, r)
+	r.send(listVideoChat)
+	r.nextFrame()
+	r.waitLog("thumbnail download failed")
+	r.restart(t, nil)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.send(listVideoChat)
+	r.nextFrame()
+	for deadline := time.Now().Add(5 * time.Second); r.currentPort().ThumbnailDownloads() < 1; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the next run did not fetch the thumbnail again")
+		}
+	}
+}
+
+// The real download fails with a wrapped ErrThumbnailTooLarge: the link is cleared, so the next run does not fetch it.
+func TestThumbnailTooLargeErrorClearsTheLink(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetThumbnail("", fmt.Errorf("last host: %w", whatsapp.ErrThumbnailTooLarge))
+	startWithVideo(t, r)
+	r.send(listVideoChat)
+	r.nextFrame()
+	r.waitLog("thumbnail download failed")
+	r.restart(t, nil)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.send(listVideoChat)
+	r.nextFrame()
+	r.send(listVideoChat)
+	r.nextFrame()
+	if n := r.currentPort().ThumbnailDownloads(); n != 0 {
+		t.Errorf("thumbnail downloads in the new run = %d, want 0", n)
+	}
+}
+
 // A synced image without any thumbnail downloads when it is listed: its chip shows the file instead.
 func TestListedImageWithoutAnyThumbnailDownloads(t *testing.T) {
 	r := newRunner(t)
@@ -246,5 +292,60 @@ func TestAutoDownloadLimitKeepsLargeMediaWaiting(t *testing.T) {
 	}
 	if n := r.port.Downloads(); n != 1 {
 		t.Errorf("downloads = %d, want 1", n)
+	}
+}
+
+// A hostile page of 20 documents with a separate thumbnail link: the oversized thumbnails are dropped,
+// at most three downloads run at once, and a new run does not fetch the links again.
+func TestOversizedThumbnailsAreDroppedAndNotRetried(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetThumbnail(strings.Repeat("x", whatsapp.MaxThumbnailBytes+1), nil)
+	r.port.SetThumbnailDelay(20 * time.Millisecond)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	for i := range 20 {
+		r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
+			ID: fmt.Sprintf("d%d", i), Sender: mediaChat, Time: int64(5 + i),
+			Media: &whatsapp.Media{Kind: media.Document, Mime: "application/pdf", Key: make([]byte, 32), ThumbDirectPath: fmt.Sprintf("/t/d%d", i)},
+		}})
+		for range 3 { // none, chatsChanged, notify
+			r.nextFrame()
+		}
+	}
+	r.send(listVideoChat)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) {
+		t.Fatalf("frame = %s, want the page", f)
+	}
+	for deadline := time.Now().Add(5 * time.Second); r.port.ThumbnailDownloads() < 20; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("thumbnail downloads = %d, want 20", r.port.ThumbnailDownloads())
+		}
+	}
+	if peak := r.port.ThumbnailPeak(); peak > 3 {
+		t.Errorf("peak of concurrent thumbnail downloads = %d, want at most 3", peak)
+	}
+	for deadline := time.Now().Add(5 * time.Second); strings.Count(r.errOut.String(), "thumbnail download failed") < 20; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("logs = %q, want 20 failed thumbnails", r.errOut.String())
+		}
+	}
+	r.send(listVideoChat)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) || strings.Contains(f, "thumbnail") || len(f) > 64<<10 {
+		t.Fatalf("frame has %d bytes, want the page without a thumbnail", len(f))
+	}
+	// A new run: the stored links are gone, so nothing is fetched.
+	r.restart(t, nil)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.send(listVideoChat)
+	r.nextFrame()
+	r.send(listVideoChat)
+	r.nextFrame()
+	if n := r.currentPort().ThumbnailDownloads(); n != 0 {
+		t.Errorf("thumbnail downloads in the new run = %d, want 0", n)
 	}
 }

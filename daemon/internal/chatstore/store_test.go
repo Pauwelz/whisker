@@ -690,3 +690,51 @@ func TestManyStoredMentionsReadFast(t *testing.T) {
 		t.Errorf("got %d mentions", len(m.Mentions))
 	}
 }
+
+// A thumbnail above the cap is refused, whether it arrives with the Message or later. It is never cut.
+func TestOversizedThumbnailIsRefused(t *testing.T) {
+	s, _ := newStore(t)
+	const jid = "a@s.whatsapp.net"
+	big := make([]byte, whatsapp.MaxThumbnailBytes+1)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: jid, LastActive: 1, Messages: []whatsapp.Message{
+		{ID: "m1", Time: 1, Media: &whatsapp.Media{Kind: media.Document, Key: make([]byte, 32), Thumbnail: big}},
+		{ID: "m2", Time: 2, Media: &whatsapp.Media{Kind: media.Document, Key: make([]byte, 32), Thumbnail: big[:whatsapp.MaxThumbnailBytes]}},
+	}}}})
+	if r, err := s.MediaOf(jid, "m1"); err != nil || len(r.Thumbnail) != 0 {
+		t.Errorf("inline thumbnail above the cap: len %d, %v; want dropped", len(r.Thumbnail), err)
+	}
+	if r, err := s.MediaOf(jid, "m2"); err != nil || len(r.Thumbnail) != whatsapp.MaxThumbnailBytes {
+		t.Errorf("inline thumbnail at the cap: len %d, %v; want kept", len(r.Thumbnail), err)
+	}
+	if _, err := s.SetThumbnail(jid, "m1", big); !errors.Is(err, whatsapp.ErrThumbnailTooLarge) {
+		t.Errorf("SetThumbnail above the cap = %v, want ErrThumbnailTooLarge", err)
+	}
+	if r, _ := s.MediaOf(jid, "m1"); len(r.Thumbnail) != 0 {
+		t.Errorf("stored thumbnail has %d bytes, want none", len(r.Thumbnail))
+	}
+}
+
+// The migration drops an oversized thumbnail, and its link, that an older Daemon stored.
+func TestMigrationDropsAnOversizedStoredThumbnail(t *testing.T) {
+	s, db := newStore(t)
+	const jid = "a@s.whatsapp.net"
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: jid, LastActive: 1, Messages: []whatsapp.Message{
+		{ID: "big", Time: 1, Media: &whatsapp.Media{Kind: media.Document, Key: make([]byte, 32), Thumbnail: []byte("a"), ThumbDirectPath: "/t"}},
+		{ID: "small", Time: 2, Media: &whatsapp.Media{Kind: media.Document, Key: make([]byte, 32), Thumbnail: []byte("b")}},
+	}}}})
+	if _, err := db.Exec(`UPDATE media SET thumbnail = zeroblob(?) WHERE id = 'big'`, whatsapp.MaxThumbnailBytes+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("PRAGMA user_version = 22"); err != nil { // the version before the cap
+		t.Fatal(err)
+	}
+	if err := chatstore.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := s.MediaOf(jid, "big"); len(r.Thumbnail) != 0 || r.ThumbDirectPath != "" {
+		t.Errorf("oversized thumbnail kept: len %d, link %q", len(r.Thumbnail), r.ThumbDirectPath)
+	}
+	if r, _ := s.MediaOf(jid, "small"); string(r.Thumbnail) != "b" {
+		t.Errorf("small thumbnail = %q, want kept", r.Thumbnail)
+	}
+}

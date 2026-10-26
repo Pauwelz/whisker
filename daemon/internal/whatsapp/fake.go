@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Fake is a scripted Port for tests. A test calls Emit to play WhatsApp events.
@@ -32,6 +33,9 @@ type Fake struct {
 	thumb          string
 	thumbErr       error
 	thumbDownloads int
+	thumbDelay     time.Duration
+	thumbActive    int
+	thumbPeak      int
 	readErr        error
 	reads          []Read
 	chatReads      []string
@@ -333,10 +337,27 @@ func (f *Fake) SetThumbnail(content string, err error) {
 // ThumbnailDownloads counts the DownloadThumbnail calls.
 func (f *Fake) ThumbnailDownloads() int { f.mu.Lock(); defer f.mu.Unlock(); return f.thumbDownloads }
 
+// SetThumbnailDelay makes each DownloadThumbnail call take d, so calls overlap.
+func (f *Fake) SetThumbnailDelay(d time.Duration) {
+	f.mu.Lock()
+	f.thumbDelay = d
+	f.mu.Unlock()
+}
+
+// ThumbnailPeak is the most DownloadThumbnail calls that ran at the same time.
+func (f *Fake) ThumbnailPeak() int { f.mu.Lock(); defer f.mu.Unlock(); return f.thumbPeak }
+
 func (f *Fake) DownloadThumbnail(Media) ([]byte, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.thumbDownloads++
+	f.thumbActive++
+	f.thumbPeak = max(f.thumbPeak, f.thumbActive)
+	delay := f.thumbDelay
+	f.mu.Unlock()
+	time.Sleep(delay)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.thumbActive--
 	if f.thumbErr != nil {
 		return nil, f.thumbErr
 	}
