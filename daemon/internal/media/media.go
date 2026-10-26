@@ -90,19 +90,23 @@ func (s *Store) hash(parts ...string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// names returns the folder name of the Chat and the file name of the Message. An empty id gives the folder name only.
-func (s *Store) names(chat, id string) (dir, file string, err error) {
+// chatDir returns the folder name of the Chat.
+func (s *Store) chatDir(chat string) (string, error) {
 	if err := safe(chat); err != nil {
-		return "", "", err
+		return "", err
 	}
 	if len(s.nameKey) == 0 {
-		return "", "", errNoKey
+		return "", errNoKey
 	}
-	dir = s.hash("chat", chat)
-	if id == "" {
-		return dir, "", nil
-	}
+	return s.hash("chat", chat), nil
+}
+
+// names returns the folder name of the Chat and the file name of the Message. It refuses an empty id.
+func (s *Store) names(chat, id string) (dir, file string, err error) {
 	if err := safe(id); err != nil {
+		return "", "", err
+	}
+	if dir, err = s.chatDir(chat); err != nil {
 		return "", "", err
 	}
 	return dir, s.hash("file", chat, id), nil
@@ -163,11 +167,22 @@ func (s *Store) Put(chat, id string, k Kind, mediaKey []byte, plain io.Reader) e
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		return err
 	}
-	return epoch(path)
+	return epochAll(path, dir, s.dir)
 }
 
 // epoch sets the times of a file to the Unix epoch, so they do not show when the Media arrived.
 func epoch(path string) error { return os.Chtimes(path, time.Unix(0, 0), time.Unix(0, 0)) }
+
+// epochAll sets the times of the files and folders that a change touched. The change time (ctime) cannot be set.
+func epochAll(paths ...string) error {
+	var first error
+	for _, p := range paths {
+		if err := epoch(p); err != nil && !errors.Is(err, os.ErrNotExist) && first == nil {
+			first = err
+		}
+	}
+	return first
+}
 
 // Ingest lets fetch write the plain Media to a temp file in the runtime folder, then stores it encrypted.
 // The temp file is removed in every case.
@@ -213,6 +228,7 @@ func (s *Store) Plain(chat, id, ext string, k Kind, mediaKey []byte) (string, er
 	if err := s.Export(chat, id, k, mediaKey, path); err != nil {
 		return "", err
 	}
+	epochAll(path, filepath.Dir(path), s.plainDir)
 	return path, nil
 }
 
@@ -306,8 +322,9 @@ func validate(f *os.File, iv, macKey []byte) (int64, error) {
 
 // Release deletes the plain copies of a Chat. Call it when the Chat closes.
 func (s *Store) Release(chat string) {
-	if d, _, err := s.names(chat, ""); err == nil {
+	if d, err := s.chatDir(chat); err == nil {
 		os.RemoveAll(filepath.Join(s.plainDir, d))
+		epochAll(s.plainDir)
 	}
 }
 
@@ -322,6 +339,7 @@ func (s *Store) Remove(chat, id string) {
 	for _, p := range append(plain, filepath.Join(s.plainDir, d, f)) {
 		os.Remove(p)
 	}
+	epochAll(filepath.Join(s.dir, d), filepath.Join(s.plainDir, d), s.dir)
 }
 
 var errMove = errors.New("media move failed")
@@ -331,11 +349,12 @@ var errMove = errors.New("media move failed")
 // A file whose Message id `to` already has stays as it is there. The plain copies of `from` go.
 // It keeps the folder of `from` and returns an error when a move failed, so no file is lost. The error holds no path.
 func (s *Store) MoveChat(from, to string, ids []string) error {
-	fd, _, err := s.names(from, "")
+	fd, err := s.chatDir(from)
 	if err != nil {
 		return errMove
 	}
-	if _, _, err := s.names(to, ""); err != nil {
+	td, err := s.chatDir(to)
+	if err != nil {
 		return errMove
 	}
 	s.Release(from)
@@ -354,10 +373,13 @@ func (s *Store) MoveChat(from, to string, ids []string) error {
 			failed = true
 		}
 	}
+	epochAll(filepath.Join(s.dir, td), s.dir)
 	if failed {
 		return errMove
 	}
-	os.RemoveAll(filepath.Join(s.dir, fd)) // the files that stayed go with the folder
+	// The files that stayed go with the folder. So does a file without a Media row: it cannot be opened.
+	os.RemoveAll(filepath.Join(s.dir, fd))
+	epochAll(filepath.Join(s.dir, td), s.dir)
 	return nil
 }
 
@@ -372,6 +394,7 @@ func (s *Store) Rename() error {
 		return nil // no Media
 	}
 	failed := false
+	var hashDirs []string
 	for _, d := range dirs {
 		if !d.IsDir() || isHash(d.Name()) {
 			continue
@@ -395,8 +418,13 @@ func (s *Store) Rename() error {
 			if err := os.Rename(filepath.Join(old, f.Name()), dst); err != nil || epoch(dst) != nil {
 				failed = true
 			}
+			hashDirs = append(hashDirs, filepath.Dir(dst))
 		}
 		os.Remove(old) // fails, and is right to, while a file stays
+	}
+	epochAll(s.dir)
+	for _, d := range hashDirs {
+		epochAll(d)
 	}
 	if failed {
 		return errMove

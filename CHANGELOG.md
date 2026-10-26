@@ -11,10 +11,6 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 - A Show preview setting hides the message text in notifications.
 
-### Security
-
-- Media folders and files now have keyed hash names. The media folder no longer shows phone numbers, message ids or receive times, and the plain copies in `$XDG_RUNTIME_DIR` use the same names. The first start renames existing files.
-
 ### Changed
 
 - The README and the architecture now say that Omarchy keeps the text of each notification in plain text for up to 24 h, also after the message is revoked, deleted or expires. Turn Show preview off to keep message text out of that history.
@@ -23,6 +19,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- Media folders and files now have keyed hash names. The media folder no longer shows phone numbers or message ids. Folder and file modification times are the Unix epoch, and the plain copies in `$XDG_RUNTIME_DIR` use the same names. The first start renames existing files.
 - A deleted Message no longer stays readable in the store files. The chat store and the device store now overwrite deleted rows, and the first start after this update rewrites both stores once to remove old leftovers. This covers a Message that expires, "Delete for me", an edit and a revoke.
 - Decrypted photos, videos and documents no longer stay in `$XDG_RUNTIME_DIR/whisker/media/` after the Daemon stops. Before, a locked keyring skipped the wipe, and SIGHUP or a broken log stream (SIGPIPE) killed the Daemon before it wiped. Now the Daemon wipes the folder at every start, before it needs the key, and at every exit. SIGHUP stops it cleanly, and a broken log stream gives a write error instead. The Plugin also closes the Daemon stdin when it unloads. Pasted images of Drafts stay.
 - A received location, live location, contact card, poll, event or unsupported message now disappears when the chat timer says so. Before, the Daemon read the Disappearing timer of text, image, video, audio, sticker and document messages only, so the other kinds stayed for ever, with their coordinates or phone number. The Daemon now reads the timer of every kind. When WhatsApp marks a live message as disappearing but sends no timer, it uses the timer of the chat. Messages that whisker stored before this update keep `expires_at = 0`: the Daemon cannot tell them from a message that was sent before the chat got its timer.

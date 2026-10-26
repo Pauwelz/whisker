@@ -39,11 +39,7 @@ func (s *Store) DeleteChat(chat string) (attachments []string, gone bool, err er
 	if err != nil {
 		return nil, false, err
 	}
-	rows, err := s.db.Query(`SELECT id FROM media WHERE chat_jid = ?`, chat) // a Media row that outlived its Message
-	if err != nil {
-		return nil, false, err
-	}
-	orphans, err := scanStrings(rows)
+	orphans, err := s.MediaIDs(chat) // a Media row that outlived its Message
 	if err != nil {
 		return nil, false, err
 	}

@@ -255,10 +255,8 @@ func TestNamesHideTheChatTheIdAndTheTime(t *testing.T) {
 			if !d.IsDir() {
 				n++
 			}
-			if root == enc && !d.IsDir() {
-				if fi, _ := d.Info(); !fi.ModTime().Equal(time.Unix(0, 0)) {
-					t.Errorf("mtime = %v, want the epoch", fi.ModTime())
-				}
+			if fi, _ := d.Info(); !fi.ModTime().Equal(time.Unix(0, 0)) {
+				t.Errorf("mtime of %q = %v, want the epoch", rel, fi.ModTime())
 			}
 			return nil
 		})
@@ -358,5 +356,25 @@ func TestOtherKeysGiveOtherNames(t *testing.T) {
 	}
 	if len(names) != 2 {
 		t.Error("two keys gave the same name")
+	}
+}
+
+func TestEmptyNamesAreRefused(t *testing.T) {
+	s, enc, _ := newStore(t)
+	if err := s.Put(jid, msgID, media.Image, key, strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	if s.Has(jid, "") || s.Has("", msgID) {
+		t.Error("Has accepted an empty name")
+	}
+	if s.Put(jid, "", media.Image, key, strings.NewReader("x")) == nil || s.Put("", msgID, media.Image, key, strings.NewReader("x")) == nil {
+		t.Error("Put accepted an empty name")
+	}
+	if s.Export(jid, "", media.Image, key, filepath.Join(t.TempDir(), "o")) == nil {
+		t.Error("Export accepted an empty id")
+	}
+	s.Remove(jid, "")
+	if m, _ := filepath.Glob(filepath.Join(enc, "*", "*")); len(m) != 1 {
+		t.Errorf("files = %v, want the one file to stay", m)
 	}
 }
