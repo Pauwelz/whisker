@@ -3,8 +3,10 @@ package chatstore_test
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -623,5 +625,68 @@ func TestApplyHistoryCountsOnlyNewMessages(t *testing.T) {
 	}})
 	if err != nil || added["a@s.whatsapp.net"] != 1 || added["b@s.whatsapp.net"] != 0 {
 		t.Fatalf("got %v, %v", added, err)
+	}
+}
+
+func TestMentionsOfNearNumbersEachGetTheirName(t *testing.T) {
+	s, _ := newStore(t)
+	if err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: "@12 and @123",
+		Mentions: []string{"12@s.whatsapp.net", "123@s.whatsapp.net"}}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+		t.Fatal(err)
+	}
+	apply(t, s, whatsapp.PushName{JID: "12@s.whatsapp.net", Name: "Ann"})
+	apply(t, s, whatsapp.PushName{JID: "123@s.whatsapp.net", Name: "Bob"})
+	if m, _ := s.Message("g@g.us", "m1"); m.Text != "@Ann and @Bob" {
+		t.Fatalf("got %q", m.Text)
+	}
+}
+
+func TestMentionNamesAreNotScannedAgain(t *testing.T) {
+	s, _ := newStore(t)
+	jids := make([]string, 30)
+	for i := range jids {
+		jids[i] = "2@s.whatsapp.net"
+	}
+	if err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: "@2", Mentions: jids}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+		t.Fatal(err)
+	}
+	apply(t, s, whatsapp.PushName{JID: "2@s.whatsapp.net", Name: "x@2x@2"})
+	m, _ := s.Message("g@g.us", "m1")
+	if m.Text != "@x@2x@2" || len(m.Mentions) != 1 {
+		t.Fatalf("got %q %v", m.Text, m.Mentions)
+	}
+}
+
+func TestManyStoredMentionsReadFast(t *testing.T) {
+	s, _ := newStore(t)
+	jids := make([]string, 5000)
+	var text strings.Builder
+	for i := range jids {
+		jids[i] = fmt.Sprintf("%d@s.whatsapp.net", 1000+i)
+		fmt.Fprintf(&text, "@%d ", 1000+i)
+	}
+	for text.Len() < 60000 {
+		text.WriteString("filler @ text ")
+	}
+	if err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: text.String(), Mentions: jids}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	m, err := s.Message("g@g.us", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := s.Messages("g@g.us", 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > readBudget*time.Millisecond {
+		t.Errorf("read took %v", d)
+	}
+	if len(m.Mentions) != whatsapp.MaxMentions || len(page.Messages[0].Mentions) != whatsapp.MaxMentions {
+		t.Errorf("got %d mentions", len(m.Mentions))
 	}
 }

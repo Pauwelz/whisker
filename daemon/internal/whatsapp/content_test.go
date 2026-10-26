@@ -1,6 +1,7 @@
 package whatsapp
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -87,5 +88,22 @@ func TestMediaOfKeepsTheLinkToTheSeparateThumbnail(t *testing.T) {
 	dm := mediaOf(&waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{ThumbnailDirectPath: proto.String("/d")}})
 	if im.ThumbDirectPath != "/t" || im.ThumbSHA256[0] != 1 || im.ThumbEncSHA256[0] != 2 || vm.ThumbDirectPath != "/v" || dm.ThumbDirectPath != "/d" {
 		t.Errorf("thumbnail links = %+v, %+v, %+v", im, vm, dm)
+	}
+}
+
+func TestMentionsInDropsRepeatsAndTokensNotInText(t *testing.T) {
+	jids := []string{"12@s.whatsapp.net", "123@s.whatsapp.net", "123@s.whatsapp.net", "9@s.whatsapp.net"}
+	got := MentionsIn("hi @123, bye", jids)
+	if len(got) != 1 || got[0] != "123@s.whatsapp.net" {
+		t.Fatalf("got %v", got)
+	}
+	many := make([]string, 0, 1000)
+	text := ""
+	for i := 0; i < 1000; i++ {
+		many = append(many, fmt.Sprintf("%d@s.whatsapp.net", i))
+		text += fmt.Sprintf("@%d ", i)
+	}
+	if got := MentionsIn(text, many); len(got) != MaxMentions {
+		t.Fatalf("got %d mentions, want %d", len(got), MaxMentions)
 	}
 }

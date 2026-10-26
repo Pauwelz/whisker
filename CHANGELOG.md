@@ -12,6 +12,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - The README now explains what whisker does, what it needs, how to link your phone and which dependencies it uses. It also states that whisker is unofficial and not affiliated with WhatsApp or Meta.
 - The plugin description in Omarchy is longer and names whatsmeow. The bar widget description is "WhatsApp chats in a pop-out".
 
+### Security
+
+- A sender can no longer crash or stall the Daemon with a long mention list. The Daemon now keeps at most 256 different mentions per Message, and only those whose `@<number>` is in the text. It also replaces names in the text in one pass, so a push name that holds `@<number>` cannot grow the text. Before, one small Message could exhaust the memory of the Daemon.
+
 ## [1.0.1] - 2026-10-26
 
 ### Changed

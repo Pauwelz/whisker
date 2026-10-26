@@ -264,7 +264,7 @@ func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body conten
 	return Message{
 		ID: info.ID, Sender: c.senderOf(info.MessageSource).String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
 		Text: body.Text, PushName: info.PushName, Quote: c.quoteOf(m), Media: body.Media, Timer: timerOf(m),
-		Mentions: c.phoneStrings(body.Mentions), MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+		Mentions: c.phoneStrings(MentionsIn(body.Text, body.Mentions)), MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
 	}
 }
 

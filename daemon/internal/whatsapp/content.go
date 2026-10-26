@@ -3,6 +3,8 @@ package whatsapp
 import (
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -107,6 +109,82 @@ func mentionsOf(m *waE2E.Message) []string {
 		}
 	}
 	return nil
+}
+
+// MaxMentions is the most mentions that the Daemon keeps for one Message. A group holds about 1024 people.
+const MaxMentions = 256
+
+// mentionWord returns the user part that follows the "@" at text[at], and where it ends.
+// A user part ends at the first rune that is not a letter or a digit, so "@12" never matches "@123".
+func mentionWord(text string, at int) (word string, end int) {
+	end = at + 1
+	for end < len(text) {
+		r, size := utf8.DecodeRuneInString(text[end:])
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			break
+		}
+		end += size
+	}
+	return text[at+1 : end], end
+}
+
+// UniqueMentions drops the repeated JIDs and keeps the first MaxMentions. The input is not changed.
+func UniqueMentions(jids []string) []string {
+	seen := make(map[string]bool, min(len(jids), MaxMentions))
+	out := make([]string, 0, min(len(jids), MaxMentions))
+	for _, jid := range jids {
+		if len(out) == MaxMentions {
+			break
+		}
+		if !seen[jid] {
+			seen[jid] = true
+			out = append(out, jid)
+		}
+	}
+	return out
+}
+
+// MentionsIn keeps the JIDs whose "@<user part>" token is in the text. It also applies UniqueMentions.
+func MentionsIn(text string, jids []string) []string {
+	if len(jids) == 0 {
+		return nil
+	}
+	words := map[string]bool{}
+	for i := 0; i < len(text); i++ {
+		if text[i] == '@' {
+			word, end := mentionWord(text, i)
+			words[word] = true
+			i = end - 1
+		}
+	}
+	present := make([]string, 0, min(len(jids), MaxMentions))
+	for _, jid := range jids {
+		if user, _, _ := strings.Cut(jid, "@"); words[user] {
+			present = append(present, jid)
+		}
+	}
+	return UniqueMentions(present)
+}
+
+// ReplaceMentions replaces each "@<user part>" token with its label, in one left-to-right pass.
+// A label is never scanned again.
+func ReplaceMentions(text string, labels map[string]string) string {
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] != '@' {
+			continue
+		}
+		word, end := mentionWord(text, i)
+		if label, ok := labels[word]; ok {
+			b.WriteString(text[last:i])
+			b.WriteString(label)
+			last = end
+		}
+		i = end - 1
+	}
+	b.WriteString(text[last:])
+	return b.String()
 }
 
 // mentionsUser reports whether a JID in mentions has one of the user parts (the phone number and the LID of the user).

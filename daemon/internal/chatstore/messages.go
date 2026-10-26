@@ -449,18 +449,46 @@ func (s *Store) systemLine(m Message, sys whatsapp.System) (string, error) {
 }
 
 // nameMentions replaces "@<user part>" in the text with "@<name>" (the name rule) and lists the names.
-// shortcut: a plain replace, so "@12" inside "@123" is also replaced; upgrade if mentions of near numbers appear.
+// It keeps at most whatsapp.MaxMentions different mentions, so a row stored before the cap stays cheap.
 func (s *Store) nameMentions(m *Message, jids string) error {
-	for _, jid := range strings.Fields(jids) {
-		name, err := s.ParticipantName(jid)
-		if err != nil {
+	unique := whatsapp.UniqueMentions(strings.Fields(jids))
+	if len(unique) == 0 {
+		return nil
+	}
+	args := make([]any, len(unique))
+	for i, jid := range unique {
+		args[i] = jid
+	}
+	rows, err := s.db.Query(`SELECT jid, COALESCE(contact_name, ''), COALESCE(push_name, '') FROM names WHERE jid IN (?`+strings.Repeat(",?", len(unique)-1)+`)`, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	names := map[string]string{}
+	for rows.Next() {
+		var jid, contact, push string
+		if err := rows.Scan(&jid, &contact, &push); err != nil {
 			return err
+		}
+		names[jid] = participantName(contact, push, jid)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	labels := map[string]string{}
+	for _, jid := range unique {
+		name, ok := names[jid]
+		if !ok {
+			name = phoneNumber(jid)
 		}
 		user, _, _ := strings.Cut(jid, "@")
 		label := "@" + name
-		m.Text = strings.ReplaceAll(m.Text, "@"+user, label)
+		if _, ok := labels[user]; !ok {
+			labels[user] = label
+		}
 		m.Mentions = append(m.Mentions, label)
 	}
+	m.Text = whatsapp.ReplaceMentions(m.Text, labels)
 	return nil
 }
 
