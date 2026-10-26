@@ -45,7 +45,7 @@ The Daemon sends `ready` once it has opened the Profile (the stores and the stor
 
 `keyringPlain` is `true` when the default gnome-keyring collection has no password, so its file holds the store key in plain text. The Daemon checks this on each start, before `ready`. A different Secret Service, or any read error, gives `false`. The Plugin shows a notice in Settings while it is `true`. Fixtures: `contract/fixtures/ready.jsonl`, `contract/fixtures/keyring-plain.jsonl`.
 
-If the store key was lost, or the key in the keyring does not open the stores, the Daemon never deletes the Profile by itself. It renames the Profile folder to `whisker.unreadable-<time>` next to it and makes a new key. `ready` then follows as for a new Profile, with `profileMovedAside`. Log out (`unlinked` with `by` = `user`) removes these folders. A key that exists while no store file exists is replaced by a new key, because another program may have chosen it.
+If the store key was lost, or the key in the keyring does not open the stores, the Daemon never deletes the Profile by itself. It renames the Profile folder to `whisker.unreadable-<time>` next to it and makes a new key. `ready` then follows as for a new Profile, with `profileMovedAside`. Log out (`unlinked` with `by` = `user`) removes these folders. An unlink from the phone keeps them.
 
 ### `keyringUnavailable`
 

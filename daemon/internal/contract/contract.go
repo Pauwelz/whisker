@@ -106,6 +106,7 @@ type Profile interface {
 	Media() *media.Store
 	Delete() error
 	MovedAside() bool
+	RemoveUnreadable() error
 }
 
 // NewPort makes the WhatsApp port for the Profile that Open just opened.

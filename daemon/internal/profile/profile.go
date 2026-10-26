@@ -62,7 +62,6 @@ func (p *Profile) Device() *sqlstore.Container { return p.device }
 // A store that the key cannot open is unreadable. This happens when the key is new but store files exist (lost key),
 // and when the key is in the keyring but is wrong. Open never deletes such a Profile: it renames the Profile directory
 // to <dir>.unreadable-<time> and starts a fresh Profile (see MovedAside).
-// A key that exists while no store file does may come from another program, so Open replaces it.
 // A keyring error leaves the Profile alone and returns keystore.ErrUnavailable.
 // Then Open gives the Media store its name key and renames the Media files of the old layout.
 func (p *Profile) Open() error {
@@ -81,13 +80,8 @@ func (p *Profile) openKeyed() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	switch {
-	case created:
+	if created {
 		if err := p.setAside(); err != nil {
-			return nil, err
-		}
-	case !p.hasStores():
-		if key, err = p.keys.Replace(); err != nil {
 			return nil, err
 		}
 	}
@@ -183,13 +177,19 @@ func (p *Profile) Close() {
 	}
 }
 
-// Delete is the one routine that deletes a Profile: the stores, the Media, the unreadable Profiles and the store key.
+// Delete is the one routine that deletes a Profile: the stores, the Media and the store key.
+// It keeps the unreadable Profiles: a phone unlink must not remove them (see RemoveUnreadable).
 // Profile Settings live in $XDG_CONFIG_HOME and stay.
 func (p *Profile) Delete() error {
 	p.Close()
 	if err := os.RemoveAll(p.Dir); err != nil {
 		return err
 	}
+	return p.keys.Delete()
+}
+
+// RemoveUnreadable removes the Profiles that Open set aside. Log out calls it.
+func (p *Profile) RemoveUnreadable() error {
 	old, err := p.unreadable()
 	if err != nil {
 		return err
@@ -199,12 +199,12 @@ func (p *Profile) Delete() error {
 			return err
 		}
 	}
-	return p.keys.Delete()
+	return nil
 }
 
-// unreadablePrefix starts the name of a Profile directory that Open set aside.
 const unreadableSuffix = ".unreadable-"
 
+// unreadablePrefix starts the name of a Profile directory that Open set aside.
 func (p *Profile) unreadablePrefix() string { return filepath.Base(p.Dir) + unreadableSuffix }
 
 // unreadable lists the Profile directories that Open set aside, next to the Profile directory.
@@ -231,10 +231,10 @@ func (p *Profile) MovedAside() bool {
 	return len(dirs) > 0
 }
 
-// hasStores tells whether a store file exists.
+// hasStores tells whether a store file may exist. Only "does not exist" counts as absent, so a stat error never allows a delete.
 func (p *Profile) hasStores() bool {
 	for _, name := range []string{"device.db", "chat.db"} {
-		if _, err := os.Stat(filepath.Join(p.Dir, name)); err == nil {
+		if _, err := os.Stat(filepath.Join(p.Dir, name)); !errors.Is(err, os.ErrNotExist) {
 			return true
 		}
 	}

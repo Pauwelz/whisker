@@ -293,8 +293,8 @@ func TestWrongKeyMovesTheProfileAside(t *testing.T) {
 	assertAside(t, p, old)
 }
 
-// Log out removes the set-aside Profiles too.
-func TestDeleteRemovesTheUnreadableProfiles(t *testing.T) {
+// Delete keeps the set-aside Profiles. Log out removes them with RemoveUnreadable.
+func TestRemoveUnreadableRemovesTheSetAsideProfiles(t *testing.T) {
 	fake := keystore.NewFake()
 	p := newProfile(t, fake)
 	if err := p.Open(); err != nil {
@@ -309,25 +309,13 @@ func TestDeleteRemovesTheUnreadableProfiles(t *testing.T) {
 	if err := p.Delete(); err != nil {
 		t.Fatal(err)
 	}
-	if left, _ := filepath.Glob(p.Dir + "*"); len(left) != 0 || p.MovedAside() {
-		t.Errorf("left after Delete: %v", left)
+	if !p.MovedAside() {
+		t.Error("Delete must keep the unreadable Profiles")
 	}
-}
-
-// A key that exists before the first start may come from another program: Open replaces it.
-func TestKeyWithoutStoreFilesIsReplaced(t *testing.T) {
-	fake := keystore.NewFake()
-	planted := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32))
-	fake.Set(planted)
-	p := newProfile(t, fake)
-	if err := p.Open(); err != nil {
+	if err := p.RemoveUnreadable(); err != nil {
 		t.Fatal(err)
 	}
-	defer p.Close()
-	if got, _ := fake.Get(); got == planted || got == "" {
-		t.Error("the planted key is still in the keyring")
-	}
-	if p.MovedAside() {
-		t.Error("nothing was there to set aside")
+	if left, _ := filepath.Glob(p.Dir + "*"); len(left) != 0 || p.MovedAside() {
+		t.Errorf("left after Delete: %v", left)
 	}
 }

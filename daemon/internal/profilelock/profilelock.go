@@ -21,7 +21,7 @@ func CheckRuntimeDir(dir string) error {
 	if !filepath.IsAbs(dir) {
 		return errors.New("runtime directory is not an absolute path")
 	}
-	info, err := os.Stat(dir)
+	info, err := os.Lstat(dir)
 	if err != nil {
 		return fmt.Errorf("runtime directory: %w", err)
 	}

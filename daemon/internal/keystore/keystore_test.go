@@ -113,17 +113,3 @@ func TestLoadWaitsForATimedOutDelete(t *testing.T) {
 		t.Errorf("keyring calls = %q, want delete,get,set", got)
 	}
 }
-
-func TestReplaceWritesANewKeyOverTheItem(t *testing.T) {
-	fake := keystore.NewFake()
-	s := keystore.New(fake, clock.NewManual())
-	old, _, _ := s.Load()
-	key, err := s.Replace()
-	if err != nil || len(key) != 32 || string(key) == string(old) {
-		t.Fatalf("Replace = %d bytes, same as old %v, err %v", len(key), string(key) == string(old), err)
-	}
-	again, created, err := s.Load()
-	if err != nil || created || string(again) != string(key) {
-		t.Errorf("Load after Replace: created %v, same key %v, err %v", created, string(again) == string(key), err)
-	}
-}

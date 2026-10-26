@@ -160,6 +160,12 @@ func (s *session) unlink(by string) int {
 		fmt.Fprintln(s.logOut, "profile delete failed")
 		return ExitError
 	}
+	if by == "user" {
+		if err := s.profile.RemoveUnreadable(); err != nil {
+			fmt.Fprintln(s.logOut, "profile delete failed")
+			return ExitError
+		}
+	}
 	params := map[string]any{}
 	if by != "" {
 		params["by"] = by

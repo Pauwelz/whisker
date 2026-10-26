@@ -26,7 +26,11 @@ func TestCheckRuntimeDir(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for name, dir := range map[string]string{"relative": "run/user", "missing": filepath.Join(good, "none"), "open mode": open, "file": file} {
+	link := filepath.Join(good, "link")
+	if err := os.Symlink(good, link); err != nil {
+		t.Fatal(err)
+	}
+	for name, dir := range map[string]string{"symlink": link, "relative": "run/user", "missing": filepath.Join(good, "none"), "open mode": open, "file": file} {
 		if err := profilelock.CheckRuntimeDir(dir); err == nil {
 			t.Errorf("%s: accepted", name)
 		}

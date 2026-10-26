@@ -125,16 +125,6 @@ func (s *Store) exclusive(fn func() error) error {
 	}
 }
 
-// Replace makes a new key and stores it over the item. Open uses it when the item exists but no store file does:
-// another program may have chosen that key.
-func (s *Store) Replace() ([]byte, error) {
-	var key []byte // read only after exclusive returned nil: fn has ended then
-	if err := s.exclusive(func() (err error) { key, err = s.set(); return }); err != nil {
-		return nil, err
-	}
-	return key, nil
-}
-
 // Delete removes the key. A missing key is not an error.
 // It waits for earlier keyring calls, so a timed-out Delete cannot remove the key of a Profile that linked later.
 func (s *Store) Delete() error {

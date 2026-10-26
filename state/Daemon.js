@@ -104,7 +104,7 @@ function parseLine(line) {
 }
 
 // Profile Settings live on disk, so every frame keeps them, including the ones that reset the rest.
-// `keyringPlain` and `profileMovedAside` come with `ready` and holds until the next one.
+// `keyringPlain` and `profileMovedAside` come with `ready` and hold until the next one.
 function applyFrame(state, frame) {
   var next = foldFrame(state, frame)
   var keep = frame && frame.method === "ready" ? ["settings"] : ["settings", "keyringPlain", "profileMovedAside"]
