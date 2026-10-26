@@ -72,7 +72,7 @@ func (l *mediaLoader) start(chat, id string) {
 	go func() {
 		l.fileSlots <- struct{}{}
 		defer func() { <-l.fileSlots }()
-		err := l.store.Ingest(chat, id, ref.Kind, ref.Key, func(f *os.File) error {
+		err := l.store.Ingest(chat, id, ref.Kind, func(f *os.File) error {
 			return l.port.Download(ref.Media, f, whatsapp.DownloadCap(ref.Size))
 		})
 		l.results <- mediaResult{chat: chat, id: id, err: err}
@@ -201,7 +201,7 @@ func (l *mediaLoader) openReply(id json.RawMessage, chat, msgID string) map[stri
 		return errorReply(id, errMedia, msgInvalidMedia)
 	}
 	// shortcut: the decrypt runs on the Daemon loop, so a very large video blocks other requests for a moment.
-	path, err := l.store.Plain(chat, msgID, extension(ref.Media), ref.Kind, ref.Key)
+	path, err := l.store.Plain(chat, msgID, extension(ref.Media), ref.Kind)
 	if err != nil {
 		return l.failed(id, err)
 	}
@@ -214,7 +214,7 @@ func (l *mediaLoader) saveReply(id json.RawMessage, chat, msgID, dst string) map
 	if !ok || !filepath.IsAbs(dst) {
 		return errorReply(id, errMedia, msgInvalidMedia)
 	}
-	if err := l.store.Export(chat, msgID, ref.Kind, ref.Key, dst); err != nil {
+	if err := l.store.Export(chat, msgID, ref.Kind, dst); err != nil {
 		return l.failed(id, err)
 	}
 	return resultReply(id, map[string]any{})

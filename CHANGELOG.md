@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Security
+
+- The Daemon now stores every Media file under a key derived from the store key, not under the `mediaKey` of the Message. No stored file equals its WhatsApp CDN blob any more. Media stored before this version no longer opens. Log out and link again to clear it.
+
 ## [1.1.0] - 2026-10-26
 
 ### Added

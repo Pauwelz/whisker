@@ -192,7 +192,7 @@ func (s *session) storeMedia(chat, path, caption string) (chatstore.Message, err
 		return chatstore.Message{}, errMediaCopy
 	}
 	msgID := s.port.NewMessageID()
-	if err := s.media.Put(chat, msgID, m.Kind, m.Key, plain); err != nil {
+	if err := s.media.Put(chat, msgID, m.Kind, plain); err != nil {
 		fmt.Fprintln(s.logOut, "media copy failed") // the error text could hold paths
 		return chatstore.Message{}, errMediaCopy
 	}

@@ -1,5 +1,7 @@
-// Package media keeps Media in the Profile in WhatsApp's CDN format and hands out plain copies on request.
-// A stored file is AES-256-CBC ciphertext followed by a 10-byte truncated HMAC-SHA256, keyed by the mediaKey.
+// Package media keeps Media in the Profile and hands out plain copies on request.
+// A stored file is AES-256-CBC ciphertext followed by a 10-byte truncated HMAC-SHA256, in WhatsApp's CDN format.
+// The keys come from a file key that the Profile derives from the store key, never from the mediaKey of the Message.
+// So no stored file equals its CDN blob.
 // Plain copies live only in a private runtime folder (tmpfs). Wipe clears it at start and exit.
 // Folders and files carry keyed hashes of the Chat and the Message id, so a listing shows no JID, id or time.
 // Callers must never log a path from this package.
@@ -59,24 +61,29 @@ var errName = errors.New("unsafe media name")
 
 var errNoRuntime = errors.New("no runtime folder")
 
-var errNoKey = errors.New("no name key")
+var errNoKey = errors.New("no media key")
 
 // NameKey derives the key for the Media names from the store key. It never uses the store key itself.
 func NameKey(storeKey []byte) []byte {
 	return hkdfutil.SHA256(storeKey, nil, []byte("whisker media names"), 32)
 }
 
-// getMediaKeys re-implements the unexported whatsmeow helper: HKDF-SHA256 of the mediaKey, 112 bytes.
-func getMediaKeys(mediaKey []byte, k Kind) (iv, cipherKey, macKey []byte) {
-	x := hkdfutil.SHA256(mediaKey, nil, []byte(k.Info()), 112)
+// FileKey derives the root key for the Media files from the store key. It never uses the store key itself.
+func FileKey(storeKey []byte) []byte {
+	return hkdfutil.SHA256(storeKey, nil, []byte("whisker media files"), 32)
+}
+
+// getMediaKeys re-implements the unexported whatsmeow helper: HKDF-SHA256 of the file key, 112 bytes.
+func getMediaKeys(fileKey []byte, k Kind) (iv, cipherKey, macKey []byte) {
+	x := hkdfutil.SHA256(fileKey, nil, []byte(k.Info()), 112)
 	return x[:16], x[16:48], x[48:80]
 }
 
 // Store is the Media of one Profile. dir holds the encrypted files, plainDir the plain copies.
-// Without a name key, only Wipe works.
+// Without a name key and a file key, only Wipe works.
 type Store struct {
-	dir, plainDir string
-	nameKey       []byte
+	dir, plainDir    string
+	nameKey, fileKey []byte
 }
 
 func New(dir, plainDir string) *Store { return &Store{dir: dir, plainDir: plainDir} }
@@ -84,10 +91,26 @@ func New(dir, plainDir string) *Store { return &Store{dir: dir, plainDir: plainD
 // SetNameKey sets the key from NameKey. Profile.Open calls it before any other use.
 func (s *Store) SetNameKey(k []byte) { s.nameKey = k }
 
-func (s *Store) hash(parts ...string) string {
-	h := hmac.New(sha256.New, s.nameKey)
+// SetFileKey sets the key from FileKey. Profile.Open calls it before any other use.
+func (s *Store) SetFileKey(k []byte) { s.fileKey = k }
+
+func mac(key []byte, parts ...string) []byte {
+	h := hmac.New(sha256.New, key)
 	h.Write([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(h.Sum(nil))
+	return h.Sum(nil)
+}
+
+func (s *Store) hash(parts ...string) string { return hex.EncodeToString(mac(s.nameKey, parts...)) }
+
+// mediaKeys returns the IV, cipher key and MAC key of one stored file. Each Message id has its own key.
+// The Chat is not part of the key, because MoveChat moves files between Chats.
+// shortcut: two Chats with the same id share a key and IV, which shows only equal leading blocks. Fix it with a re-encrypt in MoveChat.
+func (s *Store) mediaKeys(id string, k Kind) (iv, cipherKey, macKey []byte, err error) {
+	if len(s.fileKey) == 0 {
+		return nil, nil, nil, errNoKey
+	}
+	iv, cipherKey, macKey = getMediaKeys(mac(s.fileKey, "file", id), k)
+	return iv, cipherKey, macKey, nil
 }
 
 // chatDir returns the folder name of the Chat.
@@ -142,8 +165,12 @@ func (s *Store) Has(chat, id string) bool {
 }
 
 // Put encrypts plain into the Profile. A failed Put stores nothing.
-func (s *Store) Put(chat, id string, k Kind, mediaKey []byte, plain io.Reader) error {
+func (s *Store) Put(chat, id string, k Kind, plain io.Reader) error {
 	path, err := s.file(chat, id)
+	if err != nil {
+		return err
+	}
+	iv, cipherKey, macKey, err := s.mediaKeys(id, k)
 	if err != nil {
 		return err
 	}
@@ -156,7 +183,6 @@ func (s *Store) Put(chat, id string, k Kind, mediaKey []byte, plain io.Reader) e
 		return err
 	}
 	defer os.Remove(tmp.Name())
-	iv, cipherKey, macKey := getMediaKeys(mediaKey, k)
 	if _, _, _, _, err := cbcutil.EncryptStream(cipherKey, iv, macKey, plain, tmp); err != nil {
 		tmp.Close()
 		return err
@@ -186,7 +212,7 @@ func epochAll(paths ...string) error {
 
 // Ingest lets fetch write the plain Media to a temp file in the runtime folder, then stores it encrypted.
 // The temp file is removed in every case.
-func (s *Store) Ingest(chat, id string, k Kind, mediaKey []byte, fetch func(*os.File) error) error {
+func (s *Store) Ingest(chat, id string, k Kind, fetch func(*os.File) error) error {
 	if _, _, err := s.names(chat, id); err != nil {
 		return err
 	}
@@ -208,12 +234,12 @@ func (s *Store) Ingest(chat, id string, k Kind, mediaKey []byte, fetch func(*os.
 	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	return s.Put(chat, id, k, mediaKey, tmp)
+	return s.Put(chat, id, k, tmp)
 }
 
 // Plain writes a plain copy to the runtime folder and returns its path.
 // ext (for example ".jpg") helps other apps pick the type. On any error no plain copy stays.
-func (s *Store) Plain(chat, id, ext string, k Kind, mediaKey []byte) (string, error) {
+func (s *Store) Plain(chat, id, ext string, k Kind) (string, error) {
 	d, f, err := s.names(chat, id)
 	if err != nil {
 		return "", err
@@ -225,7 +251,7 @@ func (s *Store) Plain(chat, id, ext string, k Kind, mediaKey []byte) (string, er
 		return "", err
 	}
 	path := filepath.Join(s.plainDir, d, f+ext)
-	if err := s.Export(chat, id, k, mediaKey, path); err != nil {
+	if err := s.Export(chat, id, k, path); err != nil {
 		os.Remove(path) // an older copy must not stay after a failed rewrite
 		return "", err
 	}
@@ -235,7 +261,7 @@ func (s *Store) Plain(chat, id, ext string, k Kind, mediaKey []byte) (string, er
 
 // UploadCopy writes a plain copy for a send to a new file of its own, apart from the copy that Plain hands out.
 // A media.open during the upload rewrites the Plain copy, so the upload must not read it. The caller removes the file.
-func (s *Store) UploadCopy(chat, id string, k Kind, mediaKey []byte) (string, error) {
+func (s *Store) UploadCopy(chat, id string, k Kind) (string, error) {
 	if _, _, err := s.names(chat, id); err != nil {
 		return "", err
 	}
@@ -251,7 +277,7 @@ func (s *Store) UploadCopy(chat, id string, k Kind, mediaKey []byte) (string, er
 		return "", err
 	}
 	f.Close()
-	if err := s.Export(chat, id, k, mediaKey, f.Name()); err != nil {
+	if err := s.Export(chat, id, k, f.Name()); err != nil {
 		os.Remove(f.Name())
 		return "", err
 	}
@@ -261,7 +287,7 @@ func (s *Store) UploadCopy(chat, id string, k Kind, mediaKey []byte) (string, er
 // Export writes a plain copy to dst (mode 0600) after the HMAC passed.
 // It decrypts into a temp file next to dst and renames it onto dst. A symlink at dst is replaced, not followed.
 // On error the temp file goes and an existing dst stays as it was.
-func (s *Store) Export(chat, id string, k Kind, mediaKey []byte, dst string) (err error) {
+func (s *Store) Export(chat, id string, k Kind, dst string) (err error) {
 	path, err := s.file(chat, id)
 	if err != nil {
 		return err
@@ -271,7 +297,10 @@ func (s *Store) Export(chat, id string, k Kind, mediaKey []byte, dst string) (er
 		return err
 	}
 	defer src.Close()
-	iv, cipherKey, macKey := getMediaKeys(mediaKey, k)
+	iv, cipherKey, macKey, err := s.mediaKeys(id, k)
+	if err != nil {
+		return err
+	}
 	size, err := validate(src, iv, macKey)
 	if err != nil {
 		return err

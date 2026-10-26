@@ -196,9 +196,8 @@ func TestOpenRenamesTheMediaOfTheOldLayoutOnce(t *testing.T) {
 	if err := p.Open(); err != nil {
 		t.Fatal(err)
 	}
-	mk := bytes.Repeat([]byte{3}, 32)
 	const jid = "31612345678@s.whatsapp.net"
-	if err := p.Media().Put(jid, "m1", media.Image, mk, strings.NewReader("pic")); err != nil {
+	if err := p.Media().Put(jid, "m1", media.Image, strings.NewReader("pic")); err != nil {
 		t.Fatal(err)
 	}
 	// Put it back in the old layout.
@@ -230,7 +229,7 @@ func TestOpenRenamesTheMediaOfTheOldLayoutOnce(t *testing.T) {
 	if !p2.Media().Has(jid, "m1") {
 		t.Fatal("the file has no new name")
 	}
-	if path, err := p2.Media().Plain(jid, "m1", "", media.Image, mk); err != nil {
+	if path, err := p2.Media().Plain(jid, "m1", "", media.Image); err != nil {
 		t.Fatal(err)
 	} else if got, _ := os.ReadFile(path); string(got) != "pic" {
 		t.Errorf("file = %q", got)
