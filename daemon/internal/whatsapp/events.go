@@ -38,7 +38,7 @@ func (c *Client) handle(evt any) {
 		c.events <- Disconnected{}
 	case *events.Message:
 		c.emitLiveAlias(evt.Info.MessageSource)
-		if c.handleProtocol(evt) {
+		if c.handleProtocol(evt) || c.handleSecretEdit(evt) {
 			return
 		}
 		chat := c.chatOf(evt.Info.MessageSource)
@@ -173,6 +173,29 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 		}
 	default:
 		return false
+	}
+	return true
+}
+
+// handleSecretEdit turns an encrypted edit into MessageEdited. WhatsApp sends the edits of other people this way.
+// It reports whether the Message was an encrypted edit. An edit that does not decrypt is dropped.
+func (c *Client) handleSecretEdit(evt *events.Message) bool {
+	enc := evt.Message.GetSecretEncryptedMessage()
+	if enc.GetSecretEncType() != waE2E.SecretEncryptedMessage_MESSAGE_EDIT {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
+	defer cancel()
+	m, err := c.cli.DecryptSecretEncryptedMessage(ctx, evt)
+	if err != nil {
+		return true
+	}
+	if inner := m.GetProtocolMessage().GetEditedMessage(); inner != nil { // the payload can hold the edit as a ProtocolMessage
+		m = inner
+	}
+	if text := messageText(m); text != "" {
+		c.events <- MessageEdited{Chat: c.chatOf(evt.Info.MessageSource).String(), ID: enc.GetTargetMessageKey().GetID(),
+			Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text}
 	}
 	return true
 }

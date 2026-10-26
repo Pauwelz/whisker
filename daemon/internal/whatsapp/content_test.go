@@ -32,6 +32,7 @@ func TestContentOf(t *testing.T) {
 		{"unknown kind with metadata", &waE2E.Message{GroupInviteMessage: &waE2E.GroupInviteMessage{}, MessageContextInfo: &waE2E.MessageContextInfo{}}, false, unsupportedText, true},
 		{"reaction", &waE2E.Message{ReactionMessage: &waE2E.ReactionMessage{}}, false, "", false},
 		{"poll vote", &waE2E.Message{PollUpdateMessage: &waE2E.PollUpdateMessage{}}, false, "", false},
+		{"encrypted edit", &waE2E.Message{SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{}}, false, "", false},
 		{"metadata only", &waE2E.Message{MessageContextInfo: &waE2E.MessageContextInfo{}}, false, "", false},
 	}
 	for _, tt := range tests {

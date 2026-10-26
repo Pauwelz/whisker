@@ -129,7 +129,7 @@ func hasVisibleContent(m *waE2E.Message) bool {
 	m.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
 		switch fd.Name() {
 		case "messageContextInfo", "senderKeyDistributionMessage", "protocolMessage", "reactionMessage",
-			"encReactionMessage", "pollUpdateMessage", "encEventResponseMessage", "keepInChatMessage":
+			"encReactionMessage", "pollUpdateMessage", "encEventResponseMessage", "keepInChatMessage", "secretEncryptedMessage":
 			return true
 		}
 		visible = true
