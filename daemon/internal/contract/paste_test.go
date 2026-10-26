@@ -25,7 +25,7 @@ func fakeClipboard(t *testing.T, script string) {
 }
 
 func uriScript(uris string) string {
-	return `if [ "$1" = --list-types ]; then printf 'text/uri-list\ntext/plain\n'; else printf '` + uris + `'; fi`
+	return `if [ "$1" = --list-types ]; then printf 'text/uri-list\n'; else printf '` + uris + `'; fi`
 }
 
 func paste(t *testing.T) (string, string) {
@@ -292,7 +292,12 @@ func TestPasteOfFilesAndTextAsksTheUser(t *testing.T) {
 	if f, _ := paste(t); !strings.Contains(f, `"alsoText":true`) || !strings.Contains(f, mustJSON(file)) {
 		t.Errorf("frame = %s, want the file and alsoText", f)
 	}
-	// The file list as text is no text.
+	// A file manager also offers the file list as text. That asks too: a hostile clipboard owner can do the same.
+	fakeClipboard(t, `if [ "$1" = --list-types ]; then printf 'text/uri-list\ntext/plain\n'; else printf 'file://`+file+`\n'; fi`)
+	if f, _ := paste(t); !strings.Contains(f, `"alsoText":true`) {
+		t.Errorf("frame = %s, want alsoText for a file manager copy", f)
+	}
+	// Only a file list: attach at once.
 	fakeClipboard(t, uriScript("file://"+file+"\\n"))
 	if f, _ := paste(t); strings.Contains(f, "alsoText") {
 		t.Errorf("frame = %s, want no alsoText", f)

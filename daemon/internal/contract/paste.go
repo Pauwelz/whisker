@@ -61,7 +61,7 @@ func readClipboard(id json.RawMessage, chat string) pasteResult {
 	}
 	types := strings.Fields(string(out))
 	r.files = copiedFiles(types)
-	r.text = len(r.files) > 0 && clipboardText(types, r.files)
+	r.text = len(r.files) > 0 && clipboardText(types)
 	i := slices.IndexFunc(pastedImageTypes, func(t struct{ mime, ext string }) bool { return slices.Contains(types, t.mime) })
 	if len(r.files) == 0 && i >= 0 {
 		var err error
@@ -177,23 +177,10 @@ func copiedFiles(types []string) []string {
 	return files
 }
 
-// clipboardText tells that the clipboard has text besides the copied files. A file manager often offers the file list as
-// text too (paths or file:// lines): that is no text.
-func clipboardText(types, files []string) bool {
-	i := slices.IndexFunc(types, func(t string) bool { return strings.HasPrefix(t, "text/plain") || t == "UTF8_STRING" })
-	if i < 0 {
-		return false
-	}
-	data, err := wlPaste(maxTextBytes, "--type", types[i])
-	if errors.Is(err, errTooLarge) {
-		return true
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "file://") && !slices.Contains(files, line) {
-			return true
-		}
-	}
-	return false
+// clipboardText tells that the clipboard also offers text. A file manager offers its file list as text too, but so can
+// a hostile clipboard owner, so any text counts and the Plugin asks (#95 L19).
+func clipboardText(types []string) bool {
+	return slices.ContainsFunc(types, func(t string) bool { return strings.HasPrefix(t, "text/plain") || t == "UTF8_STRING" })
 }
 
 var (

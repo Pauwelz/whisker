@@ -215,7 +215,7 @@ Item {
             visible: active
             sourceComponent: MediaChip { message: line.message; panel: line.panel }
           }
-          // Open asks first for a file type that is not on the safe list: Open or Save as.
+          // Open asks first for a file type that is not on the safe list: Open, Save as or Cancel.
           Row {
             readonly property bool asking: line.isMessage && line.panel.whiskerService.confirmOpen !== null && line.panel.whiskerService.confirmOpen.message.id === line.message.id
             visible: asking
@@ -230,6 +230,7 @@ Item {
             }
             Button { text: "Open"; bordered: true; onClicked: line.panel.whiskerService.confirmLaunch() }
             Button { text: "Save as"; bordered: true; onClicked: { line.panel.whiskerService.cancelLaunch(); line.panel.savingId = line.message.id } }
+            Button { text: "Cancel"; bordered: true; onClicked: line.panel.whiskerService.cancelLaunch() }
           }
           // Save as: type an absolute path, then press Enter. Escape cancels.
           TextEdit {
