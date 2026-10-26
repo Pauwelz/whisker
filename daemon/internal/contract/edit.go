@@ -32,7 +32,9 @@ func (s *session) chatEdit(req *request) outcome {
 	if err := s.port.Edit(p.Chat, p.ID, p.Text); err != nil {
 		return outcome{reply: s.whatsappFailed(req.ID, err)}
 	}
-	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.Edit(p.Chat, p.ID, "", true, p.Text) }, func() { s.clearDraft(p.Chat) })
+	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) {
+		return s.chats.Edit(whatsapp.MessageEdited{Chat: p.Chat, ID: p.ID, FromMe: true, Text: p.Text, Time: Clock.Now().Unix()}, EditWindow)
+	}, func() { s.clearDraft(p.Chat) })
 }
 
 // chatRevoke revokes a Message of the user for everyone. It becomes a Tombstone.

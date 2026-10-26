@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
@@ -235,11 +236,12 @@ func (s *Store) Requeue(chat, id string) (bool, error) {
 // Edit, Revoke and storedAuthor all use it.
 const authorSQL = `from_me = ? AND (from_me = 1 OR sender_jid = ?)`
 
-// Edit replaces the text of a Message that is not a Tombstone and marks it edited.
-// Only the author can edit: fromMe and sender must match the stored Message. It reports whether the Message changed.
-func (s *Store) Edit(chat, id, sender string, fromMe bool, text string) (bool, error) {
-	return s.change(`UPDATE messages SET text = ?, edited = 1 WHERE chat_jid = ? AND id = ? AND revoked = 0 AND `+authorSQL,
-		text, chat, id, boolInt(fromMe), sender)
+// Edit replaces the text and the mentions of a Message that is not a Tombstone and marks it edited.
+// Only the author can edit: ev.FromMe and ev.Sender must match the stored Message. An edit that ev.Time puts more than window after the Message time is refused.
+// It reports whether the Message changed.
+func (s *Store) Edit(ev whatsapp.MessageEdited, window time.Duration) (bool, error) {
+	return s.change(`UPDATE messages SET text = ?, edited = 1, mentions = ?, mentions_me = ? WHERE chat_jid = ? AND id = ? AND revoked = 0 AND `+authorSQL+` AND ? - time <= ?`,
+		ev.Text, strings.Join(ev.Mentions, " "), boolInt(ev.MentionsMe), ev.Chat, ev.ID, boolInt(ev.FromMe), ev.Sender, ev.Time, int64(window/time.Second))
 }
 
 // Revoke turns a Message into a Tombstone: it empties the text and keeps the position. It reports whether the Message changed.

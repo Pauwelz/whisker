@@ -214,8 +214,8 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 	}
 	switch {
 	case pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT:
-		if text := messageText(pm.GetEditedMessage()); text != "" {
-			c.events <- MessageEdited{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text}
+		if edit, ok := c.editOf(evt, id, pm.GetEditedMessage()); ok {
+			c.events <- edit
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
 		c.events <- MessageRevoked{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe}
@@ -249,11 +249,24 @@ func (c *Client) handleSecretEdit(evt *events.Message) bool {
 	if inner := m.GetProtocolMessage().GetEditedMessage(); inner != nil { // the payload can hold the edit as a ProtocolMessage
 		m = inner
 	}
-	if text := messageText(m); text != "" && !ReservedID(enc.GetTargetMessageKey().GetID()) {
-		c.events <- MessageEdited{Chat: c.chatOf(evt.Info.MessageSource).String(), ID: enc.GetTargetMessageKey().GetID(),
-			Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text}
+	if edit, ok := c.editOf(evt, enc.GetTargetMessageKey().GetID(), m); ok {
+		c.events <- edit
 	}
 	return true
+}
+
+// editOf is the MessageEdited that an event makes for the Message id, with m as its new content. It reports false for an edit without text or with a reserved target.
+func (c *Client) editOf(evt *events.Message, id string, m *waE2E.Message) (MessageEdited, bool) {
+	text := messageText(m)
+	if text == "" || ReservedID(id) {
+		return MessageEdited{}, false
+	}
+	mentions := mentionsOf(m)
+	return MessageEdited{
+		Chat: c.chatOf(evt.Info.MessageSource).String(), ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text,
+		Time:     evt.Info.Timestamp.Unix(), // the edit's own time, so an edit that arrives late still applies
+		Mentions: c.phoneStrings(MentionsIn(text, mentions)), MentionsMe: mentionsUser(mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+	}, true
 }
 
 // timerOf is the Disappearing timer in seconds that a Message carries in its ContextInfo, or 0.

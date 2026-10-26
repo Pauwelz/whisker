@@ -455,7 +455,7 @@ Params: `chat`, `id` and `text` (not blank, at most 65536 characters). Valid onc
 
 Error -32006 means the Message cannot be edited (unknown, not the user's, not sent yet, a Tombstone, too old, has mentions, or a blank or too long text). Error -32007 means WhatsApp could not be reached (offline or a failed call): nothing changed. The call blocks the Daemon for up to 15 s.
 
-An edit from another device, or from another Participant, arrives as `messageChanged` with `edited: true`. The Daemon drops an edit from someone other than the author. Fixture: `chat-edit.jsonl`.
+An edit from another device, or from another Participant, arrives as `messageChanged` with `edited: true`. The Daemon drops an edit from someone other than the author. It also drops an edit that is more than 15 minutes (`EditWindow`) after the Message time. The time of the edit comes from the edit itself, not from the arrival, so a late delivery still applies. An applied edit also replaces the mentions and the mention flag of the Message. Fixture: `chat-edit.jsonl`.
 
 ### `chat.react`
 

@@ -389,12 +389,16 @@ type Receipt struct {
 
 // MessageEdited means a Participant, or another device of the user, changed the text of a stored Message.
 // Sender and FromMe name the editor: only the author can edit a Message.
+// Time is the time of the edit itself in Unix seconds, not of its delivery. Mentions and MentionsMe are those of the new text.
 type MessageEdited struct {
-	Chat   string `json:"chat"`
-	ID     string `json:"id"`
-	Sender string `json:"sender"`
-	FromMe bool   `json:"fromMe"`
-	Text   string `json:"text"`
+	Chat       string   `json:"chat"`
+	ID         string   `json:"id"`
+	Sender     string   `json:"sender"`
+	FromMe     bool     `json:"fromMe"`
+	Text       string   `json:"text"`
+	Time       int64    `json:"time"`
+	Mentions   []string `json:"mentions"`
+	MentionsMe bool     `json:"mentionsMe"`
 }
 
 // MessageRevoked means a stored Message was revoked for everyone.
