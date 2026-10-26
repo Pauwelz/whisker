@@ -11,8 +11,19 @@ import (
 
 // PutSystem stores a live System Message. It keeps the Chat quiet: no Read Marker, no new last_active, no unarchive.
 // It creates the Chat if History Sync has not. A new subject also renames the Group Chat.
-func (s *Store) PutSystem(ev whatsapp.NewMessage) error {
-	return s.inTx(func(tx *sql.Tx) error {
+// It reports false when it stored nothing: a security code change adds no Chat and does not repeat itself.
+func (s *Store) PutSystem(ev whatsapp.NewMessage) (stored bool, err error) {
+	err = s.inTx(func(tx *sql.Tx) error {
+		stored = false
+		if ev.Message.System.Kind == whatsapp.SystemIdentity {
+			var skip bool
+			// The last Message is what the user sees above the new line. A sent or received Message in between lets the notice show again.
+			if err := tx.QueryRow(`SELECT NOT EXISTS (SELECT 1 FROM chats WHERE jid = ?)
+				OR COALESCE((SELECT system_kind = ? FROM messages WHERE chat_jid = ? ORDER BY time DESC, rowid DESC LIMIT 1), 0)`,
+				ev.Chat, whatsapp.SystemIdentity, ev.Chat).Scan(&skip); err != nil || skip {
+				return err
+			}
+		}
 		if _, err := tx.Exec(`INSERT INTO chats (jid, kind) VALUES (?, ?) ON CONFLICT(jid) DO UPDATE SET kind = COALESCE(NULLIF(?, ''), kind)`,
 			ev.Chat, kindOrDirect(ev.Kind), ev.Kind); err != nil {
 			return err
@@ -23,9 +34,46 @@ func (s *Store) PutSystem(ev whatsapp.NewMessage) error {
 				return err
 			}
 		}
-		_, err := putMessage(tx, ev.Chat, ev.Message, MediaNone)
+		stored, err = putMessage(tx, ev.Chat, ev.Message, MediaNone)
 		return err
 	})
+	return stored, err
+}
+
+// NoteOwnDevices stores the device ids of the user's own account. It reports true when an id is new,
+// unless the stored set was empty: the first list only fills the set. An id that is gone leaves the set.
+func (s *Store) NoteOwnDevices(ids []uint16) (added bool, err error) {
+	err = s.inTx(func(tx *sql.Tx) error {
+		added = false
+		old := map[uint16]bool{}
+		rows, err := tx.Query(`SELECT device FROM own_devices`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id uint16
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			old[id] = true
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		rows.Close()
+		if _, err := tx.Exec(`DELETE FROM own_devices`); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if _, err := tx.Exec(`INSERT OR IGNORE INTO own_devices (device) VALUES (?)`, id); err != nil {
+				return err
+			}
+			added = added || (len(old) > 0 && !old[id])
+		}
+		return nil
+	})
+	return added, err
 }
 
 // systemActor is the Participant who made the change of a System Message: the user, or a name (the name rule).
@@ -72,6 +120,10 @@ func systemText(kind string, actor systemActor, targets []string, value string) 
 		return who + " changed the group icon"
 	case whatsapp.SystemCreate:
 		return who + " created the group"
+	case whatsapp.SystemIdentity:
+		return "Security code changed"
+	case whatsapp.SystemDevice:
+		return "A new device was linked to your account"
 	case whatsapp.SystemTimer:
 		seconds, _ := strconv.ParseInt(value, 10, 64)
 		if seconds <= 0 {

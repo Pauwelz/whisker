@@ -93,6 +93,8 @@ Notification text leaves the encrypted stores. Omarchy's notification service sa
 
 On a default Omarchy install, the login keyring has no password, and gnome-keyring stores it in plain text in `~/.local/share/keyrings/`. A backup of `~/.local/share` then holds the stores and their key. The README tells users to set a password on the login keyring for real protection at rest.
 
+whatsmeow does not check the signed device lists of contacts or of the user's own account, and it accepts a changed identity key without asking (`AutoTrustIdentity`). The Companion Device trusts the WhatsApp server for the end-to-end keys. Against a malicious server it is weaker than the official apps. The Daemon only shows two System Messages: "Security code changed" in the Direct Chat of a contact, and "A new device was linked to your account" in the user's own Direct Chat. The Daemon reads the own device list at each connection, because whatsmeow sends no event for it. The first list after a new link only fills the stored set.
+
 Deletion: both stores use `secure_delete(1)`, so SQLite overwrites a deleted row in the store file. On the first start after the update, `Profile.Open` runs `VACUUM` once on both stores to clear old free space. The `VACUUM` copy stays in memory (`temp_store(2)`). The rollback journal is a separate file. The filesystem can keep its (encrypted) blocks until it reuses them.
 
 ### Lock

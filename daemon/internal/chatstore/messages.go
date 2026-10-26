@@ -416,7 +416,7 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 		if mi.Kind != "" {
 			m.Media = &mi
 		}
-		if !m.FromMe {
+		if !m.FromMe && m.Sender != "" { // a notice has no author
 			m.SenderName = participantName(contact, push, m.Sender)
 			m.SenderPush = pushOnly(contact, push)
 		}
