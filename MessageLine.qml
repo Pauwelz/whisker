@@ -216,21 +216,16 @@ Item {
             sourceComponent: MediaChip { message: line.message; panel: line.panel }
           }
           // Open asks first for a file type that is not on the safe list: Open, Save as or Cancel.
-          Row {
-            readonly property bool asking: line.isMessage && line.panel.whiskerService.confirmOpen !== null && line.panel.whiskerService.confirmOpen.message.id === line.message.id
-            visible: asking
-            spacing: Style.space(8)
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              textFormat: Text.PlainText
-              text: "Open this file in the default app?"
-              color: line.panel.contentForeground
-              font.family: line.panel.contentFontFamily
-              font.pixelSize: Style.font.body
-            }
-            Button { text: "Open"; bordered: true; onClicked: line.panel.whiskerService.confirmLaunch() }
-            Button { text: "Save as"; bordered: true; onClicked: { line.panel.whiskerService.cancelLaunch(); line.panel.savingId = line.message.id } }
-            Button { text: "Cancel"; bordered: true; onClicked: line.panel.whiskerService.cancelLaunch() }
+          Question {
+            visible: line.isMessage && line.panel.whiskerService.confirmOpen !== null && line.panel.whiskerService.confirmOpen.message.id === line.message.id
+            width: parent.width
+            panel: line.panel
+            text: "Open this file in the default app?"
+            answers: [
+              { label: "open", run: function() { line.panel.whiskerService.confirmLaunch() } },
+              { label: "save as…", run: function() { line.panel.whiskerService.cancelLaunch(); line.panel.savingId = line.message.id } },
+              { label: "cancel", run: function() { line.panel.whiskerService.cancelLaunch() } }
+            ]
           }
           // Save as: type an absolute path, then press Enter. Escape cancels.
           TextEdit {

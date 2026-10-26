@@ -15,7 +15,7 @@ FocusScope {
   readonly property var service: panel ? panel.whiskerService : null
   readonly property var draft: panel ? panel.draft : ({ text: "", attachments: [] })
   readonly property bool hasAttachment: Draft.hasAttachment(draft)
-  implicitHeight: askRow.height + suggestionList.height + row.implicitHeight + Style.space(8)
+  implicitHeight: askRow.height + askRow.anchors.topMargin + suggestionList.height + row.implicitHeight + Style.space(8)
   readonly property var pasteQuestion: panel ? Draft.pasteQuestion(panel.view, Quickshell.env("HOME")) : null
   property string lastText: "" // the last text within the limit
 
@@ -93,35 +93,24 @@ FocusScope {
     more: !suggestionList.atXEnd
   }
 
-  // The question about copied files and text: attach the files, or paste the text.
-  Row {
+  // The question about copied files and text: attach the files, paste the text, or neither. Escape is "cancel".
+  Question {
     id: askRow
     visible: composer.pasteQuestion !== null
-    height: visible ? 28 + anchors.topMargin : 0
+    height: visible ? implicitHeight : 0
     anchors.left: parent.left
+    anchors.right: parent.right
     anchors.leftMargin: Style.space(8)
+    anchors.rightMargin: Style.space(8)
     anchors.top: parent.top
     anchors.topMargin: visible ? Style.space(4) : 0
-    spacing: Style.space(8)
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      textFormat: Text.PlainText
-      text: composer.pasteQuestion ? composer.pasteQuestion.text : ""
-      color: composer.panel ? composer.panel.contentForeground : Color.foreground
-      font.family: composer.panel ? composer.panel.contentFontFamily : Style.font.family
-      font.pixelSize: Style.font.body
-    }
-    Button {
-      text: "Attach"
-      onClicked: composer.service.answerPaste(true)
-    }
-    Button {
-      text: "Paste text"
-      onClicked: {
-        composer.service.answerPaste(false)
-        input.forceActiveFocus()
-      }
-    }
+    panel: composer.panel
+    text: composer.pasteQuestion ? composer.pasteQuestion.text : ""
+    answers: [
+      { label: "attach", run: function() { composer.service.answerPaste(true); input.forceActiveFocus() } },
+      { label: "paste text", run: function() { composer.service.answerPaste(false); input.forceActiveFocus() } },
+      { label: "cancel", run: function() { composer.service.answerPaste(null); input.forceActiveFocus() } }
+    ]
   }
 
   ListView {
@@ -223,6 +212,11 @@ FocusScope {
         else composer.panel.runShortcut("Escape")
       }
       Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Escape && composer.pasteQuestion !== null) {
+          event.accepted = true
+          composer.service.answerPaste(null)
+          return
+        }
         if (composer.suggestions.length > 0) {
           var move = Shortcode.shortcodeKeyAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0)
           if (move !== "default") {

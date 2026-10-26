@@ -402,10 +402,11 @@ Item {
   }
 
   // Called by Attach or Paste text in the question about pasted files and text.
+  // attach: true attaches the files, false pastes the text, null drops the question.
   function answerPaste(attach) {
     var question = Draft.pasteQuestion(view)
     view = Draft.pasteAnswered(view)
-    if (!question) return
+    if (!question || attach === null) return
     if (attach) changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(view), question.paths) })
     else pasteText()
   }

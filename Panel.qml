@@ -121,11 +121,12 @@ Panel {
     }
   }
 
-  // Closes the Message overlays: the Reaction picker, the menu and the Save as field. Open one only after this.
+  // Closes the Message overlays: the Reaction picker, the menu, the Save as field and the Open question. Open one only after this.
   function closeOverlays() {
     root.reactingId = ""
     root.menuId = ""
     root.savingId = ""
+    root.whiskerService.cancelLaunch()
   }
 
   // Called by MessageLine, which cannot reach the composer.
@@ -896,11 +897,11 @@ Panel {
                 TapHandler { onTapped: root.whiskerService.loadOlderMessages() }
               }
             }
-            // A click on empty space closes the quick emoji bar and the menu.
+            // A click on empty space closes the quick emoji bar, the menu and the Open question.
             MouseArea {
               anchors.fill: parent
               z: -1
-              enabled: root.reactingId !== "" || root.menuId !== ""
+              enabled: root.reactingId !== "" || root.menuId !== "" || root.whiskerService.confirmOpen !== null
               onClicked: root.closeOverlays()
             }
             delegate: MessageLine {
