@@ -20,6 +20,7 @@ whisker is the Omarchy product: a Quickshell/QML Plugin and its own Go Daemon. I
 
 - Quickshell starts the Daemon as a child process. The Daemon stops with the Plugin.
 - The Plugin talks to the Daemon over the child's stdio. stdin carries commands. stdout carries protocol frames only. stderr carries logs. There is no socket.
+- At start, the Daemon copies fd 1 for the frame encoder and points fd 1 at stderr. A library that prints to stdout cannot inject a frame.
 - The Daemon exits on stdin EOF. A hard shell crash leaves no orphan Daemon.
 - The Daemon `Process` lives in a Plugin `service` with `keepLoaded: true`, so a config reload keeps it. Quickshell kills the child when it exits. The Plugin does not use `startDetached()` ([research](research/omarchy-plugin.md)).
 - One Daemon serves one Profile, which is one Companion Device. The initial architecture has no support for several Profiles.

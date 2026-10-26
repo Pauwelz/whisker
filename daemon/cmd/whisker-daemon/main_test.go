@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -106,4 +107,25 @@ func TestSignalStopsTheDaemonCleanly(t *testing.T) {
 			t.Errorf("exit code after %v = %d, want %d", sig, got, contract.ExitOK)
 		}
 	}
+}
+
+// The Plugin applies each stdout line as a frame, so every line must be a JSON-RPC 2.0 frame.
+func TestEveryStdoutLineIsAJSONRPCFrame(t *testing.T) {
+	c := start(t, buildDaemon(t), t.TempDir())
+	io.WriteString(c.stdin.(io.Writer), `{"jsonrpc":"2.0","id":1,"method":"nope"}`+"\n")
+	c.stdin.Close()
+	lines := 0
+	for c.out.Scan() {
+		lines++
+		var f struct {
+			JSONRPC string `json:"jsonrpc"`
+		}
+		if err := json.Unmarshal(c.out.Bytes(), &f); err != nil || f.JSONRPC != "2.0" {
+			t.Errorf("stdout line %q is not a JSON-RPC 2.0 frame", c.out.Text())
+		}
+	}
+	if lines == 0 {
+		t.Error("Daemon sent no frame")
+	}
+	c.exitCode()
 }

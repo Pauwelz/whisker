@@ -31,10 +31,16 @@ func main() {
 		fmt.Println(version)
 		return
 	}
-	os.Exit(run())
+	// Before any library code writes to fd 1: only the frame encoder may write there.
+	frames, err := privateStdout()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot protect stdout:", err)
+		os.Exit(contract.ExitError)
+	}
+	os.Exit(run(frames))
 }
 
-func run() int {
+func run(frames io.Writer) int {
 	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 	if runtimeDir == "" {
 		fmt.Fprintln(os.Stderr, "XDG_RUNTIME_DIR is not set")
@@ -73,7 +79,7 @@ func run() int {
 	defer p.Close()
 	whatsapp.SetDeviceIdentity(version)
 	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
-	return contract.Run(stdinUntilSignal(), os.Stdout, os.Stderr, p, prefs, newPort)
+	return contract.Run(stdinUntilSignal(), frames, os.Stderr, p, prefs, newPort)
 }
 
 // stdinUntilSignal reads stdin, and ends like EOF on SIGTERM or SIGINT.
