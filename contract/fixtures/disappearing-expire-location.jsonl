@@ -1,0 +1,11 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","lastActive":10,"timer":86400,"messages":[]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","ephemeral":true,"message":{"id":"m1","sender":"1@s.whatsapp.net","time":50,"text":"Location\nhttps://www.openstreetmap.org/?mlat=1.000000&mlon=2.000000#map=17/1.000000/2.000000","pushName":"Ann"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"Location\nhttps://www.openstreetmap.org/?mlat=1.000000&mlon=2.000000#map=17/1.000000/2.000000","state":"","edited":false,"revoked":false,"expiresAt":86450,"senderPush":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"clock","now":172850}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageExpired","params":{"chat":"1@s.whatsapp.net","id":"m1"}}}

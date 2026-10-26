@@ -174,7 +174,7 @@ A Chat has a timer in seconds (`timer` in `chats.list`, absent when off). It com
 
 The Daemon deletes expired Messages at start-up before `ready`, so a Message that expired while whisker was off is gone at once. After that it sweeps every minute (`contract.ExpiryInterval`) and sends `messageExpired` for each.
 
-Fixtures: `disappearing-expire.jsonl`, `disappearing-restart.jsonl`, `disappearing-send.jsonl`.
+Fixtures: `disappearing-expire.jsonl`, `disappearing-expire-location.jsonl`, `disappearing-restart.jsonl`, `disappearing-send.jsonl`.
 
 ### System Messages
 

@@ -684,6 +684,11 @@ func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) (bool, err
 		ev.Chat, kindOrDirect(ev.Kind), ev.Message.Time, ev.Kind); err != nil {
 		return false, err
 	}
+	if ev.Ephemeral && ev.Message.Timer == 0 { // WhatsApp marked it Disappearing but sent no timer
+		if err := tx.QueryRow(`SELECT timer FROM chats WHERE jid = ?`, ev.Chat).Scan(&ev.Message.Timer); err != nil {
+			return false, err
+		}
+	}
 	if _, err := putMessage(tx, ev.Chat, ev.Message, p.MediaState); err != nil {
 		return false, err
 	}

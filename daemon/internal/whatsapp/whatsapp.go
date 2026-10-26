@@ -341,10 +341,12 @@ type AppStateBatch struct {
 
 // NewMessage is a Message that arrived live, or that another device of the user sent. Time is Unix seconds.
 // Kind is the kind of the Chat, for a Chat that is not stored yet.
+// Ephemeral is set when WhatsApp marked the Message as Disappearing: the Chat store then uses the Chat timer if the Message has none.
 type NewMessage struct {
-	Chat    string  `json:"chat"`
-	Kind    string  `json:"chatKind"`
-	Message Message `json:"message"`
+	Chat      string  `json:"chat"`
+	Kind      string  `json:"chatKind"`
+	Ephemeral bool    `json:"ephemeral,omitempty"`
+	Message   Message `json:"message"`
 }
 
 // Participant is a Participant of a Group Chat. WhatsApp can give either ID, so a Participant holds both. An unknown ID is empty.
