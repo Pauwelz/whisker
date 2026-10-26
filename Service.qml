@@ -322,6 +322,20 @@ Item {
     send(Draft.pasteRequest, view.openChat.jid)
   }
 
+  // Called by Attach or Paste text in the question about pasted files and text.
+  function answerPaste(attach) {
+    var question = Draft.pasteQuestion(view)
+    view = Draft.pasteAnswered(view)
+    if (!question) return
+    if (attach) changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(view), question.paths) })
+    else pasteText()
+  }
+
+  // Called by a text field that cut text over the limit.
+  function textRefused() {
+    view = Draft.textRefused(view)
+  }
+
   // Called by the Delete button of a Message of the user. The Message becomes a Tombstone.
   function revokeMessage(messageId) {
     send(Message.revokeRequest, view.openChat.jid, messageId)
@@ -420,6 +434,7 @@ Item {
         root.handleNotificationFrame(frame)
         var pasted = Draft.pastedAttachment(root.view, frame)
         if (pasted !== null && pasted.length === 0) root.pasteText()
+        else if (pasted !== null && frame.result.alsoText) view = Draft.pasteAsked(view, pasted)
         else if (pasted !== null) root.changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(root.view), pasted) })
         if (Daemon.resendsAttention(frame)) root.syncAttention()
         if (Timeline.reloadsOpenChat(root.view, frame)) {

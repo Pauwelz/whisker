@@ -14,6 +14,29 @@ var KEY_V = 0x56
 // `openChat.unsendable` lists the Attachment paths that the Daemon refused. The marks live in the view only.
 var EMPTY_DRAFT = { text: "", quote: "", edit: "", attachments: [] }
 
+// The Daemon refuses text over 65536 code points (WhatsApp's limit). The composer and both search fields cap their text here.
+var MAX_TEXT = 65536
+var TEXT_TOO_LONG = "That text is too long"
+
+function codePoints(text) {
+  var n = 0
+  for (var i = 0; i < text.length; i++) {
+    var c = text.charCodeAt(i)
+    if (!(c >= 0xDC00 && c <= 0xDFFF && i > 0 && text.charCodeAt(i - 1) >= 0xD800 && text.charCodeAt(i - 1) <= 0xDBFF)) n++
+  }
+  return n
+}
+
+// The cap on a text field: { text, ok }. A text over the limit gives `last`, the last text that was valid, and ok false.
+function capText(text, last) {
+  return codePoints(text) <= MAX_TEXT ? { text: text, ok: true } : { text: last, ok: false }
+}
+
+// The state with the notice for text that was too long.
+function textRefused(state) {
+  return Common.withChanges(state, { notice: TEXT_TOO_LONG })
+}
+
 function draftOf(state) {
   return (state.openChat && state.openChat.draft) || EMPTY_DRAFT
 }
@@ -110,6 +133,25 @@ function pastedAttachment(state, frame) {
   if (!frame || !frame.result || !Array.isArray(frame.result.pasted)) return null
   if (!state.openChat || state.openChat.jid !== frame.result.chat) return null
   return frame.result.pasted
+}
+
+// A draft.paste reply with files and text asks the user first: the state keeps the files until the answer.
+function pasteAsked(state, paths) {
+  return Common.withChanges(state, { pasteChoice: { jid: state.openChat.jid, paths: paths } })
+}
+
+function pasteAnswered(state) {
+  return Common.withChanges(state, { pasteChoice: null })
+}
+
+// The question of the open Chat about the pasted files, or null: { paths, text }. A switch of Chat drops it.
+function pasteQuestion(state) {
+  var choice = state.pasteChoice
+  if (!choice || !state.openChat || state.openChat.jid !== choice.jid) return null
+  var dirs = choice.paths[0].split("/")
+  var folder = dirs[dirs.length - 2] || "/"
+  var n = choice.paths.length
+  return { paths: choice.paths, text: "Attach " + n + (n === 1 ? " file" : " files") + " from " + folder + "?" }
 }
 
 // The Attachments of the Draft with the pasted paths added at the end. A path that is already in the list stays once.

@@ -13,12 +13,14 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- When the clipboard holds copied files and other text, Ctrl+V now asks "Attach N files from <folder>?" with Attach and Paste text. Before, it attached the files at once. A file list that a file manager also offers as text does not count as text.
 - The README and the architecture now say that Omarchy keeps the text of each notification in plain text for up to 24 h, also after the message is revoked, deleted or expires. Turn Show preview off to keep message text out of that history.
 - The README now explains what whisker does, what it needs, how to link your phone and which dependencies it uses. It also states that whisker is unofficial and not affiliated with WhatsApp or Meta.
 - The plugin description in Omarchy is longer and names whatsmeow. The bar widget description is "WhatsApp chats in a pop-out".
 
 ### Security
 
+- The composer and both search fields now stop text at 65536 code points. The field keeps the last text within the limit and shows a notice. Before, a huge paste went to the Daemon in each request.
 - A paste now reads at most 64 KiB of the clipboard text and type list, and 100 MiB of an image. The Daemon stops `wl-paste` past the limit, and an image over it gives the "not sendable" notice. The Daemon runs one clipboard read at a time.
 - A pasted image now goes into the stored Draft of its Chat at once, so a switch of Chat cannot leave the file in `$XDG_RUNTIME_DIR` without an owner.
 - A click on a notification no longer puts the Chat id in a process argument. Before, the click command was `omarchy-shell pauwelz.whisker openChat <chat id>`, so other local users could read the phone number or group id in `/proc`. Omarchy also saved it in its notification history for up to 24 h. Now the command holds a random token, and the Daemon looks up the Chat. After a Daemon restart, an old notification opens the Chat list. The architecture now lists what whisker still passes in arguments: the path of a plain Media copy and the URL of a map link.

@@ -443,7 +443,17 @@ Panel {
             color: root.contentForeground
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.body
-            onTextChanged: root.whiskerService.searchChats(text)
+            property string lastText: ""
+            onTextChanged: {
+              var capped = Draft.capText(text, lastText)
+              if (!capped.ok) {
+                root.whiskerService.textRefused()
+                text = capped.text
+                return
+              }
+              lastText = text
+              root.whiskerService.searchChats(text)
+            }
             Keys.onEscapePressed: root.runShortcut("Escape")
             Text {
               visible: searchInput.text === ""
@@ -535,7 +545,17 @@ Panel {
               color: root.contentForeground
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.body
-              onTextChanged: if (parent.visible) root.whiskerService.searchContacts(text)
+              property string lastText: ""
+              onTextChanged: {
+                var capped = Draft.capText(text, lastText)
+                if (!capped.ok) {
+                  root.whiskerService.textRefused()
+                  text = capped.text
+                  return
+                }
+                lastText = text
+                if (parent.visible) root.whiskerService.searchContacts(text)
+              }
               Keys.onEscapePressed: root.runShortcut("Escape")
               Text {
                 visible: newChatInput.text === ""
