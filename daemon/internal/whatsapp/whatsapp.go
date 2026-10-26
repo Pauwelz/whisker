@@ -497,6 +497,9 @@ func (DeletedForMe) isEvent()   {}
 func (ChatCleared) isEvent()    {}
 func (ChatDeleted) isEvent()    {}
 
+// ReactionEmoji is the Reaction picker: the six default emoji of WhatsApp. A Reaction with another emoji, set by the user or by another Participant, is refused.
+var ReactionEmoji = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
+
 // Reasons for LinkFailed. docs/contract.md mirrors this list.
 const (
 	ReasonTimeout                   = "timeout"

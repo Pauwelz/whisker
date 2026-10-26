@@ -2,10 +2,9 @@ package contract
 
 import (
 	"slices"
-)
 
-// ReactionEmoji is the Reaction picker: the six default emoji of WhatsApp. An empty emoji removes the Reaction.
-var ReactionEmoji = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
+	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
+)
 
 // chatReact sets or removes the Reaction of the user on a Message. The follow-up sends `messageChanged` for it.
 // A Reaction is an interaction, like a sent Message.
@@ -13,7 +12,7 @@ var ReactionEmoji = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
 func (s *session) chatReact(req *request) outcome {
 	p := req.Params
 	m, err := s.chats.Message(p.Chat, p.ID)
-	if err != nil || inert(m) || (p.Emoji != "" && !slices.Contains(ReactionEmoji, p.Emoji)) {
+	if err != nil || inert(m) || (p.Emoji != "" && !slices.Contains(whatsapp.ReactionEmoji, p.Emoji)) {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
 	if err := s.port.React(p.Chat, p.ID, m.Sender, p.Emoji); err != nil {

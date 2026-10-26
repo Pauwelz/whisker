@@ -284,7 +284,7 @@ func (c *Client) kindOf(jid types.JID) string {
 // quoteOf is the Quote that a Message carries, or nil. The user's own JID maps to the empty sender.
 func (c *Client) quoteOf(m *waE2E.Message) *Quote {
 	ctx := m.GetExtendedTextMessage().GetContextInfo()
-	if ctx.GetStanzaID() == "" {
+	if ctx.GetStanzaID() == "" || ReservedID(ctx.GetStanzaID()) {
 		return nil
 	}
 	sender := c.phoneString(ctx.GetParticipant())

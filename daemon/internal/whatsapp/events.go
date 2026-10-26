@@ -42,12 +42,18 @@ func (c *Client) handle(evt any) {
 	case *events.Disconnected:
 		c.events <- Disconnected{}
 	case *events.Message:
+		if ReservedID(evt.Info.ID) {
+			return
+		}
 		c.emitLiveAlias(evt.Info.MessageSource)
 		if c.handleProtocol(evt) || c.handleSecretEdit(evt) {
 			return
 		}
 		chat := c.chatOf(evt.Info.MessageSource)
 		if r := evt.Message.GetReactionMessage(); r != nil {
+			if ReservedID(r.GetKey().GetID()) || (r.GetText() != "" && !slices.Contains(ReactionEmoji, r.GetText())) { // empty text removes
+				return
+			}
 			c.events <- Reaction{Chat: chat.String(), ID: r.GetKey().GetID(), Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
 			return
 		}
@@ -203,6 +209,9 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 		return false // the zero type of a missing ProtocolMessage is REVOKE
 	}
 	chat, id := c.chatOf(evt.Info.MessageSource).String(), pm.GetKey().GetID()
+	if ReservedID(id) && (pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT || pm.GetType() == waE2E.ProtocolMessage_REVOKE) {
+		return true
+	}
 	switch {
 	case pm.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT:
 		if text := messageText(pm.GetEditedMessage()); text != "" {
@@ -240,7 +249,7 @@ func (c *Client) handleSecretEdit(evt *events.Message) bool {
 	if inner := m.GetProtocolMessage().GetEditedMessage(); inner != nil { // the payload can hold the edit as a ProtocolMessage
 		m = inner
 	}
-	if text := messageText(m); text != "" {
+	if text := messageText(m); text != "" && !ReservedID(enc.GetTargetMessageKey().GetID()) {
 		c.events <- MessageEdited{Chat: c.chatOf(evt.Info.MessageSource).String(), ID: enc.GetTargetMessageKey().GetID(),
 			Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text}
 	}
@@ -414,7 +423,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 				}
 			}
 			parsed, err := c.cli.ParseWebMessage(jid, hm.GetMessage())
-			if err != nil {
+			if err != nil || ReservedID(parsed.Info.ID) {
 				continue
 			}
 			if body, ok := contentOf(parsed.Message, parsed.IsViewOnce); ok {
@@ -436,7 +445,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 func historyReactions(rs []*waWeb.Reaction, phone func(string) string) []HistoryReaction {
 	var out []HistoryReaction
 	for _, r := range rs {
-		if r.GetText() == "" {
+		if !slices.Contains(ReactionEmoji, r.GetText()) { // also drops the empty text of a removed Reaction
 			continue
 		}
 		key := r.GetKey()
