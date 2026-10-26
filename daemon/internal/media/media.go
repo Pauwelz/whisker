@@ -1,6 +1,7 @@
 // Package media keeps Media in the Profile in WhatsApp's CDN format and hands out plain copies on request.
 // A stored file is AES-256-CBC ciphertext followed by a 10-byte truncated HMAC-SHA256, keyed by the mediaKey.
 // Plain copies live only in a private runtime folder (tmpfs). Wipe clears it at start and exit.
+// Folders and files carry keyed hashes of the Chat and the Message id, so a listing shows no JID, id or time.
 // Callers must never log a path from this package.
 package media
 
@@ -8,12 +9,14 @@ import (
 	"crypto/aes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"go.mau.fi/whatsmeow/util/cbcutil"
 	"go.mau.fi/whatsmeow/util/hkdfutil"
@@ -56,6 +59,13 @@ var errName = errors.New("unsafe media name")
 
 var errNoRuntime = errors.New("no runtime folder")
 
+var errNoKey = errors.New("no name key")
+
+// NameKey derives the key for the Media names from the store key. It never uses the store key itself.
+func NameKey(storeKey []byte) []byte {
+	return hkdfutil.SHA256(storeKey, nil, []byte("whisker media names"), 32)
+}
+
 // getMediaKeys re-implements the unexported whatsmeow helper: HKDF-SHA256 of the mediaKey, 112 bytes.
 func getMediaKeys(mediaKey []byte, k Kind) (iv, cipherKey, macKey []byte) {
 	x := hkdfutil.SHA256(mediaKey, nil, []byte(k.Info()), 112)
@@ -63,9 +73,44 @@ func getMediaKeys(mediaKey []byte, k Kind) (iv, cipherKey, macKey []byte) {
 }
 
 // Store is the Media of one Profile. dir holds the encrypted files, plainDir the plain copies.
-type Store struct{ dir, plainDir string }
+// Without a name key, only Wipe works.
+type Store struct {
+	dir, plainDir string
+	nameKey       []byte
+}
 
 func New(dir, plainDir string) *Store { return &Store{dir: dir, plainDir: plainDir} }
+
+// SetNameKey sets the key from NameKey. Profile.Open calls it before any other use.
+func (s *Store) SetNameKey(k []byte) { s.nameKey = k }
+
+func (s *Store) hash(parts ...string) string {
+	h := hmac.New(sha256.New, s.nameKey)
+	h.Write([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// chatDir returns the folder name of the Chat.
+func (s *Store) chatDir(chat string) (string, error) {
+	if err := safe(chat); err != nil {
+		return "", err
+	}
+	if len(s.nameKey) == 0 {
+		return "", errNoKey
+	}
+	return s.hash("chat", chat), nil
+}
+
+// names returns the folder name of the Chat and the file name of the Message. It refuses an empty id.
+func (s *Store) names(chat, id string) (dir, file string, err error) {
+	if err := safe(id); err != nil {
+		return "", "", err
+	}
+	if dir, err = s.chatDir(chat); err != nil {
+		return "", "", err
+	}
+	return dir, s.hash("file", chat, id), nil
+}
 
 // safe rejects names that could leave their folder.
 func safe(names ...string) error {
@@ -77,23 +122,32 @@ func safe(names ...string) error {
 	return nil
 }
 
-func (s *Store) file(chat, id string) string { return filepath.Join(s.dir, chat, id) }
+// file is the path of the stored file.
+func (s *Store) file(chat, id string) (string, error) {
+	d, f, err := s.names(chat, id)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(s.dir, d, f), nil
+}
 
 // Has reports whether the Media is stored.
 func (s *Store) Has(chat, id string) bool {
-	if safe(chat, id) != nil {
+	p, err := s.file(chat, id)
+	if err != nil {
 		return false
 	}
-	_, err := os.Stat(s.file(chat, id))
+	_, err = os.Stat(p)
 	return err == nil
 }
 
 // Put encrypts plain into the Profile. A failed Put stores nothing.
 func (s *Store) Put(chat, id string, k Kind, mediaKey []byte, plain io.Reader) error {
-	if err := safe(chat, id); err != nil {
+	path, err := s.file(chat, id)
+	if err != nil {
 		return err
 	}
-	dir := filepath.Dir(s.file(chat, id))
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -110,13 +164,30 @@ func (s *Store) Put(chat, id string, k Kind, mediaKey []byte, plain io.Reader) e
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), s.file(chat, id))
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return err
+	}
+	return epochAll(path, dir, s.dir)
+}
+
+// epoch sets the times of a file to the Unix epoch, so they do not show when the Media arrived.
+func epoch(path string) error { return os.Chtimes(path, time.Unix(0, 0), time.Unix(0, 0)) }
+
+// epochAll sets the times of the files and folders that a change touched. The change time (ctime) cannot be set.
+func epochAll(paths ...string) error {
+	var first error
+	for _, p := range paths {
+		if err := epoch(p); err != nil && !errors.Is(err, os.ErrNotExist) && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 // Ingest lets fetch write the plain Media to a temp file in the runtime folder, then stores it encrypted.
 // The temp file is removed in every case.
 func (s *Store) Ingest(chat, id string, k Kind, mediaKey []byte, fetch func(*os.File) error) error {
-	if err := safe(chat, id); err != nil {
+	if _, _, err := s.names(chat, id); err != nil {
 		return err
 	}
 	if !filepath.IsAbs(s.plainDir) {
@@ -143,32 +214,34 @@ func (s *Store) Ingest(chat, id string, k Kind, mediaKey []byte, fetch func(*os.
 // Plain writes a plain copy to the runtime folder and returns its path.
 // ext (for example ".jpg") helps other apps pick the type. On any error no plain copy stays.
 func (s *Store) Plain(chat, id, ext string, k Kind, mediaKey []byte) (string, error) {
-	if err := safe(chat, id); err != nil {
+	d, f, err := s.names(chat, id)
+	if err != nil {
 		return "", err
 	}
 	if !filepath.IsAbs(s.plainDir) {
 		return "", errNoRuntime
 	}
-	if err := os.MkdirAll(filepath.Join(s.plainDir, chat), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(s.plainDir, d), 0o700); err != nil {
 		return "", err
 	}
-	path := filepath.Join(s.plainDir, chat, id+ext)
+	path := filepath.Join(s.plainDir, d, f+ext)
 	if err := s.Export(chat, id, k, mediaKey, path); err != nil {
 		return "", err
 	}
+	epochAll(path, filepath.Dir(path), s.plainDir)
 	return path, nil
 }
 
 // UploadCopy writes a plain copy for a send to a new file of its own, apart from the copy that Plain hands out.
 // A media.open during the upload rewrites the Plain copy, so the upload must not read it. The caller removes the file.
 func (s *Store) UploadCopy(chat, id string, k Kind, mediaKey []byte) (string, error) {
-	if err := safe(chat, id); err != nil {
+	if _, _, err := s.names(chat, id); err != nil {
 		return "", err
 	}
 	if !filepath.IsAbs(s.plainDir) {
 		return "", errNoRuntime
 	}
-	dir := filepath.Join(s.plainDir, "upload") // no Chat folder: a JID always holds "@"
+	dir := filepath.Join(s.plainDir, "upload") // no Chat folder: a Chat folder name is 64 hex characters
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
@@ -185,10 +258,11 @@ func (s *Store) UploadCopy(chat, id string, k Kind, mediaKey []byte) (string, er
 
 // Export writes a plain copy to dst (mode 0600) after the HMAC passed. On error dst is removed.
 func (s *Store) Export(chat, id string, k Kind, mediaKey []byte, dst string) (err error) {
-	if err := safe(chat, id); err != nil {
+	path, err := s.file(chat, id)
+	if err != nil {
 		return err
 	}
-	src, err := os.Open(s.file(chat, id))
+	src, err := os.Open(path)
 	if err != nil {
 		return err
 	}
@@ -248,51 +322,119 @@ func validate(f *os.File, iv, macKey []byte) (int64, error) {
 
 // Release deletes the plain copies of a Chat. Call it when the Chat closes.
 func (s *Store) Release(chat string) {
-	if safe(chat) == nil {
-		os.RemoveAll(filepath.Join(s.plainDir, chat))
+	if d, err := s.chatDir(chat); err == nil {
+		os.RemoveAll(filepath.Join(s.plainDir, d))
+		epochAll(s.plainDir)
 	}
 }
 
 // Remove deletes the stored Media of one Message, for example when a Disappearing Message expires.
 func (s *Store) Remove(chat, id string) {
-	if safe(chat, id) != nil {
+	d, f, err := s.names(chat, id)
+	if err != nil {
 		return
 	}
-	os.Remove(s.file(chat, id))
-	plain, _ := filepath.Glob(filepath.Join(s.plainDir, chat, id+".*"))
-	for _, p := range append(plain, filepath.Join(s.plainDir, chat, id)) {
+	os.Remove(filepath.Join(s.dir, d, f))
+	plain, _ := filepath.Glob(filepath.Join(s.plainDir, d, f+".*"))
+	for _, p := range append(plain, filepath.Join(s.plainDir, d, f)) {
 		os.Remove(p)
 	}
+	epochAll(filepath.Join(s.dir, d), filepath.Join(s.plainDir, d), s.dir)
 }
 
 var errMove = errors.New("media move failed")
 
 // MoveChat moves the stored Media of the Chat `from` into the Chat `to`, when the two Chats merge.
+// The hashed file names hide the Message ids, so the caller passes the ids of `from`.
 // A file whose Message id `to` already has stays as it is there. The plain copies of `from` go.
 // It keeps the folder of `from` and returns an error when a move failed, so no file is lost. The error holds no path.
-func (s *Store) MoveChat(from, to string) error {
-	if safe(from, to) != nil {
-		return nil
-	}
-	s.Release(from)
-	entries, err := os.ReadDir(filepath.Join(s.dir, from))
+func (s *Store) MoveChat(from, to string, ids []string) error {
+	fd, err := s.chatDir(from)
 	if err != nil {
-		return nil // no Media in the Chat
-	}
-	if os.MkdirAll(filepath.Join(s.dir, to), 0o700) != nil {
 		return errMove
 	}
+	td, err := s.chatDir(to)
+	if err != nil {
+		return errMove
+	}
+	s.Release(from)
 	failed := false
-	for _, e := range entries {
-		if !s.Has(to, e.Name()) && os.Rename(s.file(from, e.Name()), s.file(to, e.Name())) != nil {
+	for _, id := range ids {
+		src, err := s.file(from, id)
+		if err != nil {
+			failed = true
+			continue
+		}
+		if _, err := os.Stat(src); err != nil || s.Has(to, id) {
+			continue // no file, or the target Chat has the id
+		}
+		dst, _ := s.file(to, id)
+		if os.MkdirAll(filepath.Dir(dst), 0o700) != nil || os.Rename(src, dst) != nil {
 			failed = true
 		}
+	}
+	epochAll(filepath.Join(s.dir, td), s.dir)
+	if failed {
+		return errMove
+	}
+	// The files that stayed go with the folder. So does a file without a Media row: it cannot be opened.
+	os.RemoveAll(filepath.Join(s.dir, fd))
+	epochAll(filepath.Join(s.dir, td), s.dir)
+	return nil
+}
+
+// Rename gives the files of the old layout, <Chat>/<id>, their hashed names. A folder whose name is 64 hex characters is already new.
+// It is safe to run twice. A failed rename keeps the old file and the old folder.
+func (s *Store) Rename() error {
+	if len(s.nameKey) == 0 {
+		return errNoKey
+	}
+	dirs, err := os.ReadDir(s.dir)
+	if err != nil {
+		return nil // no Media
+	}
+	failed := false
+	var hashDirs []string
+	for _, d := range dirs {
+		if !d.IsDir() || isHash(d.Name()) {
+			continue
+		}
+		old := filepath.Join(s.dir, d.Name())
+		files, err := os.ReadDir(old)
+		if err != nil {
+			failed = true
+			continue
+		}
+		for _, f := range files {
+			if strings.HasPrefix(f.Name(), ".put-") { // a temp file of a Put that never ended
+				os.Remove(filepath.Join(old, f.Name()))
+				continue
+			}
+			dst, err := s.file(d.Name(), f.Name())
+			if err != nil || f.IsDir() || os.MkdirAll(filepath.Dir(dst), 0o700) != nil {
+				failed = true
+				continue
+			}
+			if err := os.Rename(filepath.Join(old, f.Name()), dst); err != nil || epoch(dst) != nil {
+				failed = true
+			}
+			hashDirs = append(hashDirs, filepath.Dir(dst))
+		}
+		os.Remove(old) // fails, and is right to, while a file stays
+	}
+	epochAll(s.dir)
+	for _, d := range hashDirs {
+		epochAll(d)
 	}
 	if failed {
 		return errMove
 	}
-	os.RemoveAll(filepath.Join(s.dir, from)) // the files that stayed go with the folder
 	return nil
+}
+
+func isHash(name string) bool {
+	b, err := hex.DecodeString(name)
+	return err == nil && len(b) == sha256.Size
 }
 
 // Wipe deletes every plain copy. Call it at start and exit.

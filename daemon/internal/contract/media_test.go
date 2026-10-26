@@ -69,7 +69,11 @@ func TestPlainCopiesAreWipedAtStartAndExit(t *testing.T) {
 func TestChangedStoredMediaIsRejected(t *testing.T) {
 	r := newRunner(t)
 	startWithImage(t, r)
-	file := filepath.Join(r.dir, "media", mediaChat, "m1")
+	files, _ := filepath.Glob(filepath.Join(r.dir, "media", "*", "*"))
+	if len(files) != 1 {
+		t.Fatalf("stored files = %v, want one", files)
+	}
+	file := files[0]
 	data, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +86,7 @@ func TestChangedStoredMediaIsRejected(t *testing.T) {
 	if f := r.nextFrame(); !strings.Contains(f, "-32009") || !strings.Contains(f, "integrity") {
 		t.Fatalf("frame = %s, want the integrity error", f)
 	}
-	if left, _ := os.ReadDir(filepath.Join(r.runtime, "whisker", "media", mediaChat)); len(left) > 0 {
+	if left, _ := filepath.Glob(filepath.Join(r.runtime, "whisker", "media", "*", "*")); len(left) > 0 {
 		t.Error("a plain copy stayed behind")
 	}
 	_, _, logs := r.finish()

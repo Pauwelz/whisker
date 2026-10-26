@@ -22,5 +22,5 @@
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","paths":["$RUNTIME/src/missing.png"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"error":{"code":-32013,"message":"file not sendable","data":{"paths":["$RUNTIME/src/missing.png"]}}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"fake-1"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chat":"1@s.whatsapp.net","id":"fake-1","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/fake-1.webp"}}}
-{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/fake-1.webp","content":"RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx"}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chat":"1@s.whatsapp.net","id":"fake-1","path":"$RUNTIME/whisker/media/$MEDIA[1@s.whatsapp.net|fake-1].webp"}}}
+{"dir":"file","path":"$RUNTIME/whisker/media/$MEDIA[1@s.whatsapp.net|fake-1].webp","content":"RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx"}

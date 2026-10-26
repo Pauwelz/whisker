@@ -22,8 +22,9 @@ import (
 )
 
 type Profile struct {
-	Dir  string // $XDG_DATA_HOME/whisker
-	keys *keystore.Store
+	Dir   string // $XDG_DATA_HOME/whisker
+	keys  *keystore.Store
+	media *media.Store
 
 	device *sqlstore.Container
 	chat   *sql.DB
@@ -39,12 +40,16 @@ func (p *Profile) Chat() *sql.DB { return p.chat }
 
 // Media returns the Media of the Profile: encrypted files in the Profile, plain copies in $XDG_RUNTIME_DIR/whisker/media.
 // Without XDG_RUNTIME_DIR the store refuses plain copies (the Daemon exits at start without it).
+// Open gives the store its name key. Before Open the store can only Wipe.
 func (p *Profile) Media() *media.Store {
-	plain := ""
-	if rt := os.Getenv("XDG_RUNTIME_DIR"); rt != "" {
-		plain = filepath.Join(rt, "whisker", "media")
+	if p.media == nil {
+		plain := ""
+		if rt := os.Getenv("XDG_RUNTIME_DIR"); rt != "" {
+			plain = filepath.Join(rt, "whisker", "media")
+		}
+		p.media = media.New(filepath.Join(p.Dir, "media"), plain)
 	}
-	return media.New(filepath.Join(p.Dir, "media"), plain)
+	return p.media
 }
 
 // Device returns the whatsmeow device store. It is valid after a successful Open.
@@ -54,29 +59,41 @@ func (p *Profile) Device() *sqlstore.Container { return p.device }
 // A store that the key cannot open is unreadable. This happens when the key is new but the Profile directory exists (lost key),
 // and when the key is in the keyring but is wrong. Open then deletes the old stores and starts a fresh Profile.
 // A keyring error leaves the Profile alone and returns keystore.ErrUnavailable.
+// Then Open gives the Media store its name key and renames the Media files of the old layout.
 func (p *Profile) Open() error {
-	key, created, err := p.keys.Load()
+	key, err := p.openKeyed()
 	if err != nil {
 		return err
 	}
+	p.Media().SetNameKey(media.NameKey(key))
+	_ = p.Media().Rename() // a file that did not move stays, and the next Open tries again
+	return nil
+}
+
+// openKeyed opens the stores and returns the key that opened them.
+func (p *Profile) openKeyed() ([]byte, error) {
+	key, created, err := p.keys.Load()
+	if err != nil {
+		return nil, err
+	}
 	if created {
 		if err := p.removeData(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	err = p.openStores(key)
 	if err == nil || created || !errors.Is(err, sqlite3.NOTADB) {
-		return err
+		return key, err
 	}
 	// Wrong key: replace it, because the old one opens nothing.
 	if err := p.Delete(); err != nil {
-		return err
+		return nil, err
 	}
 	key, _, err = p.keys.Load()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return p.openStores(key)
+	return key, p.openStores(key)
 }
 
 func (p *Profile) openStores(key []byte) (err error) {

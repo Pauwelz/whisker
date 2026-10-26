@@ -99,6 +99,8 @@ whatsmeow does not check the signed device lists of contacts or of the user's ow
 
 Deletion: both stores use `secure_delete(1)`, so SQLite overwrites a deleted row in the store file. On the first start after the update, `Profile.Open` runs `VACUUM` once on both stores to clear old free space. The `VACUUM` copy stays in memory (`temp_store(2)`). The rollback journal is a separate file. The filesystem can keep its (encrypted) blocks until it reuses them.
 
+The Media folders and files carry keyed names: `hex(HMAC(k, "chat\0" + chat))` for the Chat folder and `hex(HMAC(k, "file\0" + chat + "\0" + id))` for the file. `k` is an HKDF-SHA256 subkey of the store key (info `whisker media names`). Plain copies use the same names. The Media folder still shows the number of Media files per Chat and their sizes. It shows no names or ids. File and folder modification times are the Unix epoch. The change time (ctime) still shows when a file arrived.
+
 ### Lock
 
 The Profile lock is in `$XDG_RUNTIME_DIR/whisker/` (see section 3).

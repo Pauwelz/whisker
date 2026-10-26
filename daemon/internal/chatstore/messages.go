@@ -317,6 +317,24 @@ func (s *Store) DeleteMedia(chat, id string) (bool, error) {
 	return had, err
 }
 
+// MediaIDs lists the Message ids that have a Media row in the Chat. A Chat merge needs them to move the Media files.
+func (s *Store) MediaIDs(chat string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT id FROM media WHERE chat_jid = ?`, chat)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // SetReaction sets the Reaction of a Participant on a stored Message, or removes it when emoji is empty.
 // The reactor is the user when fromMe is true. It reports whether anything changed: an unknown Message or the same emoji changes nothing.
 func (s *Store) SetReaction(chat, id, sender string, fromMe bool, emoji string) (bool, error) {

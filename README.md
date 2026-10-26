@@ -62,6 +62,8 @@ whisker keeps your Profile, the local copy of your WhatsApp account, in these pl
 | `$XDG_CONFIG_HOME/whisker` (default `~/.config/whisker`) | Your settings, as plain `settings.json`. |
 | The default keyring, item `whisker` / `store-key` | The key that opens the stores. |
 
+The media folder shows how many media files each chat has and their sizes. It shows no phone numbers or message ids. File and folder modification times are the Unix epoch. The change time (ctime) still shows when a file arrived.
+
 A pasted image waits in `$XDG_RUNTIME_DIR/whisker/pasted` (in memory) until you send or remove it.
 
 Log out in the pop-out deletes the Profile and the key. It keeps your settings. `omarchy plugin remove` does not delete any of these.
