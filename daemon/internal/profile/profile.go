@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -187,6 +188,8 @@ func (p *Profile) removeData() error {
 
 // dsn opens an adiantum-encrypted file. whatsmeow needs foreign keys on. Setting any _pragma drops the default busy timeout.
 // secure_delete(1) overwrites deleted rows in the file. temp_store(2) keeps the temporary copy of VACUUM in memory, not in a plain file.
+// net/url escapes the path, so a '#', '?' or '%' in it cannot end the path early and drop vfs=adiantum.
 func dsn(path, hexKey string) string {
-	return "file:" + path + "?vfs=adiantum&hexkey=" + hexKey + "&_pragma=foreign_keys(1)&_pragma=busy_timeout(10000)&_pragma=temp_store(2)&_pragma=secure_delete(1)"
+	q := url.Values{"vfs": {"adiantum"}, "hexkey": {hexKey}, "_pragma": {"foreign_keys(1)", "busy_timeout(10000)", "temp_store(2)", "secure_delete(1)"}}
+	return (&url.URL{Scheme: "file", Path: path, RawQuery: q.Encode()}).String()
 }

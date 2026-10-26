@@ -241,3 +241,20 @@ func TestMediaBeforeOpenCanWipe(t *testing.T) {
 		t.Error("Wipe left the plain folder")
 	}
 }
+
+// A '#', '?' or '%' in the data path must not end the path early, or the store opens without encryption.
+func TestStoreStaysEncryptedInAPathWithURLCharacters(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "a#b?c%25d e", "whisker")
+	p := profile.New(dir, keystore.New(keystore.NewFake(), clock.Real))
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	p.Close()
+	data, err := os.ReadFile(filepath.Join(dir, "chat.db"))
+	if err != nil {
+		t.Fatalf("the store is not at the path: %v", err)
+	}
+	if bytes.Contains(data, []byte("SQLite format 3")) {
+		t.Error("chat.db is not encrypted")
+	}
+}
