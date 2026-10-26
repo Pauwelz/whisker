@@ -1,0 +1,25 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"Crew","lastActive":10,"messages":[]},{"jid":"g2@g.us","kind":"group","subject":"Club","lastActive":9,"messages":[]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","message":{"id":"m1","sender":"2@s.whatsapp.net","time":50,"text":"hello","pushName":"Bob"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Bob","fromMe":false,"time":50,"text":"hello","state":"","edited":false,"revoked":false,"senderPush":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g2@g.us","message":{"id":"n1","sender":"2@s.whatsapp.net","time":50,"text":"hello","pushName":"Bob"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"n1","chat":"g2@g.us","sender":"2@s.whatsapp.net","senderName":"Bob","fromMe":false,"time":50,"text":"hello","state":"","edited":false,"revoked":false,"senderPush":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","message":{"id":"m2","sender":"2@s.whatsapp.net","time":50,"text":"hello","pushName":"Bob"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m2","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Bob","fromMe":false,"time":50,"text":"hello","state":"","edited":false,"revoked":false,"senderPush":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"notified","notified":[{"summary":"Crew","body":"~ Bob +2: hello"},{"summary":"Club","body":"~ Bob +2: hello"},{"summary":"Crew","body":"~ Bob +2: hello"}]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"notification.open","params":{"token":"$TOKEN[0]"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"g1@g.us"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"notification.open","params":{"token":"$TOKEN[2]"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chat":"g1@g.us"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"notification.open","params":{"token":"$TOKEN[1]"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chat":"g2@g.us"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"notification.open","params":{"token":"0123456789abcdef0123456789abcdef"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"error":{"code":-32010,"message":"invalid chat"}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"notification.open","params":{"token":"g1@g.us"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"error":{"code":-32010,"message":"invalid chat"}}}

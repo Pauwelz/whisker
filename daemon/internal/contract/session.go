@@ -50,6 +50,7 @@ type session struct {
 	chats            *chatstore.Store
 	box              *outbox
 	read             *reader // clears Read Markers and sends Read Receipts
+	notices          *notifier
 	pres             *presenter
 	loader           *mediaLoader
 	hist             *history                  // the open On-Demand History Sync requests
@@ -78,7 +79,7 @@ func (s *session) open() int {
 		s.media = s.profile.Media()
 		s.chats = chatstore.New(s.profile.Chat(), Clock.Now)
 		s.read = &reader{chats: s.chats, port: s.port, prefs: s.prefs, attn: &s.attn, logOut: s.logOut, played: map[string]bool{}}
-		notices := &notifier{chats: s.chats, prefs: s.prefs, attn: &s.attn, desktop: s.desktop, logOut: s.logOut}
+		s.notices = &notifier{chats: s.chats, prefs: s.prefs, attn: &s.attn, desktop: s.desktop, logOut: s.logOut}
 		// A settings file that cannot be read gives the defaults.
 		autoDownloads := func(size int64) bool {
 			cur, err := s.prefs.Get()
@@ -87,7 +88,7 @@ func (s *session) open() int {
 			}
 			return cur.AutoDownloads(size)
 		}
-		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, notices.show, autoDownloads)
+		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, s.notices.show, autoDownloads)
 		s.sent = s.box.results
 		s.participantsDone = s.box.participants
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)

@@ -8,4 +8,4 @@
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"m1","sender":"1@s.whatsapp.net","time":50,"text":"","pushName":"Ann","media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","directPath":"/v/t/x","fileSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","fileEncSha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"none"},"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
-{"dir":"notified","notified":[{"summary":"~ Ann +1","body":"Photo","chat":"1@s.whatsapp.net"}]}
+{"dir":"notified","notified":[{"summary":"~ Ann +1","body":"Photo"}]}

@@ -222,7 +222,7 @@ The Daemon sends the notification before the `chatsChanged` of that Message. It 
 | App name | `whisker` |
 | Summary | The Chat name. For a Chat with `pushNameOnly`: `~ name +number`. |
 | Body | A Group Chat: `<sender>: <text>`, where `<sender>` is `~ name +number` when the Message has `senderPush`. A Direct Chat: the text. A Message with Media and no text: the Media label (`Photo`, `Sticker`, `Voice message`, `Audio`, `Video`, `Document`). With `notificationPreview` off: `New message`. The body is plain text. |
-| Click hint | `omarchy-exec-argv`, a string with the JSON argv `["omarchy-shell","pauwelz.whisker","openChat","<chat>"]`. A click runs the Plugin IPC handler `openChat` and opens the pop-out on that Chat. |
+| Click hint | `omarchy-exec-argv`, a string with the JSON argv `["omarchy-shell","pauwelz.whisker","openChat","<token>"]`. A click runs the Plugin IPC handler `openChat`. The Plugin sends `notification.open` with the token and opens the pop-out on the Chat in the answer. The token is 16 random bytes in hex. It is not the Chat id, so the id stays out of process arguments and out of the notification history of Omarchy. |
 | Urgency hint | `urgency`, a byte, 0 (low), as in `omarchy-notification-send`. |
 
 The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies unless one of these is true:
@@ -372,6 +372,12 @@ Fixtures: `read-elsewhere.jsonl` (Group Chat) and `read-elsewhere-direct.jsonl` 
 Edit, Revoke, typing and opening Media are not interactions. A Reaction of the user (`chat.react`) and a reply with a Quote (`chat.send` with `quote`) are interactions: both call `reader.interaction`. A Reaction that someone else sets is not. A Read Receipt that fails (offline) stays due and goes out with the next one for that Chat.
 
 Fixtures: `read-on-open.jsonl`, `read-off.jsonl`, `read-on-interaction.jsonl`, `read-group.jsonl`, `read-offline.jsonl`, `attention-closed.jsonl`.
+
+### `notification.open`
+
+Params: `token` (the word in the click command of a notification). Valid once the Daemon is `ready`. The result is `{chat}`: the JID of the Chat that the notification was for.
+
+The Daemon keeps one token per Chat in memory, on the Daemon loop. A second notification for the same Chat reuses the token. The map holds 256 tokens at most, and the oldest goes out first. A restart of the Daemon forgets all tokens. An unknown token gives error -32010. The Plugin then opens the pop-out on the Chat list. Fixture: `notify-click.jsonl`.
 
 ### `chat.messages`
 
@@ -628,7 +634,7 @@ The Daemon answers a request with an `error` object. Application codes will join
 | -32007 | could not reach WhatsApp (was "send failed") | `chat.requestHistory` found no connection. `chat.edit`, `chat.revoke`, `chat.react`, `contacts.lookup`, `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got no answer from WhatsApp: no connection or a timeout. Nothing changed. |
 | -32008 | invalid media | `media.download`, `media.open`, `media.save`, `media.played` got Media that does not exist or is in the wrong state, or a relative `path`. |
 | -32009 | media failed | `media.open` or `media.save` failed the integrity check, or could not write the copy. |
-| -32010 | invalid chat | `chat.start` got a `jid` that is not a person's WhatsApp ID. `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got an unknown Chat. |
+| -32010 | invalid chat | `notification.open` got an unknown token. `chat.start` got a `jid` that is not a person's WhatsApp ID. `chat.pin`, `chat.mute`, `chat.markUnread` or `chat.deleteForMe` got an unknown Chat. |
 | -32011 | pin limit | `chat.pin` would make a 4th Pinned Chat. Nothing changed. |
 | -32012 | 30 files at most | `draft.paste` would make a Draft with more than 30 Attachments. |
 | -32013 | file not sendable | `draft.paste` found a copied file that is not a regular file, is empty, or is over 100 MiB, or an image over 100 MiB. `chat.sendMedia` got one or more such paths; `error.data` is `{"paths": [...]}` with every bad path. |
@@ -671,7 +677,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `uploaded` | `uploads` | The Go test checks the Media that the fake port has uploaded and sent so far, in order, as `"id\|kind\|mime\|name\|caption\|content"`. |
 | `clock` | `historyTimer` | With `historyTimer` (true), the Go test fires the 30 s timeout of the open On-Demand History Sync request. It fires the sweep timer first. |
 | `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest timer of the Daemon clock. That is the sweep of Disappearing Messages, then a Mute end, in the order the Daemon set them. Without it, the line fires the keyring timeout as above. |
-| `notified` | `notified` | The Go test checks the desktop notifications that the fake desktop has received so far, in order, as `{summary, body, chat}`. An empty list means none. |
+| `notified` | `notified` | The Go test checks the desktop notifications that the fake desktop has received so far, in order, as `{summary, body}`. An empty list means none. In an `in` frame, `$TOKEN[n]` is the click token of the nth notification (from 0). |
 | `restart` | `now` (optional) | The Go test stops the Daemon like a closed stdin and starts it again on the same Profile, with a new fake WhatsApp port. `now` sets the Daemon time while it was off. Put the `whatsapp` start-up lines after it. |
 | `file` | `path`, and `content` or `missing` | With `write`: true the Go test writes the file with `content` (a source file for `chat.sendMedia`). With `remove`: true the Go test deletes the file. Otherwise the Go test checks a file: it holds `content`, or (`missing`: true) it does not exist, or (`present`: true) it exists. `$PROFILE` in `path` is the Profile folder. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
 | `plugin` | `openChat`, `requestHistory` or `lookup` | The Plugin test acts as the user: it opens this Chat (`jid`, `name`, `kind`), taps the older link at the end of the stored history (`requestHistory`: true), or starts a lookup. The Go test ignores it. |

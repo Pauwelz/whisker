@@ -13,11 +13,11 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
-// Notification is what the user sees. A click on it opens the pop-out on Chat.
+// Notification is what the user sees. A click on it opens the pop-out on the Chat of Token.
 type Notification struct {
 	Summary string
 	Body    string // never parsed as options; the D-Bus call neutralises it, as Omarchy renders markup
-	Chat    string // the Chat id
+	Token   string // opaque: it stands for the Chat, so the Chat id stays out of the click command
 }
 
 // Notifier shows a notification and never blocks the caller.
@@ -68,9 +68,9 @@ var neutraliser = strings.NewReplacer("<", "<\u200b", "&", "&\u200b", "://", ":/
 
 func neutralise(s string) string { return neutraliser.Replace(s) }
 
-// hints makes the click command: `omarchy-shell pauwelz.whisker openChat <chat>`, one argv word each.
+// hints makes the click command: `omarchy-shell pauwelz.whisker openChat <token>`, one argv word each.
 func hints(n Notification) (map[string]dbus.Variant, error) {
-	argv, err := json.Marshal([]string{"omarchy-shell", "pauwelz.whisker", "openChat", n.Chat})
+	argv, err := json.Marshal([]string{"omarchy-shell", "pauwelz.whisker", "openChat", n.Token})
 	if err != nil {
 		return nil, err
 	}

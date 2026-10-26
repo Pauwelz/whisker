@@ -24,6 +24,7 @@ const (
 	methodChatRetry          = "chat.retry"
 	methodChatSendMedia      = "chat.sendMedia"
 	methodAttentionSet       = "attention.set"
+	methodNotificationOpen   = "notification.open"
 	methodMediaDownload      = "media.download"
 	methodMediaOpen          = "media.open"
 	methodMediaSave          = "media.save"
@@ -70,6 +71,7 @@ type request struct {
 		Quote       string   `json:"quote"`
 		Edit        string   `json:"edit"`
 		Path        string   `json:"path"`
+		Token       string   `json:"token"`
 		Paths       []string `json:"paths"`
 		Attachments []string `json:"attachments"`
 		settings.Update
@@ -133,6 +135,7 @@ var handlers = map[string]handler{
 	methodMediaRelease:       {whenReady, (*session).mediaRelease},
 	methodMediaPlayed:        {whenReady, (*session).mediaPlayed},
 	methodAttentionSet:       {whenReady, (*session).attentionSet},
+	methodNotificationOpen:   {whenReady, (*session).notificationOpen},
 	methodChatEdit:           {whenLinked, (*session).chatEdit},
 	methodChatRevoke:         {whenLinked, (*session).chatRevoke},
 	methodChatReact:          {whenLinked, (*session).chatReact},
@@ -402,6 +405,15 @@ func (s *session) attentionSet(req *request) outcome {
 	return outcome{emptyReply(req), func() int {
 		return exitIf(!listChanged || s.send(notification("chatsChanged", nil)))
 	}}
+}
+
+// notificationOpen answers the Chat of the token in a notification click, or error -32010 for an unknown token.
+func (s *session) notificationOpen(req *request) outcome {
+	chat, ok := s.notices.tokens.chatOf(req.Params.Token)
+	if !ok {
+		return outcome{reply: errorReply(req.ID, errInvalidChat, msgInvalidChat)}
+	}
+	return outcome{reply: resultReply(req.ID, map[string]any{"chat": chat})}
 }
 
 func (s *session) chatTyping(req *request) outcome {

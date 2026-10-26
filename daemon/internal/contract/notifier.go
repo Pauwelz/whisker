@@ -29,6 +29,7 @@ type notifier struct {
 	attn    *attention.Attention
 	desktop desktop.Notifier
 	logOut  io.Writer
+	tokens  clickTokens
 }
 
 // show sends the notification of a stored new Message, or nothing when the policy says no.
@@ -76,5 +77,5 @@ func (n *notifier) show(ev whatsapp.NewMessage) {
 	if chat.PushNameOnly {
 		summary = chatstore.MarkedName(summary, chat.JID)
 	}
-	n.desktop.Notify(desktop.Notification{Summary: summary, Body: body, Chat: chat.JID})
+	n.desktop.Notify(desktop.Notification{Summary: summary, Body: body, Token: n.tokens.tokenFor(chat.JID)})
 }

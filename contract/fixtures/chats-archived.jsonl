@@ -23,4 +23,4 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"chats":[{"jid":"3@s.whatsapp.net","kind":"direct","name":"+3","lastActive":50,"pinned":false,"muted":false,"unread":true,"unreadCount":1},{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":30,"pinned":false,"muted":false,"unread":true}],"more":false,"offset":0,"unreadChats":2}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chats.list","params":{"archived":true}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chats":[{"jid":"2@s.whatsapp.net","kind":"direct","name":"+2","lastActive":40,"pinned":false,"archived":true,"muted":false,"unread":true,"unreadCount":1}],"more":false,"offset":0,"unreadChats":2}}}
-{"dir":"notified","notified":[{"summary":"+3","body":"hi","chat":"3@s.whatsapp.net"}]}
+{"dir":"notified","notified":[{"summary":"+3","body":"hi"}]}
