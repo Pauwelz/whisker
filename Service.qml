@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import "state/ChatList.js" as ChatList
 import "state/Daemon.js" as Daemon
 import "state/Draft.js" as Draft
@@ -139,6 +140,7 @@ Item {
 
   // Ends what belongs to the open Chat. The Daemon deletes the plain Media copies of the Chat.
   function leaveChat() {
+    confirmOpen = null
     stopTyping()
     stopPlayer()
     send(Media.mediaReleaseRequest, view.openChat.jid)
@@ -181,6 +183,7 @@ Item {
   function setPopoutOpen(open) {
     popoutOpen = open
     if (!open) {
+      confirmOpen = null
       stopPlayer()
       stopTyping()
     }
@@ -189,7 +192,36 @@ Item {
 
   function syncAttention() {
     if (!daemon.running) return
-    send(Daemon.attentionRequest, popoutOpen, view.openChat ? view.openChat.jid : "")
+    send(Daemon.attentionRequest, Daemon.attentionOpen(popoutOpen, idleMonitor.isIdle, screenLocked), view.openChat ? view.openChat.jid : "")
+  }
+
+  // The user is away when the session is idle for a minute or the screen is locked. The Daemon then counts the pop-out as closed.
+  property bool screenLocked: false
+  onScreenLockedChanged: syncAttention()
+
+  IdleMonitor {
+    id: idleMonitor
+    timeout: 60
+    respectInhibitors: false
+    onIsIdleChanged: root.syncAttention()
+  }
+
+  // Omarchy keeps its lock state in its own service, which a plugin cannot read. The lock command answers "true" or "false".
+  Process {
+    id: lockProbe
+    command: ["omarchy-shell", "lock", "isLocked"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.screenLocked = text.trim() === "true"
+    }
+  }
+
+  Timer {
+    interval: 5000
+    repeat: true
+    running: root.popoutOpen && daemon.running
+    triggeredOnStart: true
+    onTriggered: lockProbe.running = true
   }
 
   // Media the user clicked to open, by key, until its path arrives.
@@ -240,8 +272,55 @@ Item {
       playVoice(message, path)
       return
     }
-    opener.command = Media.openCommand(message, path)
+    if (!Media.opensInDefaultApp(message, path)) {
+      opener.command = Media.openCommand(message, path)
+      opener.startDetached()
+      return
+    }
+    if (mimeProbe.running) { // one probe at a time: a second Open asks, so it never takes the answer of the first
+      confirmOpen = { message: message, path: path }
+      return
+    }
+    mimeProbe.message = message
+    mimeProbe.path = path
+    mimeProbe.command = Media.mimeProbeCommand(path)
+    mimeProbe.running = true
+  }
+
+  // Probes the content type of a file for the default app. A safe type opens at once, any other answer asks first.
+  Process {
+    id: mimeProbe
+    property var message: null
+    property string path: ""
+    // A probe that fails (no `file` binary, a bad exit code) asks.
+    onExited: function(exitCode) { if (exitCode !== 0) root.confirmOpen = { message: message, path: path } }
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var open = { message: mimeProbe.message, path: mimeProbe.path }
+        if (Media.mimeIsSafe(text)) {
+          opener.command = Media.openCommand(open.message, open.path)
+          opener.startDetached()
+        } else {
+          root.confirmOpen = open
+        }
+      }
+    }
+  }
+
+  // The Open that waits for the user's answer ({ message, path }), or null.
+  property var confirmOpen: null
+
+  function confirmLaunch() {
+    var open = confirmOpen
+    confirmOpen = null
+    if (!open) return
+    opener.command = Media.openCommand(open.message, open.path)
     opener.startDetached()
+  }
+
+  function cancelLaunch() {
+    confirmOpen = null
   }
 
   // Asks for the path of each image and sticker that is ready, and opens Media that the user clicked.

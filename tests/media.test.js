@@ -83,3 +83,18 @@ test("Media is downloading only in that state", () => {
   assert.equal(Media.isDownloading(pdf), false);
   assert.equal(Media.isDownloading({ id: "t", chat: "c" }), false);
 });
+
+test("the default app opens only safe content types without asking", () => {
+  const safe = ["application/pdf", "image/png", "image/jpeg", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", " IMAGE/GIF\n"];
+  for (const m of safe) assert.equal(Media.mimeIsSafe(m), true, m);
+  // a file named a.pdf whose content is HTML has the type text/html: the extension does not count
+  for (const m of ["text/html", "image/svg+xml", "application/x-desktop", "text/x-shellscript", "application/octet-stream", "", undefined]) assert.equal(Media.mimeIsSafe(m), false, String(m));
+  assert.deepEqual(plain(Media.mimeProbeCommand("/p/a.pdf")), ["file", "--brief", "--dereference", "--mime-type", "--", "/p/a.pdf"]);
+  assert.equal(Media.opensInDefaultApp({ media: { kind: "image" } }, "/p/a.png"), true);
+  assert.equal(Media.opensInDefaultApp({ media: { kind: "video" } }, "/p/a.mp4"), false);
+});
+
+test("fileUrl encodes each path segment", () => {
+  assert.equal(Media.fileUrl("/run/m.jpg"), "file:///run/m.jpg");
+  assert.equal(Media.fileUrl("/run/a#b?c d/m.jpg"), "file:///run/a%23b%3Fc%20d/m.jpg");
+});

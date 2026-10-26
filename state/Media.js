@@ -102,6 +102,29 @@ function openCommand(message, path) {
   return ["mpv"].concat(flag, MPV_LOCAL_ONLY, [path])
 }
 
+// xdg-open picks the app from the file content (`file --mime-type`), not from the extension. So the Plugin probes the
+// same way and asks first unless the content type is on this short safe list. Any other type, such as text/html,
+// image/svg+xml or a script, can run active content in the default app.
+var SAFE_MIMES = ["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "text/plain", "text/csv",
+  "application/rtf", "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint",
+  "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet", "application/vnd.oasis.opendocument.presentation"]
+
+// True when the default app opens this Message (mpv opens the rest, hardened).
+function opensInDefaultApp(message, path) {
+  return openCommand(message, path)[0] === "xdg-open"
+}
+
+// The probe that gives the content type, the same way xdg-open does.
+function mimeProbeCommand(path) {
+  return ["file", "--brief", "--dereference", "--mime-type", "--", path]
+}
+
+// True when `mime` (the output of the probe) is safe to open without a question. An empty answer, from a probe error, is not.
+function mimeIsSafe(mime) {
+  var type = String(mime || "").trim().toLowerCase()
+  return SAFE_MIMES.indexOf(type) !== -1 || type.indexOf("application/vnd.openxmlformats-officedocument.") === 0
+}
+
 // Voice notes play in the pop-out. `playingKey` is the mediaKey of the note that plays now, or "".
 function isVoice(message) {
   return !!message.media && message.media.kind === "voice"
@@ -197,7 +220,12 @@ function chipShown(m) {
 function thumbnailSource(m, path) {
   if (!m.media) return ""
   if (m.media.thumbnail) return "data:image/jpeg;base64," + m.media.thumbnail
-  return previewsFile(m) && path ? "file://" + path : ""
+  return previewsFile(m) && path ? fileUrl(path) : ""
+}
+
+// The file: URL of an absolute path. Each segment is encoded, so a "#" or "?" in a name stays part of the path.
+function fileUrl(path) {
+  return "file://" + path.split("/").map(encodeURIComponent).join("/")
 }
 
 // A video that is not downloaded shows its thumbnail blurred.

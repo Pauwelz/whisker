@@ -105,7 +105,7 @@ function reactRequest(id, jid, messageId, emoji) {
 function reactionChips(message) {
   if (message.revoked) return []
   var order = []
-  var chips = {}
+  var chips = Object.create(null) // no prototype: an emoji key such as __proto__ stays a plain key
   ;(message.reactions || []).forEach(function (r) {
     if (!chips[r.emoji]) { chips[r.emoji] = { emoji: r.emoji, count: 0, mine: false, names: [] }; order.push(r.emoji) }
     var chip = chips[r.emoji]

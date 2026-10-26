@@ -203,8 +203,9 @@ Item {
           Image {
             readonly property string file: line.isMessage ? Media.mediaPath(line.panel.view, line.message) : ""
             visible: file !== "" && Media.showsInline(line.message)
-            source: visible ? "file://" + file : ""
+            source: visible ? Media.fileUrl(file) : ""
             width: Math.min(parent.width, Style.space(240))
+            sourceSize.width: Style.space(240) * Screen.devicePixelRatio
             fillMode: Image.PreserveAspectFit
             asynchronous: true
             TapHandler { onTapped: line.panel.whiskerService.openMedia(line.message) }
@@ -213,6 +214,22 @@ Item {
             active: line.isMessage && Media.chipShown(line.message)
             visible: active
             sourceComponent: MediaChip { message: line.message; panel: line.panel }
+          }
+          // Open asks first for a file type that is not on the safe list: Open or Save as.
+          Row {
+            readonly property bool asking: line.isMessage && line.panel.whiskerService.confirmOpen !== null && line.panel.whiskerService.confirmOpen.message.id === line.message.id
+            visible: asking
+            spacing: Style.space(8)
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: "Open this file in the default app?"
+              color: line.panel.contentForeground
+              font.family: line.panel.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+            Button { text: "Open"; bordered: true; onClicked: line.panel.whiskerService.confirmLaunch() }
+            Button { text: "Save as"; bordered: true; onClicked: { line.panel.whiskerService.cancelLaunch(); line.panel.savingId = line.message.id } }
           }
           // Save as: type an absolute path, then press Enter. Escape cancels.
           TextEdit {

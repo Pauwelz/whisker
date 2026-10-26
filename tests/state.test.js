@@ -849,3 +849,16 @@ test("the Offline banner shows why WhatsApp ended the session, and a connect cle
   assert.equal(Daemon.connectionBanner(Daemon.applyFrame(linked, { method: "disconnected" })), "Offline")
   assert.equal(Daemon.connectionBanner(Daemon.applyFrame(state, { method: "connected" })), "")
 })
+
+test("reactionChips keys have no prototype", () => {
+  const reactions = ["__proto__", "constructor", "toString"].map((emoji) => ({ emoji, senderName: "A" }));
+  const chips = JSON.parse(JSON.stringify(Message.reactionChips({ id: "m", reactions })));
+  assert.deepEqual(chips.map((c) => [c.emoji, c.count]), [["__proto__", 1], ["constructor", 1], ["toString", 1]]);
+});
+
+test("attention needs an open pop-out, no idle and no lock", () => {
+  assert.equal(Daemon.attentionOpen(true, false, false), true);
+  assert.equal(Daemon.attentionOpen(true, true, false), false);
+  assert.equal(Daemon.attentionOpen(true, false, true), false);
+  assert.equal(Daemon.attentionOpen(false, false, false), false);
+});
