@@ -356,13 +356,13 @@ function shortcutAction(shortcut, state, local) {
   return shortcut === "Ctrl+F" && onList ? "focusSearch" : "none"
 }
 
-// The request that tells the Daemon about the pop-out: `open`, and the Chat it shows (`jid`, or "" for the Chat list).
-// The Daemon derives the Attended Chat from it. Send it on every change and again on `ready`.
 // True when the user can see the pop-out: it is open, the session is not idle and the screen is not locked.
 function attentionOpen(opened, idle, locked) {
   return opened && !idle && !locked
 }
 
+// The request that tells the Daemon about the pop-out: `open`, and the Chat it shows (`jid`, or "" for the Chat list).
+// The Daemon derives the Attended Chat from it. Send it on every change and again on `ready`.
 function attentionRequest(id, open, jid) {
   return Common.request(id, "attention.set", { open: open, chat: jid || "" })
 }

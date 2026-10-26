@@ -102,15 +102,27 @@ function openCommand(message, path) {
   return ["mpv"].concat(flag, MPV_LOCAL_ONLY, [path])
 }
 
-// The extensions that open without a question: documents, common images and plain text. Any other extension, such as
-// .html, .svg, .desktop or .sh, can run active content in the default app, so the user decides first.
-var SAFE_EXTENSIONS = ["pdf", "jpg", "jpeg", "png", "gif", "webp", "bmp", "txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "csv"]
+// xdg-open picks the app from the file content (`file --mime-type`), not from the extension. So the Plugin probes the
+// same way and asks first unless the content type is on this short safe list. Any other type, such as text/html,
+// image/svg+xml or a script, can run active content in the default app.
+var SAFE_MIMES = ["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "text/plain", "text/csv",
+  "application/rtf", "application/msword", "application/vnd.ms-excel", "application/vnd.ms-powerpoint",
+  "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet", "application/vnd.oasis.opendocument.presentation"]
 
-// True when the default app would open `path` and its extension is not on the safe list. mpv opens the rest.
-function needsOpenConfirm(message, path) {
-  if (openCommand(message, path)[0] !== "xdg-open") return false
-  var ext = /\.([^./]*)$/.exec(path)
-  return !ext || SAFE_EXTENSIONS.indexOf(ext[1].toLowerCase()) === -1
+// True when the default app opens this Message (mpv opens the rest, hardened).
+function opensInDefaultApp(message, path) {
+  return openCommand(message, path)[0] === "xdg-open"
+}
+
+// The probe that gives the content type, the same way xdg-open does.
+function mimeProbeCommand(path) {
+  return ["file", "--brief", "--dereference", "--mime-type", "--", path]
+}
+
+// True when `mime` (the output of the probe) is safe to open without a question. An empty answer, from a probe error, is not.
+function mimeIsSafe(mime) {
+  var type = String(mime || "").trim().toLowerCase()
+  return SAFE_MIMES.indexOf(type) !== -1 || type.indexOf("application/vnd.openxmlformats-officedocument.") === 0
 }
 
 // Voice notes play in the pop-out. `playingKey` is the mediaKey of the note that plays now, or "".

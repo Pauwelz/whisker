@@ -140,6 +140,7 @@ Item {
 
   // Ends what belongs to the open Chat. The Daemon deletes the plain Media copies of the Chat.
   function leaveChat() {
+    confirmOpen = null
     stopTyping()
     stopPlayer()
     send(Media.mediaReleaseRequest, view.openChat.jid)
@@ -271,12 +272,34 @@ Item {
       playVoice(message, path)
       return
     }
-    if (Media.needsOpenConfirm(message, path)) {
-      confirmOpen = { message: message, path: path }
+    if (!Media.opensInDefaultApp(message, path)) {
+      opener.command = Media.openCommand(message, path)
+      opener.startDetached()
       return
     }
-    opener.command = Media.openCommand(message, path)
-    opener.startDetached()
+    mimeProbe.message = message
+    mimeProbe.path = path
+    mimeProbe.command = Media.mimeProbeCommand(path)
+    mimeProbe.running = true
+  }
+
+  // Probes the content type of a file for the default app. A safe type opens at once, any other answer asks first.
+  Process {
+    id: mimeProbe
+    property var message: null
+    property string path: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var open = { message: mimeProbe.message, path: mimeProbe.path }
+        if (Media.mimeIsSafe(text)) {
+          opener.command = Media.openCommand(open.message, open.path)
+          opener.startDetached()
+        } else {
+          root.confirmOpen = open
+        }
+      }
+    }
   }
 
   // The Open that waits for the user's answer ({ message, path }), or null.

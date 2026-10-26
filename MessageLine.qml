@@ -205,7 +205,7 @@ Item {
             visible: file !== "" && Media.showsInline(line.message)
             source: visible ? Media.fileUrl(file) : ""
             width: Math.min(parent.width, Style.space(240))
-            sourceSize.width: width * Screen.devicePixelRatio
+            sourceSize.width: Style.space(240) * Screen.devicePixelRatio
             fillMode: Image.PreserveAspectFit
             asynchronous: true
             TapHandler { onTapped: line.panel.whiskerService.openMedia(line.message) }

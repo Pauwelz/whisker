@@ -84,11 +84,14 @@ test("Media is downloading only in that state", () => {
   assert.equal(Media.isDownloading({ id: "t", chat: "c" }), false);
 });
 
-test("the default app opens only safe extensions without asking", () => {
-  const doc = { media: { kind: "document" } };
-  for (const f of ["a.pdf", "a.PDF", "a.jpg", "a.docx", "a.txt"]) assert.equal(Media.needsOpenConfirm(doc, "/p/" + f), false, f);
-  for (const f of ["a.html", "a.svg", "a.desktop", "a.sh", "a", "a.pdf.html"]) assert.equal(Media.needsOpenConfirm(doc, "/p/" + f), true, f);
-  assert.equal(Media.needsOpenConfirm({ media: { kind: "video" } }, "/p/a.html"), false); // mpv opens it, hardened
+test("the default app opens only safe content types without asking", () => {
+  const safe = ["application/pdf", "image/png", "image/jpeg", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", " IMAGE/GIF\n"];
+  for (const m of safe) assert.equal(Media.mimeIsSafe(m), true, m);
+  // a file named a.pdf whose content is HTML has the type text/html: the extension does not count
+  for (const m of ["text/html", "image/svg+xml", "application/x-desktop", "text/x-shellscript", "application/octet-stream", "", undefined]) assert.equal(Media.mimeIsSafe(m), false, String(m));
+  assert.deepEqual(plain(Media.mimeProbeCommand("/p/a.pdf")), ["file", "--brief", "--dereference", "--mime-type", "--", "/p/a.pdf"]);
+  assert.equal(Media.opensInDefaultApp({ media: { kind: "image" } }, "/p/a.png"), true);
+  assert.equal(Media.opensInDefaultApp({ media: { kind: "video" } }, "/p/a.mp4"), false);
 });
 
 test("fileUrl encodes each path segment", () => {
