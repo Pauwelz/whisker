@@ -494,7 +494,11 @@ func (s *Store) nameMentions(m *Message, jids string) error {
 
 // putMessage stores a Message that arrived live or in History Sync, and the Push Name that came with it.
 // mediaState is the state of the Media row: a live Message of a kind that downloads by itself starts downloading.
+// A stored Message of another author with the same (Chat, ID) stays as it is: the sender picks the ID, so a match proves nothing.
 func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) (inserted bool, err error) {
+	if stored, mine, err := storedAuthor(tx, chat, m); err != nil || (stored && !mine) {
+		return false, err
+	}
 	state := ""
 	if m.FromMe && m.System == nil { // a System Message has no Delivery State
 		state = whatsapp.StateSent
@@ -569,6 +573,18 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 	return inserted, nil
 }
 
+// storedAuthor tells whether a Message with the ID of m is stored in the Chat, and if so, whether m has the same author.
+// The author is from_me and, for another Participant, the sender: the phone JID, as the Edit check reads it.
+func storedAuthor(tx *sql.Tx, chat string, m whatsapp.Message) (stored, sameAuthor bool, err error) {
+	var fromMe bool
+	var sender string
+	err = tx.QueryRow(`SELECT from_me, sender_jid FROM messages WHERE chat_jid = ? AND id = ?`, chat, m.ID).Scan(&fromMe, &sender)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, false, nil
+	}
+	return err == nil, fromMe == m.FromMe && (m.FromMe || sender == m.Sender), err
+}
+
 // MediaRef is the stored Media of a Message, with what a download or a decrypt needs.
 type MediaRef struct {
 	whatsapp.Media
@@ -622,47 +638,53 @@ type LivePolicy struct {
 	MarkUnread bool   // set the Read Marker of the Chat and keep the Message waiting for its Read Receipt
 }
 
-// PutLive stores a Message that arrived live. It creates the Chat if History Sync has not.
-// A Message that is stored already changes nothing, also not the Read Marker.
-func (s *Store) PutLive(ev whatsapp.NewMessage, p LivePolicy) error {
-	return s.inTx(func(tx *sql.Tx) error { return putLiveMessage(tx, ev, p) })
+// PutLive stores a Message that arrived live.
+// A Message that reuses the ID of a stored Message of another author is dropped. It creates the Chat if History Sync has not.
+// A Message that is stored already changes nothing, also not the Read Marker. It reports whether the Message is new.
+func (s *Store) PutLive(ev whatsapp.NewMessage, p LivePolicy) (isNew bool, err error) {
+	err = s.inTx(func(tx *sql.Tx) error {
+		var err error
+		isNew, err = putLiveMessage(tx, ev, p)
+		return err
+	})
+	return isNew, err
 }
 
-func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) error {
+func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) (bool, error) {
+	known, mine, err := storedAuthor(tx, ev.Chat, ev.Message)
+	if err != nil || (known && !mine) {
+		return false, err
+	}
 	// A Message that knows its kind fixes the kind of a row that a Pin stored.
 	if _, err := tx.Exec(`INSERT INTO chats (jid, kind, last_active) VALUES (?, ?, ?)
 		ON CONFLICT(jid) DO UPDATE SET kind = COALESCE(NULLIF(?, ''), kind), last_active = MAX(last_active, excluded.last_active)`,
 		ev.Chat, kindOrDirect(ev.Kind), ev.Message.Time, ev.Kind); err != nil {
-		return err
-	}
-	var known int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM messages WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID).Scan(&known); err != nil {
-		return err
+		return false, err
 	}
 	if _, err := putMessage(tx, ev.Chat, ev.Message, p.MediaState); err != nil {
-		return err
+		return false, err
 	}
-	if known > 0 {
-		return nil
+	if known {
+		return false, nil
 	}
 	if ev.Message.FromMe { // History Sync Messages never get this: see Combined
 		if _, err := tx.Exec(`UPDATE messages SET track_recipients = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
-			return err
+			return false, err
 		}
 	}
 	// With "Keep chats archived" off, a new Message unarchives its Chat. The live bit stops a later History Sync from archiving it again.
 	if _, err := tx.Exec(`UPDATE chats SET archived = 0, live_flags = live_flags | ? WHERE jid = ? AND archived = 1
 		AND (SELECT value FROM app_state_settings WHERE name = ?) = 1`, flagArchive, ev.Chat, settingUnarchiveChats); err != nil {
-		return err
+		return false, err
 	}
 	if !p.MarkUnread {
-		return nil
+		return true, nil
 	}
 	if _, err := tx.Exec(`UPDATE messages SET read_pending = 1, in_unread_count = 1 WHERE chat_jid = ? AND id = ?`, ev.Chat, ev.Message.ID); err != nil {
-		return err
+		return false, err
 	}
-	_, err := tx.Exec(`UPDATE chats SET unread = 1, live_flags = live_flags | ? WHERE jid = ?`, flagUnread, ev.Chat)
-	return err
+	_, err = tx.Exec(`UPDATE chats SET unread = 1, live_flags = live_flags | ? WHERE jid = ?`, flagUnread, ev.Chat)
+	return err == nil, err
 }
 
 // ClearUnread clears the Read Marker of a Chat and its unreadCount. It reports whether the marker was set.
