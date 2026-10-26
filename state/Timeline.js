@@ -106,6 +106,14 @@ function removeMessage(state, expired) {
   return Common.withChanges(state, { openChat: Common.withChanges(chat, { messages: messages }) })
 }
 
+// Takes the Messages of a cleared Chat out of the open Chat: those at or before `until` (Unix seconds), or all when it is 0.
+function clearMessages(state, cleared) {
+  var chat = state.openChat
+  if (!chat || chat.jid !== cleared.chat) return state
+  var messages = chat.messages.filter(function (m) { return cleared.until > 0 && m.time > cleared.until })
+  return Common.withChanges(state, { openChat: Common.withChanges(chat, { messages: messages }) })
+}
+
 // A chat.messages result for the open Chat. A page of another Chat is dropped.
 function messagesPage(state, result) {
   var chat = state.openChat

@@ -334,6 +334,26 @@ type ReadElsewhere struct {
 	IDs  []string `json:"ids"`
 }
 
+// DeletedForMe says that the user deleted a Message for themself on another device.
+type DeletedForMe struct {
+	Chat string `json:"chat"`
+	ID   string `json:"id"`
+}
+
+// ChatCleared says that the user cleared a Chat on another device. It removes the Messages up to Until (Unix seconds).
+// Until 0 means every Message. The Chat stays.
+type ChatCleared struct {
+	Chat  string `json:"chat"`
+	Until int64  `json:"until"`
+}
+
+// ChatDeleted says that the user deleted a Chat on another device. Until is the Unix seconds of its last Message, 0 when unknown.
+// A Message newer than Until stays: the delete came before it.
+type ChatDeleted struct {
+	Chat  string `json:"chat"`
+	Until int64  `json:"until"`
+}
+
 // AppStateBatch holds the Pin, Archive, UnarchiveChats, Mute and ReadMarker events of one full App State sync, in order.
 type AppStateBatch struct {
 	Events []Event `json:"events"`
@@ -461,6 +481,9 @@ func (ReadMarker) isEvent()     {}
 func (ReadElsewhere) isEvent()  {}
 func (AppStateBatch) isEvent()  {}
 func (PictureChanged) isEvent() {}
+func (DeletedForMe) isEvent()   {}
+func (ChatCleared) isEvent()    {}
+func (ChatDeleted) isEvent()    {}
 
 // Reasons for LinkFailed. docs/contract.md mirrors this list.
 const (

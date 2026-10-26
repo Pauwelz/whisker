@@ -782,3 +782,30 @@ test("the older link stays hidden until the first page of the Chat is in", () =>
 test("the Daemon request for older Messages is chat.requestHistory", () => {
   assert.deepEqual(JSON.parse(Timeline.historyRequest(5, "1@s.whatsapp.net")), { jsonrpc: "2.0", id: 5, method: "chat.requestHistory", params: { chat: "1@s.whatsapp.net" } });
 });
+
+test("chatCleared takes the Messages up to `until` out of the open Chat, or all with 0", () => {
+  const at = (time) => ({ id: "m" + time, chat: "1@s.whatsapp.net", time });
+  let state = Timeline.openChat(Daemon.initialState(), { jid: "1@s.whatsapp.net", name: "A", kind: "direct" });
+  for (const time of [10, 20, 30]) state = Timeline.upsertMessage(state, at(time));
+  const ids = (s) => Array.from(s.openChat.messages, (m) => m.id);
+  const frame = (chat, until) => ({ method: "chatCleared", params: { chat, until } });
+  assert.deepEqual(ids(Daemon.applyFrame(state, frame("1@s.whatsapp.net", 20))), ["m30"]);
+  assert.deepEqual(ids(Daemon.applyFrame(state, frame("1@s.whatsapp.net", 0))), []);
+  assert.deepEqual(ids(Daemon.applyFrame(state, frame("2@s.whatsapp.net", 0))), ["m10", "m20", "m30"]);
+  assert.equal(Daemon.refreshesChats(frame("1@s.whatsapp.net", 20)), true);
+});
+
+test("chatRemoved takes the Chat out of the list and closes it when it is open", () => {
+  const frame = { method: "chatRemoved", params: { chat: "1@s.whatsapp.net" } };
+  const list = [{ jid: "1@s.whatsapp.net" }, { jid: "2@s.whatsapp.net" }];
+  const listed = Object.assign(Daemon.initialState(), { chats: list });
+  const open = (jid) => Timeline.openChat(listed, { jid, name: "A", kind: "direct" });
+  const shut = Daemon.applyFrame(open("1@s.whatsapp.net"), frame);
+  assert.equal(Daemon.removesOpenChat(open("1@s.whatsapp.net"), frame), true);
+  assert.equal(shut.openChat, undefined);
+  assert.deepEqual(Array.from(shut.chats, (c) => c.jid), ["2@s.whatsapp.net"]);
+  const other = open("2@s.whatsapp.net");
+  assert.equal(Daemon.removesOpenChat(other, frame), false);
+  assert.equal(Daemon.applyFrame(other, frame).openChat.jid, "2@s.whatsapp.net");
+  assert.equal(Daemon.refreshesChats(frame), true);
+});
