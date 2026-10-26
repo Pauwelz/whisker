@@ -9,8 +9,8 @@ import (
 
 // Schema migrations. How to add one:
 //  1. Add migrations/NNNN_name.sql with the next free number.
-//  2. Write plain SQL. If SQL cannot do the step, add a Go function to goSteps (cleannames.go); it runs after the file, in the same transaction.
-//     Write plain SQL. Never edit a file that a release has shipped.
+//  2. Write plain SQL. Never edit a file that a release has shipped.
+//     If SQL cannot do the step, add a Go function to goSteps (cleannames.go); it runs after the file, in the same transaction.
 //
 // The schema version is PRAGMA user_version: the count of files applied, in file name order.
 // Migrate runs each missing file in its own transaction, so a failed step leaves the version unchanged.

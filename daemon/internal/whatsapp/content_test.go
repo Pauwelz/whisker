@@ -130,7 +130,7 @@ func TestMediaOfTreatsAHugeFileLengthAsUnknown(t *testing.T) {
 }
 
 func TestDocumentNameIsCleaned(t *testing.T) {
-	m := mediaOf(&waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{FileName: proto.String("invoice‮fdp.desktop")}})
+	m := mediaOf(&waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{FileName: proto.String("invoice\u202efdp.desktop")}})
 	if m.Name != "invoicefdp.desktop" {
 		t.Errorf("Name = %q", m.Name)
 	}

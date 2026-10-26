@@ -17,7 +17,7 @@ const (
 func CleanName(s string, max int) string {
 	s = strings.Map(func(r rune) rune {
 		switch {
-		case r == '‍', r == '‌', r >= 0xE0020 && r <= 0xE007F:
+		case r == '\u200d', r == '\u200c', r >= 0xE0020 && r <= 0xE007F:
 			return r
 		case unicode.In(r, unicode.Cc, unicode.Zl, unicode.Zp, unicode.Cf):
 			return -1

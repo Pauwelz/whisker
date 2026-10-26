@@ -774,11 +774,11 @@ func TestNamesAreCleanedBeforeTheyAreStored(t *testing.T) {
 	s, _ := newStore(t)
 	const jid = "1111@s.whatsapp.net"
 	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: jid, Kind: whatsapp.KindDirect, LastActive: 10}}})
-	apply(t, s, whatsapp.PushName{JID: jid, Name: "Mom\n‮" + strings.Repeat("x", 40)})
+	apply(t, s, whatsapp.PushName{JID: jid, Name: "Mom\n\u202e" + strings.Repeat("x", 40)})
 	if name := list(t, s, 0, 10).Chats[0].Name; name != "Mom"+strings.Repeat("x", 22) {
 		t.Errorf("Name = %q, want 25 clean runes", name)
 	}
-	apply(t, s, whatsapp.PushName{JID: jid, Name: "\n‮"})
+	apply(t, s, whatsapp.PushName{JID: jid, Name: "\n\u202e"})
 	if c := list(t, s, 0, 10).Chats[0]; c.Name != "+1111" || c.PushNameOnly {
 		t.Errorf("Name = %q, PushNameOnly = %v; want the phone number", c.Name, c.PushNameOnly)
 	}
@@ -786,7 +786,7 @@ func TestNamesAreCleanedBeforeTheyAreStored(t *testing.T) {
 
 func TestMigrationCleansStoredNamesOnce(t *testing.T) {
 	_, db := newStore(t)
-	dirty := "A‮B\n"
+	dirty := "A\u202eB\n"
 	for _, q := range []string{
 		`INSERT INTO names (jid, push_name, contact_name) VALUES ('1@s.whatsapp.net', ?, ?)`,
 		`INSERT INTO chats (jid, kind, subject, last_active, pinned, archived, muted_until, unread, timer) VALUES ('2@g.us', 'group', ?, 0, 0, 0, 0, 0, 0)`,

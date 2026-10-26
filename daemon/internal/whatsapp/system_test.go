@@ -277,7 +277,7 @@ func TestLiveAndHistorySyncCopiesShareTheID(t *testing.T) {
 }
 
 func TestLiveSubjectChangeIsCleaned(t *testing.T) {
-	evt := &events.GroupInfo{JID: sysGroup, Sender: &jef, Timestamp: sysAt, Name: &types.GroupName{Name: "Fam\n‮ily"}}
+	evt := &events.GroupInfo{JID: sysGroup, Sender: &jef, Timestamp: sysAt, Name: &types.GroupName{Name: "Fam\n\u202eily"}}
 	msgs, _ := liveSystem(t, evt)
 	if len(msgs) != 1 || msgs[0].System.Value != "Family" {
 		t.Errorf("got %+v, want one subject System Message with value Family", msgs)
