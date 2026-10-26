@@ -1,0 +1,86 @@
+# Publish release vV from dev. See docs/releasing.md.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version V in SemVer form, for example 1.0.1 or 1.1.0-rc.1"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      V: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the guards
+        run: |
+          [ "$GITHUB_REF" = refs/heads/dev ] || { echo "::error::Run the Release workflow from dev."; exit 1; }
+          echo "$V" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$' \
+            || { echo "::error::$V is not a SemVer version."; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null; then
+            echo "::error::Tag v$V already exists."; exit 1
+          fi
+          awk '/^## \[Unreleased\]/ {f = 1; next} /^## \[/ {f = 0} f && /^- / {n++} END {exit !n}' CHANGELOG.md \
+            || { echo "::error::CHANGELOG.md has no entries under [Unreleased]."; exit 1; }
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "26"
+
+      - name: Run the tests
+        run: (cd daemon && go test ./...) && node --test tests/*.test.js
+
+      - name: Bump the version and the changelog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          sed -i "s/^\( *\"version\": *\"\)[^\"]*\"/\1$V\"/" manifest.json
+          sed -i "s/^## \[Unreleased\]$/## [Unreleased]\n\n## [$V] - $(date +%F)/" CHANGELOG.md
+          git commit -am "chore(release): $V"
+          # Fails when dev moved after the run started. Nothing is published yet.
+          git push origin HEAD:dev
+
+      - name: Build the Daemon
+        run: |
+          scripts/build-daemon.sh
+          [ "$(bin/whisker-daemon --version)" = "$V" ]
+          cp bin/whisker-daemon bin/whisker-daemon-linux-amd64
+
+      - name: Publish the release
+        run: |
+          case "$V" in *-*) pre=--prerelease ;; *) pre= ;; esac
+          gh release create "v$V" bin/whisker-daemon-linux-amd64 \
+            --target "$(git rev-parse HEAD)" $pre \
+            --title "v$V" --notes "See CHANGELOG.md."
+
+      - name: Commit SHA256SUMS
+        run: |
+          (cd bin && sha256sum whisker-daemon-linux-amd64) > SHA256SUMS
+          git add SHA256SUMS
+          git commit -m "chore(release): add SHA256SUMS for $V"
+          git push origin HEAD:dev
+
+      - name: Check the release as a user gets it
+        run: |
+          rm -rf bin
+          scripts/fetch-daemon.sh
+          [ "$(bin/whisker-daemon --version)" = "$V" ]
+
+      - name: Fast-forward main
+        if: ${{ !contains(inputs.version, '-') }}
+        run: git push origin HEAD:main

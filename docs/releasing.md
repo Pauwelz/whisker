@@ -25,7 +25,29 @@ The Plugin runs the script again at the next shell start.
 
 `WHISKER_RELEASE_URL` replaces the release base URL. Only the tests use it.
 
-## Release steps
+## Release with GitHub Actions
+
+The Release workflow (`.github/workflows/release.yml`) does all release steps.
+
+1. Open **Actions** > **Release** on GitHub.
+2. Click **Run workflow**, select the branch `dev`, and type V.
+3. Wait for the run to pass.
+
+The workflow stops before it changes anything when:
+
+- it does not run on `dev`,
+- V is not in SemVer form,
+- the tag `vV` already exists,
+- `CHANGELOG.md` has no entries under `[Unreleased]`.
+
+Then it does the manual steps below in the same order, as `github-actions[bot]`.
+It pushes the release commit to `dev` before it publishes the release.
+If `dev` moved after the run started, this push fails and nothing is published.
+A V with a `-`, such as `1.0.0-rc.1`, becomes a pre-release and does not move `main`.
+
+## Manual release steps
+
+Use these steps only when the workflow cannot run.
 
 1. Start on a clean, current `dev` and run the tests.
 

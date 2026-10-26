@@ -14,7 +14,7 @@ whisker is the Omarchy product: a Quickshell/QML Plugin and its own Go Daemon. I
 - `rsc.io/qr` renders the QR code ([research](research/qr-library.md)).
 - The Daemon uses whatsmeow's `util/hkdfutil` and `util/cbcutil` packages for Media.
 - The JSON-RPC 2.0 envelope uses no library on either side.
-- Release tooling: POSIX `sh`, `curl` and `sha256sum` (see section 8).
+- Release tooling: POSIX `sh`, `curl`, `sha256sum` and a GitHub Actions workflow (see section 8).
 
 ## 3. Process model
 
@@ -138,9 +138,11 @@ If the download fails, the Plugin shows "Daemon download failed" with a retry ac
 ### Release flow
 
 1. Work happens on `dev`.
-2. To release version V: bump `manifest.json`, move the `[Unreleased]` entries in `CHANGELOG.md` to a `[V]` section, build, and publish release `vV` with the raw binary as its asset.
-3. Commit `SHA256SUMS` on top.
-4. Fast-forward `main` (the default branch) to that commit.
+2. To release version V, the maintainer runs the Release workflow on `dev` with V. The workflow bumps `manifest.json`, moves the `[Unreleased]` entries in `CHANGELOG.md` to a `[V]` section, builds, and publishes release `vV` with the raw binary as its asset.
+3. The workflow commits `SHA256SUMS` on top and checks the release with `scripts/fetch-daemon.sh`.
+4. For a final version, the workflow fast-forwards `main` (the default branch) to that commit.
+
+The steps are in [releasing.md](releasing.md).
 
 `main` only points at published releases, so HEAD is always installable.
 
