@@ -103,10 +103,12 @@ func (s *session) pasted(r pasteResult) int {
 		if len(stored.Attachments)+added > maxAttachments {
 			return fail(errTooManyFiles, msgTooManyFiles)
 		}
-		for _, f := range r.files {
-			if _, err := statSendable(f); err != nil {
+		for i, f := range r.files {
+			real, err := resolveSendable(f)
+			if err != nil {
 				return fail(errNotSendable, msgNotSendable)
 			}
+			r.files[i] = real
 		}
 		return reply(r.files...)
 	}

@@ -8,6 +8,7 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 	go.mau.fi/libsignal v0.2.2
 	go.mau.fi/whatsmeow v0.0.0-20261017175727-b2b1e71d45e2
+	golang.org/x/sys v0.49.0
 	google.golang.org/protobuf v1.36.12
 	rsc.io/qr v0.2.0
 )
@@ -31,7 +32,6 @@ require (
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	lukechampine.com/adiantum v1.1.1 // indirect
 )

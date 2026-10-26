@@ -141,18 +141,21 @@ func TestDraftSetChecksOnlyNewPathsAndRefusesFilesWithAQuote(t *testing.T) {
 	r.finish()
 }
 
-func TestSendMediaFailingOnTheSecondCopyStoresNothingAndKeepsTheFirstPastedImage(t *testing.T) {
+func TestSendMediaWithAnUnreadableSecondFileStoresNothingAndKeepsTheFirstPastedImage(t *testing.T) {
 	fakeClipboard(t, imageScript)
 	r := linkedRunner(t)
 	pasted := pastedPath(t, r, 1)
 	unreadable := filepath.Join(t.TempDir(), "locked")
-	if err := os.WriteFile(unreadable, []byte("x"), 0o000); err != nil {
+	if err := os.WriteFile(unreadable, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	setAttachments(t, r, 2, []string{pasted, unreadable})
+	if err := os.Chmod(unreadable, 0); err != nil { // unreadable after the attach: the open at send time fails
+		t.Fatal(err)
+	}
 	sendMedia(r, 3, []string{pasted, unreadable}, "look")
-	if f := r.nextFrame(); !strings.Contains(f, "-32009") {
-		t.Fatalf("frame = %s, want a media copy failure", f)
+	if f := r.nextFrame(); !strings.Contains(f, "-32013") {
+		t.Fatalf("frame = %s, want an unsendable file", f)
 	}
 	if !exists(pasted) {
 		t.Error("the pasted image of the first path is gone")

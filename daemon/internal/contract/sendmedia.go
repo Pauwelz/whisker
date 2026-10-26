@@ -15,6 +15,7 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
+	"golang.org/x/sys/unix"
 )
 
 // maxSendBytes is the largest file `chat.sendMedia` accepts.
@@ -36,20 +37,58 @@ func sniffMime(path string, f *os.File) string {
 	return t
 }
 
-// statSendable checks a file that `chat.sendMedia` accepts: an absolute path to a regular file of 1 B to 100 MiB.
-// `draft.set` and `draft.get` use it too, so all agree on what can be sent. It never opens the file, so a FIFO cannot block the loop.
-func statSendable(path string) (os.FileInfo, error) {
+// openSendable opens a file that `chat.sendMedia` accepts: an absolute path to a regular file of 1 B to 100 MiB.
+// No part of the path may be a symlink. The checks run on the open file, so a swap after the open changes nothing.
+// The open never blocks: a FIFO or a device fails the regular-file check.
+func openSendable(path string) (*os.File, os.FileInfo, error) {
 	if !filepath.IsAbs(path) {
-		return nil, errors.New("not absolute")
+		return nil, nil, errors.New("not absolute")
 	}
-	st, err := os.Stat(path)
+	const flags = unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_NONBLOCK | unix.O_CLOEXEC
+	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: flags, Resolve: unix.RESOLVE_NO_SYMLINKS})
+	var f *os.File
+	switch {
+	case err == nil:
+		f = os.NewFile(uintptr(fd), path)
+	case errors.Is(err, unix.ENOSYS): // an old kernel: O_NOFOLLOW still refuses a symlink in the last part
+		f, err = os.OpenFile(path, flags, 0)
+		if err != nil {
+			return nil, nil, err
+		}
+	default:
+		return nil, nil, err
+	}
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() || st.Size() == 0 || st.Size() > maxSendBytes {
+		f.Close()
+		return nil, nil, errors.New("not sendable")
+	}
+	return f, st, nil
+}
+
+// statSendable checks a path with openSendable. `draft.set` and `draft.get` use it too, so all agree on what can be sent.
+func statSendable(path string) (os.FileInfo, error) {
+	f, st, err := openSendable(path)
 	if err != nil {
 		return nil, err
 	}
-	if !st.Mode().IsRegular() || st.Size() == 0 || st.Size() > maxSendBytes {
-		return nil, errors.New("not sendable")
-	}
+	f.Close()
 	return st, nil
+}
+
+// resolveSendable gives the real path of a new Attachment, if openSendable accepts it. The Draft stores that path.
+func resolveSendable(path string) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", errors.New("not absolute")
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", err
+	}
+	if _, err := statSendable(real); err != nil {
+		return "", err
+	}
+	return real, nil
 }
 
 // errMediaCopy marks a file that could not be copied into the Media store.
@@ -104,23 +143,19 @@ func (s *session) chatSendMedia(req *request) outcome {
 // storeMedia copies one checked file into the Media store and adds its pending Message.
 // An Image loses its metadata first (Orientation stays), so the stored copy, the upload and the hash hold the stripped bytes. A Document stays byte-exact.
 func (s *session) storeMedia(chat, path, caption string) (chatstore.Message, error) {
-	f, err := os.Open(path)
+	f, st, err := openSendable(path)
 	if err != nil {
 		return chatstore.Message{}, errMediaCopy
 	}
 	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
-		return chatstore.Message{}, errMediaCopy
-	}
 	m := whatsapp.Media{Kind: media.Document, Mime: sniffMime(path, f), Name: filepath.Base(path), Size: st.Size(), Key: make([]byte, 32)}
 	if sendableImages[m.Mime] {
 		m.Kind, m.Name = media.Image, ""
 	}
-	var plain io.Reader = f
+	var plain io.Reader = io.LimitReader(f, maxSendBytes+1) // a file that grew since the open is cut
 	if m.Kind == media.Image {
-		raw, err := io.ReadAll(f)
-		if err != nil {
+		raw, err := io.ReadAll(io.LimitReader(f, maxSendBytes+1))
+		if err != nil || len(raw) > maxSendBytes {
 			return chatstore.Message{}, errMediaCopy
 		}
 		stripped, err := media.StripMetadata(m.Mime, raw)

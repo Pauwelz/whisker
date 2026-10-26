@@ -58,13 +58,16 @@ func (s *session) draftSet(req *request) outcome {
 	}
 	// Check a file only when it is new: a keystroke that keeps a stored file must save even if the file is gone now.
 	old, oldErr := s.chats.Draft(chat)
-	for _, path := range d.Attachments {
+	d.Attachments = slices.Clone(d.Attachments)
+	for i, path := range d.Attachments {
 		if oldErr == nil && slices.Contains(old.Attachments, path) {
 			continue
 		}
-		if _, err := statSendable(path); err != nil {
+		real, err := resolveSendable(path)
+		if err != nil {
 			return invalid
 		}
+		d.Attachments[i] = real // the Draft keeps the real path, so a later symlink swap is refused at send time
 	}
 	for _, target := range []string{d.Quote, d.Edit} {
 		if target == "" {
