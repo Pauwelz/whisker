@@ -344,3 +344,22 @@ func TestDraftSetBeforeThePasteReplyKeepsThePastedImage(t *testing.T) {
 	}
 	r.finish()
 }
+
+func TestDraftGetAfterAMissedPasteReplyLetsTheUserRemoveTheImage(t *testing.T) {
+	fakeClipboard(t, imageScript)
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "1@s.whatsapp.net", LastActive: 1}}})
+	r.nextFrame() // chatsChanged
+	path := pastedPath(t, r, 1) // the Plugin dropped this reply: the user left the Chat
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}`)
+	r.nextFrame()
+	setAttachments(t, r, 3, nil)
+	if exists(path) {
+		t.Error("a pasted image that the user removed stays")
+	}
+	r.finish()
+}
