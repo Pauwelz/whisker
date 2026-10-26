@@ -26,7 +26,7 @@ func timedKinds() map[string]*waE2E.Message {
 		"poll":          {PollCreationMessage: &waE2E.PollCreationMessage{ContextInfo: withTimer()}},
 		"poll v2":       {PollCreationMessageV2: &waE2E.PollCreationMessage{ContextInfo: withTimer()}},
 		"poll v3":       {PollCreationMessageV3: &waE2E.PollCreationMessage{ContextInfo: withTimer()}},
-		"poll v4":       {PollCreationMessageV4: &waE2E.FutureProofMessage{}},
+		"poll v4":       {PollCreationMessageV4: &waE2E.FutureProofMessage{Message: &waE2E.Message{PollCreationMessage: &waE2E.PollCreationMessage{ContextInfo: withTimer()}}}},
 		"poll v5":       {PollCreationMessageV5: &waE2E.PollCreationMessage{ContextInfo: withTimer()}},
 		"poll v6":       {PollCreationMessageV6: &waE2E.PollCreationMessage{ContextInfo: withTimer()}},
 		"event":         {EventMessage: &waE2E.EventMessage{ContextInfo: withTimer()}},
@@ -40,12 +40,8 @@ func TestTimerOfEveryShownKind(t *testing.T) {
 			if _, ok := contentOf(m, false); !ok {
 				t.Fatal("contentOf does not show this kind")
 			}
-			want := int64(86400)
-			if name == "poll v4" {
-				want = 0 // V4 is a FutureProofMessage wrapper: it has no ContextInfo of its own
-			}
-			if got := timerOf(m); got != want {
-				t.Errorf("timerOf = %d, want %d", got, want)
+			if got := timerOf(m); got != 86400 {
+				t.Errorf("timerOf = %d, want 86400", got)
 			}
 		})
 	}
