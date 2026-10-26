@@ -226,6 +226,7 @@ func (s *Store) Plain(chat, id, ext string, k Kind, mediaKey []byte) (string, er
 	}
 	path := filepath.Join(s.plainDir, d, f+ext)
 	if err := s.Export(chat, id, k, mediaKey, path); err != nil {
+		os.Remove(path) // an older copy must not stay after a failed rewrite
 		return "", err
 	}
 	epochAll(path, filepath.Dir(path), s.plainDir)
@@ -251,6 +252,7 @@ func (s *Store) UploadCopy(chat, id string, k Kind, mediaKey []byte) (string, er
 	}
 	f.Close()
 	if err := s.Export(chat, id, k, mediaKey, f.Name()); err != nil {
+		os.Remove(f.Name())
 		return "", err
 	}
 	return f.Name(), nil
