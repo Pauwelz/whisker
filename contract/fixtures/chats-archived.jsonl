@@ -19,8 +19,8 @@
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"3@s.whatsapp.net","message":{"id":"m2","sender":"3@s.whatsapp.net","time":50,"text":"hi"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m2","chat":"3@s.whatsapp.net","sender":"3@s.whatsapp.net","senderName":"+3","fromMe":false,"time":50,"text":"hi","state":"","edited":false,"revoked":false}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"notify","params":{"chat":"3@s.whatsapp.net","kind":"direct","name":"+3","senderName":"+3","text":"hi"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chats.list","params":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"chats":[{"jid":"3@s.whatsapp.net","kind":"direct","name":"+3","lastActive":50,"pinned":false,"muted":false,"unread":true,"unreadCount":1},{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":30,"pinned":false,"muted":false,"unread":true}],"more":false,"offset":0,"unreadChats":2}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chats.list","params":{"archived":true}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chats":[{"jid":"2@s.whatsapp.net","kind":"direct","name":"+2","lastActive":40,"pinned":false,"archived":true,"muted":false,"unread":true,"unreadCount":1}],"more":false,"offset":0,"unreadChats":2}}}
+{"dir":"notified","notified":[{"summary":"+3","body":"hi","chat":"3@s.whatsapp.net"}]}

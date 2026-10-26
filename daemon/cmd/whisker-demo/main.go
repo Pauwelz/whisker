@@ -16,6 +16,7 @@ import (
 
 	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
+	"github.com/Pauwelz/whisker/daemon/internal/desktop"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
@@ -72,7 +73,7 @@ func run() int {
 	defer p.Close()
 	prefs := settings.New(filepath.Join(dir, "settings.json"))
 	port := seed()
-	return contract.Run(os.Stdin, os.Stdout, os.Stderr, p, prefs, func() (whatsapp.Port, error) { return port, nil })
+	return contract.Run(os.Stdin, os.Stdout, os.Stderr, p, prefs, func() (whatsapp.Port, error) { return port, nil }, &desktop.Fake{}) // the demo shows no real notification
 }
 
 // seed returns a linked fake port with the demo Chats queued as events.

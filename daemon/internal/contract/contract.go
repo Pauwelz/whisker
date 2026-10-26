@@ -14,6 +14,7 @@ import (
 
 	"rsc.io/qr"
 
+	"github.com/Pauwelz/whisker/daemon/internal/desktop"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
@@ -106,11 +107,12 @@ type NewPort func() (whatsapp.Port, error)
 
 // Run opens the Profile, sends `ready`, starts linking or connecting, then serves requests and WhatsApp events until EOF.
 // While the keyring is unavailable it sends `keyringUnavailable` and waits for `keyring.retry`.
+// The desktop shows the notifications.
 // Profile Settings live in prefs, outside the Profile, so Delete keeps them.
 // It writes frames to out and logs to logOut. It returns the process exit code.
-func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.Store, newPort NewPort) int {
+func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.Store, newPort NewPort, desktop desktop.Notifier) int {
 	enc := json.NewEncoder(out) // Encode ends each frame with a newline.
-	s := &session{profile: profile, prefs: prefs, newPort: newPort, logOut: logOut, pasteDone: make(chan pasteResult, 64)}
+	s := &session{profile: profile, prefs: prefs, newPort: newPort, desktop: desktop, logOut: logOut, pasteDone: make(chan pasteResult, 64)}
 	s.send = func(frame map[string]any) bool {
 		if err := enc.Encode(frame); err != nil {
 			fmt.Fprintln(logOut, "write failed:", err)

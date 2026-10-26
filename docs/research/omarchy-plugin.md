@@ -106,10 +106,10 @@ Import `qs.Commons`. Two singletons (`$OMARCHY/shell/Commons/qmldir`):
 
 Omarchy's shell is the notification daemon (`$OMARCHY/shell/plugins/notifications/Service.qml`, a `service` plugin). It speaks `org.freedesktop.Notifications`. It supports two click mechanisms:
 
-- Omarchy hints. `$OMARCHY/bin/omarchy-notification-send` calls `Notify` over `busctl` with a hint `omarchy-exec-argv` (a JSON argv). A click on the card runs it detached (`Service.qml` `activate()`, lines 877-895). With `--action`, the hint `omarchy-actions` adds up to 3 buttons.
+- Omarchy hints. `$OMARCHY/bin/omarchy-notification-send` calls `Notify` over `busctl` (so the text sits in process arguments) with a hint `omarchy-exec-argv` (a JSON argv). A click on the card runs it detached (`Service.qml` `activate()`, lines 877-895). With `--action`, the hint `omarchy-actions` adds up to 3 buttons.
 - Standard actions. A sender's `default` action is invoked on card click (`invokeSenderAction(key, "default")`). Other actions become buttons (`actionsOf`, lines 702-720).
 
-Recommended: one `Process` in the Service that runs
+Superseded: whisker no longer runs `omarchy-notification-send`. Its arguments are readable by other local users. The Daemon calls `Notify` over D-Bus itself, with the same `omarchy-exec-argv` hint (`docs/architecture.md`, section 4). The old command line was:
 
 ```
 omarchy-notification-send --app-name whisker -r <id> "Alice" "Hello" \

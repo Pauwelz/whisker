@@ -13,6 +13,7 @@ import (
 
 	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
+	"github.com/Pauwelz/whisker/daemon/internal/desktop"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
 	"github.com/Pauwelz/whisker/daemon/internal/profilelock"
@@ -79,7 +80,7 @@ func run(frames io.Writer) int {
 	defer p.Close()
 	whatsapp.SetDeviceIdentity(version)
 	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
-	return contract.Run(stdinUntilSignal(), frames, os.Stderr, p, prefs, newPort)
+	return contract.Run(stdinUntilSignal(), frames, os.Stderr, p, prefs, newPort, desktop.DBus{LogOut: os.Stderr})
 }
 
 // stdinUntilSignal reads stdin, and ends like EOF on SIGTERM or SIGINT.

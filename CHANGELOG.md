@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- A Show preview setting hides the message text in notifications.
+
 ### Changed
 
 - The README now explains what whisker does, what it needs, how to link your phone and which dependencies it uses. It also states that whisker is unofficial and not affiliated with WhatsApp or Meta.
@@ -14,6 +18,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- Notifications no longer pass message text and names to a helper process, where other local users could read them.
 - A member of a group could write a line of JSON into the stream the Plugin reads. A short group Message made libsignal print its raw bytes to stdout. The Plugin then treated that line as a frame. Now only the frame encoder writes to the stdout of the Daemon. The Daemon discards all libsignal log lines.
 - A sender can no longer crash the Daemon with a large "separate thumbnail" link. The Daemon stops a thumbnail download at 256 KiB, times it out after 30 seconds, and runs at most three at once. It drops a larger thumbnail, also an inline one, and does not fetch an oversized link again. An update removes oversized thumbnails that chat.db already holds.
 - A sender can no longer crash or stall the Daemon with a long mention list. The Daemon now keeps at most 256 different mentions per Message, and only those whose `@<number>` is in the text. It also replaces names in the text in one pass, so a push name that holds `@<number>` cannot grow the text. Before, one small Message could exhaust the memory of the Daemon.

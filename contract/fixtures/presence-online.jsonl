@@ -16,10 +16,10 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{}}}
 {"dir":"presence","online":[false,true,false],"typing":[],"subscribed":["1@s.whatsapp.net"]}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"settings.set","params":{"sendOnline":false}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"readReceipts":"onOpen","sendOnline":false,"sendTyping":true,"notifications":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"readReceipts":"onOpen","sendOnline":false,"sendTyping":true,"notifications":true,"notificationPreview":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"attention.set","params":{"open":true,"chat":"1@s.whatsapp.net"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{}}}
 {"dir":"presence","online":[false,true,false],"typing":[],"subscribed":["1@s.whatsapp.net"]}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":6,"method":"settings.set","params":{"sendOnline":true}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":6,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":6,"result":{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"notificationPreview":true,"autoDownload":true,"autoDownloadLimit":"5mb"}}}
 {"dir":"presence","online":[false,true,false,true],"typing":[],"subscribed":["1@s.whatsapp.net"]}

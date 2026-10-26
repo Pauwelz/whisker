@@ -28,7 +28,7 @@ func startWithImage(t *testing.T, r *runner) {
 		ID: "m1", Sender: mediaChat, Time: 5,
 		Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Key: make([]byte, 32)},
 	}})
-	for _, want := range []string{`"downloading"`, "chatsChanged", `"notify"`, `"ready"`} {
+	for _, want := range []string{`"downloading"`, "chatsChanged", `"ready"`} {
 		if f := r.nextFrame(); !strings.Contains(f, want) {
 			t.Fatalf("frame = %s, want %s", f, want)
 		}
@@ -102,7 +102,7 @@ func startWithVideo(t *testing.T, r *runner) {
 		ID: "v1", Sender: mediaChat, Time: 5,
 		Media: &whatsapp.Media{Kind: media.Video, Mime: "video/mp4", Key: make([]byte, 32), ThumbDirectPath: "/t/v1"},
 	}})
-	for _, want := range []string{`"none"`, "chatsChanged", `"notify"`} {
+	for _, want := range []string{`"none"`, "chatsChanged"} {
 		if f := r.nextFrame(); !strings.Contains(f, want) {
 			t.Fatalf("frame = %s, want %s", f, want)
 		}
@@ -248,7 +248,6 @@ func TestAutoDownloadOffKeepsMediaWaiting(t *testing.T) {
 		t.Fatalf("frame = %s, want the live image waiting", f)
 	}
 	r.nextFrame() // chatsChanged
-	r.nextFrame() // notify
 	r.send(listVideoChat)
 	if f := r.nextFrame(); !strings.Contains(f, `"messages"`) {
 		t.Fatalf("frame = %s, want the page", f)
@@ -281,11 +280,10 @@ func TestAutoDownloadLimitKeepsLargeMediaWaiting(t *testing.T) {
 		t.Fatalf("frame = %s, want the large image waiting", f)
 	}
 	r.nextFrame() // chatsChanged
-	r.nextFrame() // notify
 	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
 		ID: "small", Sender: mediaChat, Time: 7, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Size: 1000, Key: make([]byte, 32)},
 	}})
-	for _, want := range []string{`"downloading"`, "chatsChanged", `"notify"`, `"ready"`} {
+	for _, want := range []string{`"downloading"`, "chatsChanged", `"ready"`} {
 		if f := r.nextFrame(); !strings.Contains(f, want) {
 			t.Fatalf("frame = %s, want %s", f, want)
 		}
@@ -310,7 +308,7 @@ func TestOversizedThumbnailsAreDroppedAndNotRetried(t *testing.T) {
 			ID: fmt.Sprintf("d%d", i), Sender: mediaChat, Time: int64(5 + i),
 			Media: &whatsapp.Media{Kind: media.Document, Mime: "application/pdf", Key: make([]byte, 32), ThumbDirectPath: fmt.Sprintf("/t/d%d", i)},
 		}})
-		for range 3 { // none, chatsChanged, notify
+		for range 2 { // none, chatsChanged
 			r.nextFrame()
 		}
 	}

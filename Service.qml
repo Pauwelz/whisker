@@ -398,7 +398,6 @@ Item {
         var draftSetDue = Daemon.draftSetDue(root.view, frame) // the answer to a send: store the restored or typed Draft
         root.view = Daemon.applyFrame(root.view, frame)
         if (draftSetDue) root.send(Draft.draftSetRequest, root.view.openChat.jid, Draft.draftOf(root.view))
-        if (Daemon.isNotify(frame)) Quickshell.execDetached(Daemon.notifyCommand(frame.params))
         root.handleMediaFrame(frame)
         var pasted = Draft.pastedAttachment(root.view, frame)
         if (pasted !== null && pasted.length === 0) root.pasteText()

@@ -1,0 +1,9 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"g1@g.us","kind":"group","subject":"Crew","lastActive":10,"messages":[]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","message":{"id":"m1","sender":"2@s.whatsapp.net","time":50,"text":"-g evil","pushName":"-r 5"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"-r 5","fromMe":false,"time":50,"text":"-g evil","state":"","edited":false,"revoked":false,"senderPush":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"notified","notified":[{"summary":"Crew","body":"-r 5: -g evil","chat":"g1@g.us"}]}

@@ -67,6 +67,9 @@ Panel {
   // Smaller than the shell's Toggle (at least 54 px), so all settings fit the pop-out without a scroll.
   component SettingToggle: Toggle {
     required property string key
+    property bool available: true // false greys the switch out, as for a setting that needs another one
+    enabled: available
+    opacity: available ? 1 : 0.4
     width: parent.width
     implicitHeight: Style.space(46)
     titleSize: Style.font.body
@@ -655,6 +658,7 @@ Panel {
             PanelSeparator { width: parent.width; foreground: root.contentForeground }
             PanelSectionHeader { text: "Notifications"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
             SettingToggle { key: "notifications" }
+            SettingToggle { key: "notificationPreview"; available: !!root.profileSettings && root.profileSettings.notifications }
 
             PanelSeparator { width: parent.width; foreground: root.contentForeground }
             PanelSectionHeader { text: "Media"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }

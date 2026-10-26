@@ -17,6 +17,7 @@ import (
 
 	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
+	"github.com/Pauwelz/whisker/daemon/internal/desktop"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
@@ -58,21 +59,25 @@ type fixtureLine struct {
 	HistoryAnswer *int              `json:"historyAnswer"` // dir "whatsapp": the Messages in the answer to each history request, 0 for an empty batch
 	HistoryTimer  bool              `json:"historyTimer"`  // dir "clock": fire the timeout of the open history request, queued behind the sweep timer
 
-	Download      *string  `json:"download"`      // dir "whatsapp": the plain Media the next downloads return
-	DownloadError *string  `json:"downloadError"` // dir "whatsapp": "" lets downloads work again
-	Path          string   `json:"path"`          // dir "file"
-	Content       string   `json:"content"`       // dir "file": the content the file must hold
-	Missing       bool     `json:"missing"`       // dir "file": the file must not exist
-	Remove        bool     `json:"remove"`        // dir "file": the test deletes the file
-	Write         bool     `json:"write"`         // dir "file": the test writes the file with `content`
-	Uploads       []string `json:"uploads"`       // dir "uploaded": "id|kind|mime|name|caption|content" of each Media the fake port has sent
-	Present       bool     `json:"present"`       // dir "file": the file must exist
-	Now           *int64   `json:"now"`           // dir "clock" and "restart": the Daemon time in Unix seconds
-	Timers        []int64  `json:"timers"`        // dir "sent": the Disappearing timer of each sent Message
-	Online        []bool   `json:"online"`        // dir "presence": the availability calls so far
-	Typing        []string `json:"typing"`        // dir "presence": "chat:composing" or "chat:paused" calls so far
-	Subscribed    []string `json:"subscribed"`    // dir "presence": the Presence subscriptions so far
+	Download      *string    `json:"download"`      // dir "whatsapp": the plain Media the next downloads return
+	DownloadError *string    `json:"downloadError"` // dir "whatsapp": "" lets downloads work again
+	Path          string     `json:"path"`          // dir "file"
+	Content       string     `json:"content"`       // dir "file": the content the file must hold
+	Missing       bool       `json:"missing"`       // dir "file": the file must not exist
+	Remove        bool       `json:"remove"`        // dir "file": the test deletes the file
+	Write         bool       `json:"write"`         // dir "file": the test writes the file with `content`
+	Uploads       []string   `json:"uploads"`       // dir "uploaded": "id|kind|mime|name|caption|content" of each Media the fake port has sent
+	Present       bool       `json:"present"`       // dir "file": the file must exist
+	Now           *int64     `json:"now"`           // dir "clock" and "restart": the Daemon time in Unix seconds
+	Timers        []int64    `json:"timers"`        // dir "sent": the Disappearing timer of each sent Message
+	Online        []bool     `json:"online"`        // dir "presence": the availability calls so far
+	Typing        []string   `json:"typing"`        // dir "presence": "chat:composing" or "chat:paused" calls so far
+	Subscribed    []string   `json:"subscribed"`    // dir "presence": the Presence subscriptions so far
+	Notified      []notified `json:"notified"`      // dir "notified": the desktop notifications so far
 }
+
+// notified is one desktop notification in a fixture: the Chat name, the body and the Chat id of the click.
+type notified struct{ Summary, Body, Chat string }
 
 // runner runs the Daemon on pipes, with a fake keyring, a manual clock and a Profile in a temp dir.
 type runner struct {
@@ -91,6 +96,7 @@ type runner struct {
 	portMu   sync.Mutex
 	portUsed bool
 	port     *whatsapp.Fake // the port of the current Profile: Profile deletion makes a new one
+	desktop  *desktop.Fake  // the notifications the Daemon showed
 }
 
 func newRunner(t *testing.T) *runner {
@@ -98,7 +104,7 @@ func newRunner(t *testing.T) *runner {
 	oldClock := contract.Clock
 	runtime := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtime)
-	r := &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: clock.NewManual(), expiry: clock.NewManual(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake()}
+	r := &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: clock.NewManual(), expiry: clock.NewManual(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake(), desktop: &desktop.Fake{}}
 	r.expiry.SetNow(1000) // fixed Message times for the fixtures
 	contract.Clock = r.expiry
 	t.Cleanup(func() { contract.Clock = oldClock })
@@ -134,7 +140,7 @@ func (r *runner) start() {
 	r.done = make(chan int, 1)
 	p := profile.New(r.dir, keystore.New(r.fake, r.clock))
 	go func() {
-		r.done <- contract.Run(inR, outW, &r.errOut, p, settings.New(filepath.Join(r.dir, "..", "settings.json")), r.newPort)
+		r.done <- contract.Run(inR, outW, &r.errOut, p, settings.New(filepath.Join(r.dir, "..", "settings.json")), r.newPort, r.desktop)
 		p.Close()
 		outW.Close()
 	}()
@@ -329,6 +335,14 @@ func TestFixtures(t *testing.T) {
 					}
 					if got, want := mustJSON(f.Subscribed()), mustJSON(append([]string{}, line.Subscribed...)); got != want {
 						t.Errorf("subscriptions = %s, want %s", got, want)
+					}
+				case "notified":
+					got := []notified{}
+					for _, c := range r.desktop.Calls() {
+						got = append(got, notified(c))
+					}
+					if want := append([]notified{}, line.Notified...); !reflect.DeepEqual(got, want) {
+						t.Errorf("notifications = %v, want %v", got, want)
 					}
 				case "file":
 					r.checkFile(line)
@@ -619,7 +633,7 @@ func run(t *testing.T, input string) (int, string, string) {
 	var out, errOut bytes.Buffer
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	p := profile.New(filepath.Join(t.TempDir(), "whisker"), keystore.New(keystore.NewFake(), clock.NewManual()))
-	code := contract.Run(strings.NewReader(input), &out, &errOut, p, settings.New(filepath.Join(t.TempDir(), "settings.json")), func() (whatsapp.Port, error) { return whatsapp.NewFake(), nil })
+	code := contract.Run(strings.NewReader(input), &out, &errOut, p, settings.New(filepath.Join(t.TempDir(), "settings.json")), func() (whatsapp.Port, error) { return whatsapp.NewFake(), nil }, &desktop.Fake{})
 	p.Close()
 	return code, out.String(), errOut.String()
 }

@@ -180,19 +180,25 @@ A System Message records a change to a Chat. The Daemon stores each one as a Mes
 
 - The Daemon stores the change as data and builds `text` when it reads the Message, with the name rule. A later Phone Contact name replaces a number. The user is "You" at the start of the line and "you" in other places.
 - The ID is `sys-` and a hash of the change and its time in whole seconds. A live change and its History Sync copy have one ID, so the Chat shows it once.
-- A System Message is quiet: no `notify`, no Read Marker, and the Chat keeps its place in the Chat list. It never expires.
+- A System Message is quiet: no notification, no Read Marker, and the Chat keeps its place in the Chat list. It never expires.
 - `chat.react`, `chat.edit`, `chat.revoke` and a `quote` of `chat.send` or `draft.set` refuse a System Message with -32006, as for an unknown Message.
 - A live subject change also renames the Group Chat. `messageChanged` and `chatsChanged` follow each live System Message.
 
 Fixture: `chat-system-messages.jsonl`.
 
-### `notify`
+### Desktop notification
 
-A new Message raises a desktop notification. The Daemon sends `notify` after `messageChanged` and `chatsChanged` of that Message. `kind` is the Chat kind, `name` follows the name rule, and `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it.
+A new Message raises a desktop notification. The Daemon shows it itself. It calls `org.freedesktop.Notifications.Notify` on the session bus, so it sends no frame to the Plugin. Message text and names never go into the arguments of a process, where other local users could read them.
 
-```json
-{"jsonrpc":"2.0","method":"notify","params":{"chat":"g1@g.us","kind":"group","name":"Crew","senderName":"Bob","text":"hello"}}
-```
+The Daemon sends the notification before the `chatsChanged` of that Message. It does not wait for the answer. A failure (no session bus, no notification server) logs one line with no text and no names, and the notification is dropped.
+
+| Part | Value |
+|---|---|
+| App name | `whisker` |
+| Summary | The Chat name. |
+| Body | A Group Chat: `<sender>: <text>`. A Direct Chat: the text. A Message with Media and no text: the Media label (`Photo`, `Sticker`, `Voice message`, `Audio`, `Video`, `Document`). With `notificationPreview` off: `New message`. The body is plain text. |
+| Click hint | `omarchy-exec-argv`, a string with the JSON argv `["omarchy-shell","pauwelz.whisker","openChat","<chat>"]`. A click runs the Plugin IPC handler `openChat` and opens the pop-out on that Chat. |
+| Urgency hint | `urgency`, a byte, 0 (low), as in `omarchy-notification-send`. |
 
 The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies unless one of these is true:
 
@@ -204,7 +210,7 @@ The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies u
 | The Chat is the Attended Chat. | `notify-attended.jsonl` |
 | The user sent the Message from another device. | `notify-own-message.jsonl` |
 
-`notify-new.jsonl` shows a Message that notifies. The Plugin shows the notification with `omarchy-notification-send`. An `--exec` action runs the Plugin IPC handler `openChat` with the Chat id (`omarchy-shell pauwelz.whisker openChat <chat>`). A click opens the pop-out on that Chat. A Message that mentions the user notifies in a Muted Chat too (`mentionsMe` on the port Message), but not in the Attended Chat.
+A fixture checks the notifications with a `notified` line (see "Golden fixtures"). `notify-new.jsonl` (Group Chat), `notify-direct.jsonl`, `notify-media.jsonl` (Media without text), `notify-preview-off.jsonl` and `notify-dash-body.jsonl` (a body that starts with `-` stays plain text) show a Message that notifies. A Message that mentions the user notifies in a Muted Chat too (`mentionsMe` on the port Message), but not in the Attended Chat.
 
 ## Methods (Plugin to Daemon)
 
@@ -278,7 +284,7 @@ Fixtures: `chat-start.jsonl`, `chat-start-invalid.jsonl`.
 No params. Valid once the Daemon is `ready`. The result is the Profile Settings:
 
 ```json
-{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"autoDownload":true,"autoDownloadLimit":"5mb"}
+{"readReceipts":"onOpen","sendOnline":true,"sendTyping":true,"notifications":true,"notificationPreview":true,"autoDownload":true,"autoDownloadLimit":"5mb"}
 ```
 
 The Daemon owns the settings in `$XDG_CONFIG_HOME/whisker/settings.json` (default `~/.config/whisker/settings.json`). The file is outside the Profile, so Log out keeps it. The Plugin reads and writes the settings only over JSON-RPC. Later tickets read them through `settings.Store.Get` in `daemon/internal/settings`.
@@ -289,10 +295,13 @@ The Daemon owns the settings in `$XDG_CONFIG_HOME/whisker/settings.json` (defaul
 | `sendOnline` | boolean | `true` |
 | `sendTyping` | boolean | `true` |
 | `notifications` | boolean | `true` |
+| `notificationPreview` | boolean | `true` |
 | `autoDownload` | boolean | `true` |
 | `autoDownloadLimit` | `1mb`, `5mb`, `25mb`, `any` | `5mb` |
 
 `autoDownload` on: images, stickers and voice notes download when they arrive, and a listed image without a thumbnail downloads. Off: they wait for `media.download`. `autoDownloadLimit` is the largest file that downloads this way; a larger one waits, and a file of unknown size downloads. WhatsApp's separate thumbnails download either way.
+
+`notificationPreview` on: a notification shows the sender and the text. Off: the summary stays the Chat name and the body is `New message`. It has no effect while `notifications` is off.
 
 A missing file or a missing key gives the default. Error -32004 means the settings file is unreadable. Fixture: `settings-defaults.jsonl`.
 
@@ -635,6 +644,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `uploaded` | `uploads` | The Go test checks the Media that the fake port has uploaded and sent so far, in order, as `"id\|kind\|mime\|name\|caption\|content"`. |
 | `clock` | `historyTimer` | With `historyTimer` (true), the Go test fires the 30 s timeout of the open On-Demand History Sync request. It fires the sweep timer first. |
 | `clock` | `now` | With `now` (Unix seconds), the Go test sets the Daemon time and fires the oldest timer of the Daemon clock. That is the sweep of Disappearing Messages, then a Mute end, in the order the Daemon set them. Without it, the line fires the keyring timeout as above. |
+| `notified` | `notified` | The Go test checks the desktop notifications that the fake desktop has received so far, in order, as `{summary, body, chat}`. An empty list means none. |
 | `restart` | `now` (optional) | The Go test stops the Daemon like a closed stdin and starts it again on the same Profile, with a new fake WhatsApp port. `now` sets the Daemon time while it was off. Put the `whatsapp` start-up lines after it. |
 | `file` | `path`, and `content` or `missing` | With `write`: true the Go test writes the file with `content` (a source file for `chat.sendMedia`). With `remove`: true the Go test deletes the file. Otherwise the Go test checks a file: it holds `content`, or (`missing`: true) it does not exist, or (`present`: true) it exists. `$PROFILE` in `path` is the Profile folder. `$RUNTIME` in `path` (and in `in` and `out` frames) is the runtime folder of the test. The Plugin test ignores it. |
 | `plugin` | `openChat`, `requestHistory` or `lookup` | The Plugin test acts as the user: it opens this Chat (`jid`, `name`, `kind`), taps the older link at the end of the stored history (`requestHistory`: true), or starts a lookup. The Go test ignores it. |

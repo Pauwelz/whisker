@@ -40,7 +40,9 @@ type Settings struct {
 	SendOnline    bool   `json:"sendOnline"`
 	SendTyping    bool   `json:"sendTyping"`
 	Notifications bool   `json:"notifications"`
-	AutoDownload  bool   `json:"autoDownload"` // images, stickers and voice notes download by themselves
+	// NotificationPreview puts the sender and text in a notification. Off, a notification says "New message".
+	NotificationPreview bool `json:"notificationPreview"`
+	AutoDownload        bool `json:"autoDownload"` // images, stickers and voice notes download by themselves
 	// AutoDownloadLimit is the largest Media that downloads by itself, one of the limits above.
 	AutoDownloadLimit string `json:"autoDownloadLimit"`
 }
@@ -53,17 +55,18 @@ func (s Settings) AutoDownloads(size int64) bool {
 
 // Update is a partial change. A nil field stays as it is.
 type Update struct {
-	ReadReceipts      *string `json:"readReceipts"`
-	SendOnline        *bool   `json:"sendOnline"`
-	SendTyping        *bool   `json:"sendTyping"`
-	Notifications     *bool   `json:"notifications"`
-	AutoDownload      *bool   `json:"autoDownload"`
-	AutoDownloadLimit *string `json:"autoDownloadLimit"`
+	ReadReceipts        *string `json:"readReceipts"`
+	SendOnline          *bool   `json:"sendOnline"`
+	SendTyping          *bool   `json:"sendTyping"`
+	Notifications       *bool   `json:"notifications"`
+	NotificationPreview *bool   `json:"notificationPreview"`
+	AutoDownload        *bool   `json:"autoDownload"`
+	AutoDownloadLimit   *string `json:"autoDownloadLimit"`
 }
 
 // Defaults returns the settings of a Profile that has no settings file.
 func Defaults() Settings {
-	return Settings{ReadReceipts: ReadReceiptsOnOpen, SendOnline: true, SendTyping: true, Notifications: true, AutoDownload: true, AutoDownloadLimit: AutoDownloadLimit5MB}
+	return Settings{ReadReceipts: ReadReceiptsOnOpen, SendOnline: true, SendTyping: true, Notifications: true, NotificationPreview: true, AutoDownload: true, AutoDownloadLimit: AutoDownloadLimit5MB}
 }
 
 func validMode(m string) bool {
@@ -108,6 +111,9 @@ func (s *Store) Set(u Update) (Settings, error) {
 	}
 	if u.Notifications != nil {
 		cur.Notifications = *u.Notifications
+	}
+	if u.NotificationPreview != nil {
+		cur.NotificationPreview = *u.NotificationPreview
 	}
 	if u.AutoDownload != nil {
 		cur.AutoDownload = *u.AutoDownload

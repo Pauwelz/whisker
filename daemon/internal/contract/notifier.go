@@ -6,32 +6,42 @@ import (
 
 	"github.com/Pauwelz/whisker/daemon/internal/attention"
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
+	"github.com/Pauwelz/whisker/daemon/internal/desktop"
 	"github.com/Pauwelz/whisker/daemon/internal/notifypolicy"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
 
-// notifier turns a new Message into a `notify` frame when the policy (notifypolicy) says so.
-// The Plugin shows the desktop notification. It runs on the Daemon loop only.
-// shortcut: a live Message that arrives twice notifies twice, upgrade if WhatsApp repeats events.
-type notifier struct {
-	chats  *chatstore.Store
-	prefs  *settings.Store
-	attn   *attention.Attention
-	logOut io.Writer
+// mediaLabels name a Message with Media and no text. The keys are the Media kinds of docs/contract.md.
+var mediaLabels = map[string]string{
+	"image": "Photo", "sticker": "Sticker", "voice": "Voice message", "audio": "Audio", "video": "Video", "document": "Document",
 }
 
-// frame returns the `notify` frame for a stored new Message, or nil when it does not notify.
-func (n *notifier) frame(ev whatsapp.NewMessage) map[string]any {
+// previewHidden is the body when the notificationPreview setting is off.
+const previewHidden = "New message"
+
+// notifier shows a desktop notification for a new Message when the policy (notifypolicy) says so.
+// It runs on the Daemon loop only.
+// shortcut: a live Message that arrives twice notifies twice, upgrade if WhatsApp repeats events.
+type notifier struct {
+	chats   *chatstore.Store
+	prefs   *settings.Store
+	attn    *attention.Attention
+	desktop desktop.Notifier
+	logOut  io.Writer
+}
+
+// show sends the notification of a stored new Message, or nothing when the policy says no.
+func (n *notifier) show(ev whatsapp.NewMessage) {
 	prefs, err := n.prefs.Get()
 	if err != nil {
 		fmt.Fprintln(n.logOut, "settings failed") // no notification without a readable setting
-		return nil
+		return
 	}
 	chat, err := n.chats.Chat(ev.Chat)
 	if err != nil {
 		fmt.Fprintln(n.logOut, "chat store read failed")
-		return nil
+		return
 	}
 	if !notifypolicy.Notifies(notifypolicy.Input{
 		FromMe:        ev.Message.FromMe,
@@ -41,16 +51,22 @@ func (n *notifier) frame(ev whatsapp.NewMessage) map[string]any {
 		Attended:      ev.Chat == n.attn.Attended(),
 		Notifications: prefs.Notifications,
 	}) {
-		return nil
+		return
 	}
-	m, err := n.chats.Message(ev.Chat, ev.Message.ID)
-	if err != nil {
-		fmt.Fprintln(n.logOut, "chat store read failed")
-		return nil
+	body := previewHidden
+	if prefs.NotificationPreview {
+		m, err := n.chats.Message(ev.Chat, ev.Message.ID)
+		if err != nil {
+			fmt.Fprintln(n.logOut, "chat store read failed")
+			return
+		}
+		body = m.Text
+		if body == "" && m.Media != nil {
+			body = mediaLabels[string(m.Media.Kind)]
+		}
+		if chat.Kind == whatsapp.KindGroup && m.SenderName != "" {
+			body = m.SenderName + ": " + body
+		}
 	}
-	params := map[string]any{"chat": chat.JID, "kind": chat.Kind, "name": chat.Name, "senderName": m.SenderName, "text": m.Text}
-	if m.Media != nil {
-		params["media"] = m.Media.Kind // the Plugin names the Media when there is no text
-	}
-	return notification("notify", params)
+	n.desktop.Notify(desktop.Notification{Summary: chat.Name, Body: body, Chat: chat.JID})
 }

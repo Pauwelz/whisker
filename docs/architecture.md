@@ -11,6 +11,7 @@ whisker is the Omarchy product: a Quickshell/QML Plugin and its own Go Daemon. I
 - `whatsmeow` handles the WhatsApp protocol and its `sqlstore`.
 - `ncruces/go-sqlite3` with the `adiantum` VFS gives encrypted SQLite in pure Go.
 - `zalando/go-keyring` reads and writes the store key in the Secret Service.
+- `godbus/dbus` calls the Notifications service on the session bus.
 - `rsc.io/qr` renders the QR code ([research](research/qr-library.md)).
 - The Daemon uses whatsmeow's `util/hkdfutil` and `util/cbcutil` packages for Media.
 - The JSON-RPC 2.0 envelope uses no library on either side.
@@ -45,6 +46,7 @@ contract/fixtures/*.jsonl  golden fixtures
 - **Plugin (QML).** It shows state, sends commands and owns all presentation. It holds no Profile state.
 - **Daemon (Go).** It owns the Profile: the stores, the Media, the session and linking.
 - **Seam 1: stdio JSON-RPC.** This is the only runtime seam between the Plugin and the Daemon (section 7). The Go tests and the Plugin's JS tests both read the golden fixtures in `contract/fixtures/*.jsonl`. This keeps both sides in step.
+- **Desktop notifications.** The Daemon shows them: it calls `org.freedesktop.Notifications.Notify` on the session bus (`daemon/internal/desktop`). The Plugin takes no part. The port `desktop.Notifier` has a fake, so the contract tests run without a bus. The click hint runs `omarchy-shell pauwelz.whisker openChat <chat>`.
 - **Seam 2: the Daemon binary.** The Plugin gets the binary through `scripts/fetch-daemon.sh`. It calls the script through `Quickshell.Io` and reads the exit code (section 8).
 - **Seam 3: whatsmeow.** The Daemon embeds whatsmeow in-process. whatsmeow's `sqlstore` runs on the encrypted SQLite driver. At runtime whatsmeow packages stay inside `daemon/internal/whatsapp` (the client in `client.go`, sends in `send.go`, events in `events.go`, System Messages in `system.go` and the message content in `content.go`). Two other packages import small parts: `internal/profile` opens the device store (`sqlstore`), and `internal/media` uses the crypto helpers (`cbcutil`, `hkdfutil`). Tests in `daemon/internal/whatsapp` may import whatsmeow to build inputs, such as a History Sync batch.
 - **Store.** The Daemon has a device store (whatsmeow's) and a chat store (Chats, messages, Drafts and the FTS index). Both are encrypted SQLite (section 5).
@@ -84,6 +86,8 @@ The scheme covers the device store, the chat store and the Media. Profile Settin
 ### Threat boundary
 
 A `0600` file is readable by every process of the same user. A key in the Secret Service is too. The encryption keeps the stores and Media away from indexers, backup or sync tools and sandboxed apps. It does not keep them from a hostile native process of the same user.
+
+Other local users can read the arguments of every process (`/proc/<pid>/cmdline`, because `/proc` has no `hidepid`). So whisker never passes message text, names or Chat ids as arguments to show a notification. The Daemon shows notifications itself over D-Bus (section 4). Other places that still put data in arguments are tracked in #72.
 
 On a default Omarchy install, the login keyring has no password, and gnome-keyring stores it in plain text in `~/.local/share/keyrings/`. A backup of `~/.local/share` then holds the stores and their key. The README tells users to set a password on the login keyring for real protection at rest.
 

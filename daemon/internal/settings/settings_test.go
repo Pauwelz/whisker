@@ -10,7 +10,7 @@ import (
 
 func TestDefaultsWithoutFile(t *testing.T) {
 	got, err := settings.New(filepath.Join(t.TempDir(), "settings.json")).Get()
-	want := settings.Settings{ReadReceipts: "onOpen", SendOnline: true, SendTyping: true, Notifications: true, AutoDownload: true, AutoDownloadLimit: "5mb"}
+	want := settings.Settings{ReadReceipts: "onOpen", SendOnline: true, SendTyping: true, Notifications: true, NotificationPreview: true, AutoDownload: true, AutoDownloadLimit: "5mb"}
 	if err != nil || got != want {
 		t.Errorf("Get = %+v, %v; want %+v", got, err, want)
 	}
@@ -20,11 +20,11 @@ func TestSetSurvivesANewStore(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "settings.json")
 	mode, off := "off", false
 	limit := "25mb"
-	if _, err := settings.New(path).Set(settings.Update{ReadReceipts: &mode, SendTyping: &off, AutoDownload: &off, AutoDownloadLimit: &limit}); err != nil {
+	if _, err := settings.New(path).Set(settings.Update{ReadReceipts: &mode, SendTyping: &off, NotificationPreview: &off, AutoDownload: &off, AutoDownloadLimit: &limit}); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := settings.New(path).Get()
-	want := settings.Settings{ReadReceipts: "off", SendOnline: true, SendTyping: false, Notifications: true, AutoDownload: false, AutoDownloadLimit: "25mb"}
+	want := settings.Settings{ReadReceipts: "off", SendOnline: true, SendTyping: false, Notifications: true, NotificationPreview: false, AutoDownload: false, AutoDownloadLimit: "25mb"}
 	if got != want {
 		t.Errorf("Get = %+v, want %+v", got, want)
 	}

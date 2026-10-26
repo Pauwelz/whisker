@@ -16,7 +16,7 @@ Read and send WhatsApp messages from the Omarchy bar.
 - Sends and receives text, Quotes, Reactions, edits and deletes.
 - Shows images, video, voice notes, documents and stickers. Paste a file or a screenshot to send it.
 - Pins, mutes and marks chats unread, and syncs these changes with your phone. Archived chats sit under a filter.
-- Sends desktop notifications for new messages.
+- Sends desktop notifications for new messages. A "Show preview" setting hides the sender and text (the notification says "New message").
 - Keeps your messages encrypted on disk.
 
 whisker does not do calls, Status, Communities or more than one account.

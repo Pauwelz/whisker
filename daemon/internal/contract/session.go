@@ -9,6 +9,7 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/attention"
 	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/clock"
+	"github.com/Pauwelz/whisker/daemon/internal/desktop"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
 	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
@@ -35,6 +36,7 @@ type session struct {
 	profile   Profile
 	prefs     *settings.Store
 	newPort   NewPort
+	desktop   desktop.Notifier
 	send      func(map[string]any) bool
 	logOut    io.Writer
 	attn      attention.Attention // the pop-out state: it outlives the Profile, so a new link keeps it
@@ -76,7 +78,7 @@ func (s *session) open() int {
 		s.media = s.profile.Media()
 		s.chats = chatstore.New(s.profile.Chat(), Clock.Now)
 		s.read = &reader{chats: s.chats, port: s.port, prefs: s.prefs, attn: &s.attn, logOut: s.logOut, played: map[string]bool{}}
-		notices := &notifier{chats: s.chats, prefs: s.prefs, attn: &s.attn, logOut: s.logOut}
+		notices := &notifier{chats: s.chats, prefs: s.prefs, attn: &s.attn, desktop: s.desktop, logOut: s.logOut}
 		// A settings file that cannot be read gives the defaults.
 		autoDownloads := func(size int64) bool {
 			cur, err := s.prefs.Get()
@@ -85,7 +87,7 @@ func (s *session) open() int {
 			}
 			return cur.AutoDownloads(size)
 		}
-		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, notices.frame, autoDownloads)
+		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, notices.show, autoDownloads)
 		s.sent = s.box.results
 		s.participantsDone = s.box.participants
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)
