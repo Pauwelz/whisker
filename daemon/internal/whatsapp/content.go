@@ -98,17 +98,31 @@ func locationLine(name, address string, lat, lon float64) string {
 	return fmt.Sprintf("%s\nhttps://www.openstreetmap.org/?mlat=%.6f&mlon=%.6f#map=17/%.6f/%.6f", title, lat, lon, lat, lon)
 }
 
+// contextOf is the ContextInfo of the content field that a Message sets, or nil. It reads every kind, also kinds that WhatsApp adds later and a kind inside a FutureProofMessage.
+// The top-level messageContextInfo is another type and holds no timer or mention, so it is skipped.
+func contextOf(m *waE2E.Message) *waE2E.ContextInfo {
+	var info *waE2E.ContextInfo
+	m.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		if fd.Kind() != protoreflect.MessageKind || fd.IsList() || fd.IsMap() || fd.Name() == "messageContextInfo" {
+			return true
+		}
+		if fp, ok := v.Message().Interface().(*waE2E.FutureProofMessage); ok {
+			info = contextOf(fp.GetMessage())
+			return info == nil
+		}
+		field := v.Message().Descriptor().Fields().ByName("contextInfo")
+		if field == nil || !v.Message().Has(field) {
+			return true
+		}
+		info, _ = v.Message().Get(field).Message().Interface().(*waE2E.ContextInfo)
+		return false
+	})
+	return info
+}
+
 // mentionsOf returns the JIDs that a Message mentions. Text and captions carry them in a ContextInfo.
 func mentionsOf(m *waE2E.Message) []string {
-	for _, ctx := range []interface{ GetMentionedJID() []string }{
-		m.GetExtendedTextMessage().GetContextInfo(), m.GetImageMessage().GetContextInfo(),
-		m.GetVideoMessage().GetContextInfo(), m.GetDocumentMessage().GetContextInfo(),
-	} {
-		if jids := ctx.GetMentionedJID(); len(jids) > 0 {
-			return jids
-		}
-	}
-	return nil
+	return contextOf(m).GetMentionedJID()
 }
 
 // MaxMentions is the most mentions that the Daemon keeps for one Message. A group holds about 1024 people.

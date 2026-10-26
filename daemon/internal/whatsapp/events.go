@@ -50,7 +50,7 @@ func (c *Client) handle(evt any) {
 		if !ok || evt.IsEdit || chat.Server == types.BroadcastServer {
 			return
 		}
-		c.events <- NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Message: c.messageOf(evt.Info, evt.Message, body)}
+		c.events <- NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Ephemeral: evt.IsEphemeral, Message: c.messageOf(evt.Info, evt.Message, body)}
 	case *events.Receipt:
 		if c.isOwn(evt.Sender) && (evt.Type == types.ReceiptTypeRead || evt.Type == types.ReceiptTypeReadSelf) {
 			c.events <- ReadElsewhere{Chat: c.chatOf(evt.MessageSource).String(), IDs: slices.Clone(evt.MessageIDs)}
@@ -204,22 +204,7 @@ func (c *Client) handleSecretEdit(evt *events.Message) bool {
 
 // timerOf is the Disappearing timer in seconds that a Message carries in its ContextInfo, or 0.
 func timerOf(m *waE2E.Message) int64 {
-	var info *waE2E.ContextInfo
-	switch {
-	case m.GetExtendedTextMessage() != nil:
-		info = m.GetExtendedTextMessage().GetContextInfo()
-	case m.GetImageMessage() != nil:
-		info = m.GetImageMessage().GetContextInfo()
-	case m.GetVideoMessage() != nil:
-		info = m.GetVideoMessage().GetContextInfo()
-	case m.GetAudioMessage() != nil:
-		info = m.GetAudioMessage().GetContextInfo()
-	case m.GetStickerMessage() != nil:
-		info = m.GetStickerMessage().GetContextInfo()
-	case m.GetDocumentMessage() != nil:
-		info = m.GetDocumentMessage().GetContextInfo()
-	}
-	return int64(info.GetExpiration())
+	return int64(contextOf(m).GetExpiration())
 }
 
 func receiptState(t types.ReceiptType) string {

@@ -819,3 +819,29 @@ func TestMigrationCleansStoredNamesOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestPutLiveGivesAnEphemeralMessageWithoutTimerTheChatTimer(t *testing.T) {
+	s, db := newStore(t)
+	const chat = "1@s.whatsapp.net"
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: chat, Kind: whatsapp.KindDirect, Timer: 86400}}})
+	live := func(id string, ephemeral bool, timer int64) {
+		t.Helper()
+		ev := whatsapp.NewMessage{Chat: chat, Ephemeral: ephemeral, Message: whatsapp.Message{ID: id, Sender: chat, Time: 100, Text: "x", Timer: timer}}
+		if _, err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	live("ephemeral", true, 0)
+	live("plain", false, 0)
+	live("own timer", true, 60)
+	want := map[string]int64{"ephemeral": 100 + 86400, "plain": 0, "own timer": 160}
+	for id, exp := range want {
+		var got int64
+		if err := db.QueryRow(`SELECT expires_at FROM messages WHERE id = ?`, id).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != exp {
+			t.Errorf("%s: expires_at = %d, want %d", id, got, exp)
+		}
+	}
+}

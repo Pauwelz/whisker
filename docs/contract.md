@@ -170,11 +170,11 @@ A Disappearing Message reached the end of its timer, or `chat.deleteForMe` delet
 
 ### Disappearing Messages
 
-A Chat has a timer in seconds (`timer` in `chats.list`, absent when off). It comes from History Sync and from `chatTimer` events, and it applies to Messages from then on. A Message of a timed Chat has `expiresAt` (Unix seconds): the Message time plus the timer. `chat.send` gives the Message of the user the timer of its Chat, and the Daemon sends the timer with it.
+A Chat has a timer in seconds (`timer` in `chats.list`, absent when off). It comes from History Sync and from `chatTimer` events, and it applies to Messages from then on. A Message of a timed Chat has `expiresAt` (Unix seconds): the Message time plus the timer. `chat.send` gives the Message of the user the timer of its Chat, and the Daemon sends the timer with it. A received Message uses its own timer. A live Message that WhatsApp marks as Disappearing without a timer uses the timer of the Chat.
 
 The Daemon deletes expired Messages at start-up before `ready`, so a Message that expired while whisker was off is gone at once. After that it sweeps every minute (`contract.ExpiryInterval`) and sends `messageExpired` for each.
 
-Fixtures: `disappearing-expire.jsonl`, `disappearing-restart.jsonl`, `disappearing-send.jsonl`.
+Fixtures: `disappearing-expire.jsonl`, `disappearing-expire-location.jsonl`, `disappearing-restart.jsonl`, `disappearing-send.jsonl`.
 
 ### System Messages
 
