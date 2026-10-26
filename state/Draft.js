@@ -145,13 +145,19 @@ function pasteAnswered(state) {
 }
 
 // The question of the open Chat about the pasted files, or null: { paths, text }. A switch of Chat drops it.
-function pasteQuestion(state) {
+// Each folder shows in full, with "~" for `home`, so a file from a hidden folder is plain to see.
+function pasteQuestion(state, home) {
   var choice = state.pasteChoice
   if (!choice || !state.openChat || state.openChat.jid !== choice.jid) return null
-  var dirs = choice.paths[0].split("/")
-  var folder = dirs[dirs.length - 2] || "/"
+  var folders = []
+  choice.paths.forEach(function(path) {
+    var dir = path.substring(0, path.lastIndexOf("/")) || "/"
+    if (home && (dir === home || dir.indexOf(home + "/") === 0)) dir = "~" + dir.substring(home.length)
+    if (folders.indexOf(dir) < 0) folders.push(dir)
+  })
   var n = choice.paths.length
-  return { paths: choice.paths, text: "Attach " + n + (n === 1 ? " file" : " files") + " from " + folder + "?" }
+  var from = folders.length === 1 ? folders[0] : folders.length + " folders: " + folders.join(", ")
+  return { paths: choice.paths, text: "Attach " + n + (n === 1 ? " file" : " files") + " from " + from + "?" }
 }
 
 // The Attachments of the Draft with the pasted paths added at the end. A path that is already in the list stays once.

@@ -144,6 +144,10 @@ func (s *session) pasted(r pasteResult) int {
 		fmt.Fprintln(s.logOut, "draft write failed")
 		return fail(errChatStore, msgChatStore)
 	}
+	if s.pastedPending == nil {
+		s.pastedPending = map[string]bool{}
+	}
+	s.pastedPending[r.image] = true
 	return reply(r.image)
 }
 
@@ -176,7 +180,7 @@ func copiedFiles(types []string) []string {
 // clipboardText tells that the clipboard has text besides the copied files. A file manager often offers the file list as
 // text too (paths or file:// lines): that is no text.
 func clipboardText(types, files []string) bool {
-	i := slices.IndexFunc(types, func(t string) bool { return strings.HasPrefix(t, "text/plain") })
+	i := slices.IndexFunc(types, func(t string) bool { return strings.HasPrefix(t, "text/plain") || t == "UTF8_STRING" })
 	if i < 0 {
 		return false
 	}

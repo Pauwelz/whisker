@@ -16,7 +16,7 @@ FocusScope {
   readonly property var draft: panel ? panel.draft : ({ text: "", attachments: [] })
   readonly property bool hasAttachment: Draft.hasAttachment(draft)
   implicitHeight: askRow.height + suggestionList.height + row.implicitHeight + Style.space(8)
-  readonly property var pasteQuestion: panel ? Draft.pasteQuestion(panel.view) : null
+  readonly property var pasteQuestion: panel ? Draft.pasteQuestion(panel.view, Quickshell.env("HOME")) : null
   property string lastText: "" // the last text within the limit
 
   // Omarchy's emoji list. Without it, Emoji Shortcodes are off.
@@ -97,7 +97,7 @@ FocusScope {
   Row {
     id: askRow
     visible: composer.pasteQuestion !== null
-    height: visible ? 28 + Style.space(4) : 0
+    height: visible ? 28 + anchors.topMargin : 0
     anchors.left: parent.left
     anchors.leftMargin: Style.space(8)
     anchors.top: parent.top

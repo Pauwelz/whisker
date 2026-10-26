@@ -300,9 +300,13 @@ func TestPasteOfFilesAndTextAsksTheUser(t *testing.T) {
 }
 
 func TestPasteReadsOutputOnlyUpToTheLimit(t *testing.T) {
-	fakeClipboard(t, `exec /usr/bin/head -c 1000000 /dev/zero`)
+	fakeClipboard(t, `exec cat /dev/zero`)
+	start := time.Now()
 	if f, _ := paste(t); !strings.Contains(f, `"pasted":[]`) {
 		t.Errorf("frame = %s, want a text paste", f)
+	}
+	if time.Since(start) > time.Second {
+		t.Error("the read ran to the timeout instead of stopping at the limit")
 	}
 }
 
@@ -315,6 +319,28 @@ func TestSecondPasteWhileOneRunsPastesText(t *testing.T) {
 	r.send(`{"jsonrpc":"2.0","id":2,"method":"draft.paste","params":{"chat":"a@s.whatsapp.net"}}`)
 	if f := r.nextFrame(); !strings.Contains(f, `"id":2`) || !strings.Contains(f, `"pasted":[]`) {
 		t.Errorf("first frame = %s, want the at-once reply to the second paste", f)
+	}
+	r.finish()
+}
+
+func TestDraftSetBeforeThePasteReplyKeepsThePastedImage(t *testing.T) {
+	fakeClipboard(t, imageScript)
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "1@s.whatsapp.net", LastActive: 1}}})
+	r.nextFrame() // chatsChanged
+	path := pastedPath(t, r, 1)
+	setAttachments(t, r, 2, nil) // a keystroke whose draft.set left before the Plugin saw the reply
+	if !exists(path) {
+		t.Fatal("draft.set deleted the pasted image before the Plugin knew it")
+	}
+	setAttachments(t, r, 3, []string{path}) // the Plugin adds it
+	setAttachments(t, r, 4, nil)            // the user removes it
+	if exists(path) {
+		t.Error("a removed pasted image stays")
 	}
 	r.finish()
 }

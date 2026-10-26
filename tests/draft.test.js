@@ -221,9 +221,11 @@ test("capText keeps the last valid text when the text passes 65536 code points",
 test("a paste of files and text asks first, and a switch of Chat drops the question", () => {
   const paths = ["/home/me/docs/a.pdf", "/home/me/docs/b.pdf"];
   let state = Draft.pasteAsked(opened(), paths);
-  assert.equal(Draft.pasteQuestion(state).text, "Attach 2 files from docs?");
+  assert.equal(Draft.pasteQuestion(state, "/home/me").text, "Attach 2 files from ~/docs?");
+  assert.equal(Draft.pasteQuestion(Draft.pasteAsked(opened(), ["/home/me/Downloads/a.pdf", "/home/me/.ssh/id_ed25519"]), "/home/me").text,
+    "Attach 2 files from 2 folders: ~/Downloads, ~/.ssh?");
   assert.equal(Draft.pasteAsked(opened(), [paths[0]]).pasteChoice.paths.length, 1);
-  assert.equal(Draft.pasteQuestion(Draft.pasteAsked(opened(), [paths[0]])).text, "Attach 1 file from docs?");
+  assert.equal(Draft.pasteQuestion(Draft.pasteAsked(opened(), [paths[0]]), "").text, "Attach 1 file from /home/me/docs?");
   assert.equal(Draft.pasteQuestion(Draft.pasteAnswered(state)), null);
   assert.equal(Draft.pasteQuestion(Timeline.openChat(state, { jid: "2@s.whatsapp.net", name: "Bo", kind: "direct" })), null);
 });

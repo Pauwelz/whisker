@@ -434,7 +434,7 @@ Item {
         root.handleNotificationFrame(frame)
         var pasted = Draft.pastedAttachment(root.view, frame)
         if (pasted !== null && pasted.length === 0) root.pasteText()
-        else if (pasted !== null && frame.result.alsoText) view = Draft.pasteAsked(view, pasted)
+        else if (pasted !== null && frame.result.alsoText) root.view = Draft.pasteAsked(root.view, pasted)
         else if (pasted !== null) root.changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(root.view), pasted) })
         if (Daemon.resendsAttention(frame)) root.syncAttention()
         if (Timeline.reloadsOpenChat(root.view, frame)) {
