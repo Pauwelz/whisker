@@ -15,6 +15,23 @@ var ErrInUse = errors.New("profile in use")
 
 const pollInterval = 50 * time.Millisecond
 
+// CheckRuntimeDir refuses a runtime directory that is not absolute, or is not a directory of this user
+// that only this user can use. Another user could otherwise redirect plain Media writes and hold the Profile lock.
+func CheckRuntimeDir(dir string) error {
+	if !filepath.IsAbs(dir) {
+		return errors.New("runtime directory is not an absolute path")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("runtime directory: %w", err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !info.IsDir() || !ok || int(st.Uid) != os.Getuid() || info.Mode().Perm()&0o077 != 0 {
+		return errors.New("runtime directory is not a private directory of this user")
+	}
+	return nil
+}
+
 // Lock is a held Profile lock.
 type Lock struct{ file *os.File }
 

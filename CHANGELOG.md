@@ -19,6 +19,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- Another program of the same user can no longer open the stdin pipe of the Daemon through `/proc/<pid>/fd` and send requests. The Daemon now marks itself as not dumpable, which also blocks ptrace and core dumps.
+- The Daemon now checks its folders at start. `XDG_RUNTIME_DIR` must be an absolute, private directory of your user, or the Daemon exits. Before, a folder of another user could redirect plain Media writes and hold the Profile lock. A relative `XDG_DATA_HOME` or `XDG_CONFIG_HOME` counts as not set. The Daemon also exits when the data folder and the runtime folder lie inside each other, because a wipe would reach the wrong files.
 - The Daemon no longer deletes your Profile by itself. Before, a damaged store header, or a new empty keyring, made the Daemon delete all chats and the key at the next start. Now it renames the Profile folder to `whisker.unreadable-<time>` next to it, starts a new link, and Settings shows a notice. Log out removes these folders.
 - A store key that is in the keyring before the first start is no longer used. Another program could have chosen it. When no store file exists, the Daemon makes a new key and writes it over the item.
 - A timed-out keyring Delete can no longer remove the store key of a Profile that you link later. Before, the Delete kept running in the background. Now every keyring call waits for the call before it.

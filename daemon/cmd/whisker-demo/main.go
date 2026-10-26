@@ -52,6 +52,10 @@ func run() int {
 		fmt.Fprintln(os.Stderr, "XDG_RUNTIME_DIR is not set")
 		return contract.ExitError
 	}
+	if err := profilelock.CheckRuntimeDir(runtimeDir); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return contract.ExitError
+	}
 	// The same lock as the real Daemon, so the two never run together.
 	lock, err := profilelock.Acquire(filepath.Join(runtimeDir, "whisker"), 5*time.Second)
 	if errors.Is(err, profilelock.ErrInUse) {
