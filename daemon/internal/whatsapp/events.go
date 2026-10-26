@@ -115,7 +115,7 @@ func (c *Client) handle(evt any) {
 	case *events.ClearChat:
 		c.events <- ChatCleared{Chat: c.phone(evt.JID).String(), Until: evt.Action.GetMessageRange().GetLastMessageTimestamp()}
 	case *events.DeleteChat:
-		c.events <- ChatDeleted{Chat: c.phone(evt.JID).String()}
+		c.events <- ChatDeleted{Chat: c.phone(evt.JID).String(), Until: evt.Action.GetMessageRange().GetLastMessageTimestamp()}
 	case *events.UnarchiveChatsSetting:
 		c.emitFlag(UnarchiveChats{On: evt.Action.GetUnarchiveChats()}, evt.FromFullSync)
 	case *events.Mute:

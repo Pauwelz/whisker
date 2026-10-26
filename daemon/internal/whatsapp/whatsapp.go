@@ -347,9 +347,11 @@ type ChatCleared struct {
 	Until int64  `json:"until"`
 }
 
-// ChatDeleted says that the user deleted a Chat on another device.
+// ChatDeleted says that the user deleted a Chat on another device. Until is the Unix seconds of its last Message, 0 when unknown.
+// A Message newer than Until stays: the delete came before it.
 type ChatDeleted struct {
-	Chat string `json:"chat"`
+	Chat  string `json:"chat"`
+	Until int64  `json:"until"`
 }
 
 // AppStateBatch holds the Pin, Archive, UnarchiveChats, Mute and ReadMarker events of one full App State sync, in order.

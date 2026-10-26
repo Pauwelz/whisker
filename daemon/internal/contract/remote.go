@@ -35,7 +35,19 @@ func (s *session) chatCleared(ev whatsapp.ChatCleared) bool {
 }
 
 // chatDeleted applies a Delete chat from another device. The Plugin hears of it only when something went.
+// A Message newer than the delete stays, with its Chat: the delete is an old one, or it came before the Message.
+// That case is a Clear chat.
 func (s *session) chatDeleted(ev whatsapp.ChatDeleted) bool {
+	if ev.Until > 0 {
+		newer, err := s.chats.HasMessageAfter(ev.Chat, ev.Until)
+		if err != nil {
+			fmt.Fprintln(s.logOut, "chat store read failed")
+			return true
+		}
+		if newer {
+			return s.chatCleared(whatsapp.ChatCleared{Chat: ev.Chat, Until: ev.Until})
+		}
+	}
 	attachments, gone, err := s.chats.DeleteChat(ev.Chat)
 	if err != nil {
 		fmt.Fprintln(s.logOut, "chat store write failed")

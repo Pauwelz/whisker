@@ -21,6 +21,12 @@ func (s *Store) ClearChat(chat string, until int64) (bool, error) {
 	return len(ids) > 0, nil
 }
 
+// HasMessageAfter reports whether the Chat holds a Message with a time after until (Unix seconds).
+func (s *Store) HasMessageAfter(chat string, until int64) (has bool, err error) {
+	err = s.db.QueryRow(`SELECT EXISTS (SELECT 1 FROM messages WHERE chat_jid = ? AND time > ?)`, chat, until).Scan(&has)
+	return has, err
+}
+
 // DeleteChat deletes a Chat and every row that its Chat or its Messages key, with the Media files.
 // The names stay: they belong to people. It returns the Attachments of the Draft, for the caller to drop,
 // and reports whether anything went, so a repeat changes nothing.

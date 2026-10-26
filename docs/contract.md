@@ -182,13 +182,13 @@ Fixture: `clear-chat-elsewhere.jsonl`.
 
 ### `chatRemoved`
 
-The user deleted a Chat on another device. The Daemon has deleted the Chat and every row that keys it: Messages, Media rows and files, Reactions, Draft (with its pasted files), picture and Recipients. The names stay, because they belong to people. The Plugin takes the Chat out of the Chat list. When it is the open Chat, the Plugin closes it and shows the Chat list. A repeat of the same event sends nothing.
+The user deleted a Chat on another device. The event names the time of the last Message that the user had deleted (`until`). A Message with a later time stays: the delete came before it, or it is an old delete that a full sync sends again. The Daemon then acts as for `chatCleared`: it deletes the Messages up to `until`, keeps the Chat and sends `chatCleared`. The Daemon has deleted the Chat and every row that keys it: Messages, Media rows and files, Reactions, Draft (with its pasted files), picture and Recipients. The names stay, because they belong to people. The Plugin takes the Chat out of the Chat list. When it is the open Chat, the Plugin closes it and shows the Chat list. A repeat of the same event sends nothing.
 
 ```json
 {"jsonrpc":"2.0","method":"chatRemoved","params":{"chat":"1@s.whatsapp.net"}}
 ```
 
-Fixture: `delete-chat-elsewhere.jsonl`.
+Fixtures: `delete-chat-elsewhere.jsonl`, `delete-chat-newer-message.jsonl`.
 
 ### Disappearing Messages
 
@@ -699,7 +699,7 @@ The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `archive`, `u
 
 The `event` kinds `newMessage`, `receipt`, `readElsewhere`, `messageEdited`, `messageRevoked` and `reaction` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
 
-The `event` kinds `deletedForMe` (`chat`, `id`), `chatCleared` (`chat`, `until`) and `chatDeleted` (`chat`) play a delete from another device of the user.
+The `event` kinds `deletedForMe` (`chat`, `id`), `chatCleared` (`chat`, `until`) and `chatDeleted` (`chat`, `until`) play a delete from another device of the user.
 
 The `event` kind `chatAlias` (`lid`, `phone`) tells the Daemon that a LID and a phone JID are one contact.
 

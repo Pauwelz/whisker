@@ -174,3 +174,13 @@ func TestDeleteChatRemovesEveryRowOfTheChat(t *testing.T) {
 		t.Error("DeleteChat touched another Chat")
 	}
 }
+
+func TestHasMessageAfter(t *testing.T) {
+	s, db := newStore(t)
+	seedChat(t, s, db)
+	for until, want := range map[int64]bool{20: true, 29: true, 30: false} {
+		if got, err := s.HasMessageAfter(colGroup, until); err != nil || got != want {
+			t.Errorf("HasMessageAfter(%d) = %v, %v; want %v", until, got, err, want)
+		}
+	}
+}
