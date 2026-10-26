@@ -64,9 +64,10 @@ jobs:
       - name: Publish the release
         run: |
           case "$V" in *-*) pre=--prerelease ;; *) pre= ;; esac
+          scripts/release-notes.sh "$V" > "$RUNNER_TEMP/notes.md"
           gh release create "v$V" bin/whisker-daemon-linux-amd64 \
             --target "$(git rev-parse HEAD)" $pre \
-            --title "v$V" --notes "See CHANGELOG.md."
+            --title "v$V" --notes-file "$RUNNER_TEMP/notes.md"
 
       - name: Commit SHA256SUMS
         run: |

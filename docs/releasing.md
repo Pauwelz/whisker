@@ -43,6 +43,7 @@ The workflow stops before it changes anything when:
 Then it does the manual steps below in the same order, as `github-actions[bot]`.
 It pushes the release commit to `dev` before it publishes the release.
 If `dev` moved after the run started, this push fails and nothing is published.
+The release notes are the `[V]` section of `CHANGELOG.md`.
 A V with a `-`, such as `1.0.0-rc.1`, becomes a pre-release and does not move `main`.
 
 ## Manual release steps
@@ -78,12 +79,14 @@ Use these steps only when the workflow cannot run.
    ```
 
 4. Publish the release `vV` with the raw binary as its asset. The tag points at the release commit.
+   The release notes are the `[V]` section of `CHANGELOG.md`, from `scripts/release-notes.sh`.
    Use `--prerelease` for an `-rc` version. Omit it for a final version.
 
    ```sh
+   scripts/release-notes.sh "$V" > bin/notes.md
    gh release create "v$V" bin/whisker-daemon-linux-amd64 \
      --target "$(git rev-parse HEAD)" --prerelease \
-     --title "v$V" --notes "See CHANGELOG.md."
+     --title "v$V" --notes-file bin/notes.md
    ```
 
 5. Commit `SHA256SUMS` on top of the release commit.
