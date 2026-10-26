@@ -131,7 +131,7 @@ func (c *Client) GroupParticipants(chat string) ([]Participant, error) {
 	return participants, nil
 }
 
-func (c *Client) IsGroupAdmin(chat, user string) (bool, error) {
+func (c *Client) IsGroupAdmin(chat string, users ...string) (bool, error) {
 	jid, err := types.ParseJID(chat)
 	if err != nil {
 		return false, err
@@ -150,7 +150,7 @@ func (c *Client) IsGroupAdmin(chat, user string) (bool, error) {
 			continue
 		}
 		for _, id := range []types.JID{p.JID, p.PhoneNumber, p.LID} {
-			if !id.IsEmpty() && id.ToNonAD().String() == user {
+			if !id.IsEmpty() && slices.Contains(users, id.ToNonAD().String()) {
 				return true, nil
 			}
 		}

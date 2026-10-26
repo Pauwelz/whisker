@@ -104,3 +104,31 @@ func TestAdminRevokeNamesTheAuthorAndTheAdmin(t *testing.T) {
 		}
 	}
 }
+
+// An admin revoke of the user's own Message names the user as the author. A LID admin keeps its LID as the other ID.
+// The user's own admin revoke from the phone is an admin revoke too.
+func TestAdminRevokeOwnMessageLIDAdminAndOwnAdmin(t *testing.T) {
+	revoke := func(src types.MessageSource, author types.JID) MessageRevoked {
+		c := systemClient()
+		src.Chat, src.IsGroup = sysGroup, true
+		evt := &events.Message{
+			Info: types.MessageInfo{MessageSource: src, Timestamp: sysAt, Edit: types.EditAttributeAdminRevoke},
+			Message: &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+				Type: waE2E.ProtocolMessage_REVOKE.Enum(),
+				Key:  &waCommon.MessageKey{ID: proto.String("m1"), Participant: proto.String(author.String())},
+			}},
+		}
+		c.handleProtocol(evt)
+		return (<-c.events).(MessageRevoked)
+	}
+	chat := sysGroup.String()
+	if got, want := revoke(types.MessageSource{Sender: jef}, sysOwn), (MessageRevoked{Chat: chat, ID: "m1", FromMe: true, Admin: jef.String()}); got != want {
+		t.Errorf("own Message = %+v, want %+v", got, want)
+	}
+	if got, want := revoke(types.MessageSource{Sender: jefLID, SenderAlt: jef}, rob), (MessageRevoked{Chat: chat, ID: "m1", Sender: rob.String(), Admin: jef.String(), AdminAlt: jefLID.String()}); got != want {
+		t.Errorf("LID admin = %+v, want %+v", got, want)
+	}
+	if got, want := revoke(types.MessageSource{Sender: sysOwn, IsFromMe: true}, rob), (MessageRevoked{Chat: chat, ID: "m1", Sender: rob.String(), Admin: sysOwn.String()}); got != want {
+		t.Errorf("own admin = %+v, want %+v", got, want)
+	}
+}

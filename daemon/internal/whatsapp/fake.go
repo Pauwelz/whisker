@@ -111,10 +111,10 @@ func (f *Fake) SetGroupAdmins(admins map[string][]string) {
 	f.mu.Unlock()
 }
 
-func (f *Fake) IsGroupAdmin(chat, user string) (bool, error) {
+func (f *Fake) IsGroupAdmin(chat string, users ...string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return slices.Contains(f.admins[chat], user), f.groupErr
+	return slices.ContainsFunc(users, func(u string) bool { return slices.Contains(f.admins[chat], u) }), f.groupErr
 }
 
 // HoldGroupLookup makes GroupParticipants wait until the test calls it again with false.

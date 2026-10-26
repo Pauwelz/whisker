@@ -261,10 +261,18 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
 		ev := MessageRevoked{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe}
-		// An admin revoke: the stanza sender is the admin, the key Participant is the author.
+		// An admin revoke: the stanza sender is the admin (also the user, from the phone), the key Participant is the author.
 		if author, err := types.ParseJID(pm.GetKey().GetParticipant()); err == nil && evt.Info.Edit == types.EditAttributeAdminRevoke &&
-			evt.Info.IsGroup && !evt.Info.IsFromMe && !pm.GetKey().GetFromMe() {
-			ev.Admin, ev.Sender = ev.Sender, c.phone(author).String()
+			evt.Info.IsGroup && !pm.GetKey().GetFromMe() {
+			ev.Admin, ev.Sender, ev.FromMe = ev.Sender, c.phone(author).String(), c.isOwn(author)
+			if ev.FromMe {
+				ev.Sender = ""
+			}
+			for _, id := range []types.JID{evt.Info.Sender, evt.Info.SenderAlt} { // a LID group can name the admin by LID only
+				if id = id.ToNonAD(); !id.IsEmpty() && id.String() != ev.Admin {
+					ev.AdminAlt = id.String()
+				}
+			}
 		}
 		c.events <- ev
 	case pm.GetType() == waE2E.ProtocolMessage_EPHEMERAL_SETTING:

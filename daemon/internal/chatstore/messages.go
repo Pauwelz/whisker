@@ -255,10 +255,10 @@ func (s *Store) Revoke(chat, id, sender string, fromMe bool) (bool, error) {
 	return s.revoke(chat, id, sender, fromMe, false)
 }
 
-// RevokeByAdmin is Revoke for a revoke by a group admin that the caller checked. author is the author that the revoke names:
-// it must be the stored author. The Tombstone records the admin.
-func (s *Store) RevokeByAdmin(chat, id, author string) (bool, error) {
-	return s.revoke(chat, id, author, false, true)
+// RevokeByAdmin is Revoke for a revoke by a group admin that the caller checked. author and fromMe name the author that the revoke names:
+// they must match the stored author. The Tombstone records the admin.
+func (s *Store) RevokeByAdmin(chat, id, author string, fromMe bool) (bool, error) {
+	return s.revoke(chat, id, author, fromMe, true)
 }
 
 func (s *Store) revoke(chat, id, sender string, fromMe, byAdmin bool) (bool, error) {

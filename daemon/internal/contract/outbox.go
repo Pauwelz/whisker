@@ -24,7 +24,7 @@ type sendPort interface {
 	Send(chat, id, text string, quote *whatsapp.Quote, timer int64) error
 	SendMedia(chat, id string, m whatsapp.Media, plain *os.File, caption string, timer int64) error
 	GroupParticipants(chat string) ([]whatsapp.Participant, error)
-	IsGroupAdmin(chat, user string) (bool, error)
+	IsGroupAdmin(chat string, users ...string) (bool, error)
 	PhoneOf(lid string) string
 }
 
@@ -260,7 +260,7 @@ func (b *outbox) checkAdmin(ev whatsapp.MessageRevoked) {
 		return
 	}
 	go func() {
-		admin, err := b.port.IsGroupAdmin(ev.Chat, ev.Admin)
+		admin, err := b.port.IsGroupAdmin(ev.Chat, ev.Admin, ev.AdminAlt)
 		b.adminRevokes <- adminRevokeResult{ev, admin, err}
 	}()
 }
@@ -274,7 +274,7 @@ func (b *outbox) adminRevokeDone(r adminRevokeResult) bool {
 	if !r.admin {
 		return true
 	}
-	return b.move(r.ev.Chat, r.ev.ID, func() (bool, error) { return b.chats.RevokeByAdmin(r.ev.Chat, r.ev.ID, r.ev.Sender) })
+	return b.move(r.ev.Chat, r.ev.ID, func() (bool, error) { return b.chats.RevokeByAdmin(r.ev.Chat, r.ev.ID, r.ev.Sender, r.ev.FromMe) })
 }
 
 func (b *outbox) reacted(ev whatsapp.Reaction) bool {
