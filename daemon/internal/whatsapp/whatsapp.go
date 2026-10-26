@@ -457,8 +457,11 @@ type ChatAlias struct {
 }
 
 // Connected and Disconnected report the connection to WhatsApp.
+// Reason on Disconnected is empty for a plain drop, which whatsmeow reconnects by itself, or one of the Disconnect reasons below.
 type Connected struct{}
-type Disconnected struct{}
+type Disconnected struct {
+	Reason string `json:"reason"`
+}
 
 // OwnDevices is the device list of the user's own account, read on each connection. IDs are the device ids.
 // Notice is the System Message to store when the list holds a device that the Chat store has not seen. Failed means the call failed.
@@ -503,6 +506,13 @@ func (ChatDeleted) isEvent()    {}
 
 // ReactionEmoji is the Reaction picker: the six default emoji of WhatsApp. A Reaction with another emoji, set by the user or by another Participant, is refused.
 var ReactionEmoji = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
+
+// Reasons for Disconnected. whatsmeow does not reconnect after any of them. docs/contract.md mirrors this list.
+const (
+	DisconnectReplaced       = "stream-replaced"
+	DisconnectTemporaryBan   = "temporary-ban"
+	DisconnectConnectFailure = "connect-failure"
+)
 
 // Reasons for LinkFailed. docs/contract.md mirrors this list.
 const (

@@ -82,7 +82,7 @@ function deleteForMeRequest(id, jid, messageId) {
   return Common.request(id, "chat.deleteForMe", { chat: jid, id: messageId })
 }
 
-// The Reaction picker: the six default emoji of WhatsApp. Mirror of `ReactionEmoji` in daemon/internal/contract/react.go.
+// The Reaction picker: the six default emoji of WhatsApp. Mirror of `ReactionEmoji` in daemon/internal/whatsapp/whatsapp.go.
 var REACTION_EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
 // The emoji that the user set on a Message, or "".

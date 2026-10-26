@@ -116,9 +116,17 @@ The Daemon sends these after `linked`. The Plugin starts as "connecting" after `
 | Notification | Params | Meaning |
 |---|---|---|
 | `connected` | none | The connection to WhatsApp is up. The Daemon then sends every `pending` Message. |
-| `disconnected` | none | The connection is down, or a connect of a linked Profile failed. The Plugin shows "Offline" and dims the bar icon. |
+| `disconnected` | `reason` (optional) | The connection is down, or a connect of a linked Profile failed. The Plugin shows "Offline" and dims the bar icon. `reason` is set when WhatsApp ended the session and the Daemon does not connect again by itself (see below). |
 
 After a failed connect of a linked Profile, the Daemon sends `disconnected` and connects again after 5 s, again and again. WhatsApp reconnects by itself after a connection that was up.
+
+Reasons of `disconnected`. The Go source of truth is `daemon/internal/whatsapp/whatsapp.go`. After any of them the Daemon does not connect again by itself.
+
+| Reason | Meaning |
+|---|---|
+| `stream-replaced` | Another client took over the session. A reconnect would start a fight over it. |
+| `temporary-ban` | WhatsApp banned the account for a while. |
+| `connect-failure` | WhatsApp refused the connection with a code that whatsmeow does not retry. |
 
 Fixture: `contract/fixtures/connection.jsonl`.
 

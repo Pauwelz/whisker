@@ -204,7 +204,7 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		s.pres.connected() // before the `connected` frame
 		ok = s.box.connected() && s.mergeKnownLIDs()
 	case whatsapp.Disconnected:
-		ok = s.box.disconnected() && s.hist.disconnected()
+		ok = s.box.disconnected(ev.Reason) && s.hist.disconnected()
 	case whatsapp.OwnDevices:
 		ok = s.ownDevices(ev)
 	case whatsapp.NewMessage:

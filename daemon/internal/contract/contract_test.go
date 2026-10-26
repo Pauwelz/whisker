@@ -585,7 +585,7 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 		case "connected":
 			f.Emit(whatsapp.Connected{})
 		case "disconnected":
-			f.Emit(whatsapp.Disconnected{})
+			f.Emit(whatsapp.Disconnected{Reason: e.Reason})
 		case "qr":
 			f.Emit(whatsapp.QRCode{Code: e.Code})
 		case "pairSuccess":
@@ -762,6 +762,18 @@ func TestContractDocListsLinkFailureReasons(t *testing.T) {
 		whatsapp.ReasonPairError, whatsapp.ReasonConnectFailed, whatsapp.ReasonUnexpected} {
 		if !strings.Contains(string(doc), "| `"+reason+"` |") {
 			t.Errorf("docs/contract.md has no row for link failure reason %s", reason)
+		}
+	}
+}
+
+func TestContractDocListsDisconnectReasons(t *testing.T) {
+	doc, err := os.ReadFile("../../../docs/contract.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, reason := range []string{whatsapp.DisconnectReplaced, whatsapp.DisconnectTemporaryBan, whatsapp.DisconnectConnectFailure} {
+		if !strings.Contains(string(doc), "| `"+reason+"` |") {
+			t.Errorf("docs/contract.md has no row for disconnect reason %s", reason)
 		}
 	}
 }

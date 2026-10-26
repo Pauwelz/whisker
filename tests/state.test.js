@@ -452,7 +452,7 @@ test("every notification with an effect is documented in docs/contract.md", () =
 });
 
 test("REACTION_EMOJI agrees with ReactionEmoji in Go", () => {
-  const go = fs.readFileSync(path.join(root, "daemon", "internal", "contract", "react.go"), "utf8");
+  const go = fs.readFileSync(path.join(root, "daemon", "internal", "whatsapp", "whatsapp.go"), "utf8");
   const list = /ReactionEmoji = \[\]string\{([^}]*)\}/.exec(go)[1];
   assert.deepEqual(Array.from(Message.REACTION_EMOJI), list.split(",").map((e) => JSON.parse(e.trim())));
 });

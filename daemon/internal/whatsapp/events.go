@@ -41,6 +41,12 @@ func (c *Client) handle(evt any) {
 		c.emitSystem(chat, c.systemMessage(chat, types.EmptyJID, types.EmptyJID, SystemIdentity, nil, "", evt.Timestamp))
 	case *events.Disconnected:
 		c.events <- Disconnected{}
+	case *events.StreamReplaced: // another client took the session: connecting again would start a fight over it
+		c.events <- Disconnected{Reason: DisconnectReplaced}
+	case *events.TemporaryBan:
+		c.events <- Disconnected{Reason: DisconnectTemporaryBan}
+	case *events.ConnectFailure:
+		c.events <- Disconnected{Reason: DisconnectConnectFailure}
 	case *events.Message:
 		if ReservedID(evt.Info.ID) {
 			return
