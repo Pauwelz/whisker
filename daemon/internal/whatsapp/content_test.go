@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -105,5 +106,25 @@ func TestMentionsInDropsRepeatsAndTokensNotInText(t *testing.T) {
 	}
 	if got := MentionsIn(text, many); len(got) != MaxMentions {
 		t.Fatalf("got %d mentions, want %d", len(got), MaxMentions)
+	}
+}
+
+// A sender sets FileLength. A value above MaxInt64 must not become a negative Size: it is unknown (0).
+func TestMediaOfTreatsAHugeFileLengthAsUnknown(t *testing.T) {
+	for _, n := range []uint64{1 << 63, math.MaxUint64} {
+		for _, m := range []*waE2E.Message{
+			{ImageMessage: &waE2E.ImageMessage{FileLength: proto.Uint64(n)}},
+			{StickerMessage: &waE2E.StickerMessage{FileLength: proto.Uint64(n)}},
+			{AudioMessage: &waE2E.AudioMessage{FileLength: proto.Uint64(n)}},
+			{VideoMessage: &waE2E.VideoMessage{FileLength: proto.Uint64(n)}},
+			{DocumentMessage: &waE2E.DocumentMessage{FileLength: proto.Uint64(n)}},
+		} {
+			if got := mediaOf(m).Size; got != 0 {
+				t.Errorf("FileLength %d gives Size %d, want 0", n, got)
+			}
+		}
+	}
+	if got := mediaOf(&waE2E.Message{ImageMessage: &waE2E.ImageMessage{FileLength: proto.Uint64(math.MaxInt64)}}).Size; got != math.MaxInt64 {
+		t.Errorf("Size = %d, want MaxInt64", got)
 	}
 }

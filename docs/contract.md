@@ -299,7 +299,7 @@ The Daemon owns the settings in `$XDG_CONFIG_HOME/whisker/settings.json` (defaul
 | `autoDownload` | boolean | `true` |
 | `autoDownloadLimit` | `1mb`, `5mb`, `25mb`, `any` | `5mb` |
 
-`autoDownload` on: images, stickers and voice notes download when they arrive, and a listed image without a thumbnail downloads. Off: they wait for `media.download`. `autoDownloadLimit` is the largest file that downloads this way; a larger one waits, and a file of unknown size downloads. WhatsApp's separate thumbnails download either way.
+`autoDownload` on: images, stickers and voice notes download when they arrive, and a listed image without a thumbnail downloads. Off: they wait for `media.download`. `autoDownloadLimit` is the largest file that downloads this way; a larger one waits, and so does a file of unknown size (the sender wrote the size, so 0 or a wrong size proves nothing), unless the limit is `any`. Every download, automatic or by `media.download`, stops and fails (state `failed`, retry by click) once it writes more than the declared size plus 26 bytes of encryption overhead, and never more than 2 GiB. A file of unknown size has only the 2 GiB cap. At most 3 files download at once; the others wait. WhatsApp's separate thumbnails download either way.
 
 `notificationPreview` on: a notification shows the sender and the text. Off: the summary stays the Chat name and the body is `New message`. It has no effect while `notifications` is off.
 

@@ -30,6 +30,9 @@ type Fake struct {
 	content        string
 	dlErr          error
 	downloads      int
+	dlDelay        time.Duration
+	dlActive       int
+	dlPeak         int
 	thumb          string
 	thumbErr       error
 	thumbDownloads int
@@ -367,15 +370,32 @@ func (f *Fake) DownloadThumbnail(Media) ([]byte, error) {
 // Downloads counts the Download calls.
 func (f *Fake) Downloads() int { f.mu.Lock(); defer f.mu.Unlock(); return f.downloads }
 
-func (f *Fake) Download(_ Media, dst *os.File) error {
+// SetDownloadDelay makes each Download call take d, so calls overlap.
+func (f *Fake) SetDownloadDelay(d time.Duration) {
+	f.mu.Lock()
+	f.dlDelay = d
+	f.mu.Unlock()
+}
+
+// DownloadPeak is the most Download calls that ran at the same time.
+func (f *Fake) DownloadPeak() int { f.mu.Lock(); defer f.mu.Unlock(); return f.dlPeak }
+
+// Download writes the scripted content through the same cap as the real client.
+func (f *Fake) Download(_ Media, dst *os.File, limit int64) error {
 	f.mu.Lock()
 	f.downloads++
-	content, err := f.content, f.dlErr
+	f.dlActive++
+	f.dlPeak = max(f.dlPeak, f.dlActive)
+	content, err, delay := f.content, f.dlErr, f.dlDelay
+	f.mu.Unlock()
+	time.Sleep(delay)
+	f.mu.Lock()
+	f.dlActive--
 	f.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	_, err = dst.WriteString(content)
+	_, err = io.WriteString(capDisk{file: dst, max: limit}, content)
 	return err
 }
 

@@ -1,6 +1,7 @@
 package settings_test
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,8 +63,12 @@ func TestAutoDownloadsFollowsTheSwitchAndTheLimit(t *testing.T) {
 	}{
 		{on, 5 * mb, true},
 		{on, 5*mb + 1, false},
-		{on, 0, true}, // an unknown size downloads
+		{on, 0, false}, // an unknown size waits for a click
+		{on, -1, false},
+		{on, math.MinInt64, false},
 		{settings.Settings{AutoDownload: true, AutoDownloadLimit: "any"}, 900 * mb, true},
+		{settings.Settings{AutoDownload: true, AutoDownloadLimit: "any"}, 0, true},
+		{settings.Settings{AutoDownload: true, AutoDownloadLimit: "any"}, -1, true},
 		{settings.Settings{AutoDownload: true, AutoDownloadLimit: "1mb"}, 2 * mb, false},
 		{settings.Settings{AutoDownload: false, AutoDownloadLimit: "any"}, 1, false},
 	}
