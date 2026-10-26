@@ -1,0 +1,74 @@
+package whatsapp
+
+import (
+	"context"
+	"testing"
+
+	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store"
+	"go.mau.fi/whatsmeow/types"
+	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
+)
+
+// pnToLID is a LID store that knows the given phone to LID pairs only.
+type pnToLID struct {
+	store.LIDStore
+	pairs map[types.JID]types.JID
+}
+
+func (s pnToLID) GetLIDForPN(_ context.Context, pn types.JID) (types.JID, error) {
+	return s.pairs[pn], nil
+}
+
+// In a group that addresses by LID, the phone number of a quoted author or a reacted-to author must not go out.
+func TestWireJIDHidesThePhoneInAGroupThatAddressesByLID(t *testing.T) {
+	own := types.JID{User: "3160", Server: types.DefaultUserServer}
+	ownLID := types.JID{User: "9160", Server: types.HiddenUserServer}
+	other := types.JID{User: "3161", Server: types.DefaultUserServer}
+	otherLID := types.JID{User: "9161", Server: types.HiddenUserServer}
+	stranger := types.JID{User: "3162", Server: types.DefaultUserServer}
+	lidGroup := types.JID{User: "1", Server: types.GroupServer}
+	pnGroup := types.JID{User: "2", Server: types.GroupServer}
+	unknownGroup := types.JID{User: "3", Server: types.GroupServer}
+	dev := &store.Device{ID: &own, LID: ownLID, LIDs: pnToLID{pairs: map[types.JID]types.JID{other: otherLID}}}
+	c := &Client{cli: whatsmeow.NewClient(dev, waLog.Noop)}
+	c.noteAddressing(lidGroup, types.AddressingModeLID)
+	c.noteAddressing(pnGroup, types.AddressingModePN)
+	c.noteAddressing(unknownGroup, "")
+
+	for _, tc := range []struct {
+		name       string
+		chat, from types.JID
+		want       types.JID
+	}{
+		{"author in a LID group", lidGroup, other, otherLID},
+		{"the user in a LID group", lidGroup, own, ownLID},
+		{"no mapping keeps the phone JID", lidGroup, stranger, stranger},
+		{"PN group", pnGroup, other, other},
+		{"group of unknown mode", unknownGroup, other, other},
+		{"Direct Chat", other, other, other},
+		{"empty sender (own Message)", lidGroup, types.EmptyJID, types.EmptyJID},
+	} {
+		if got := c.wireJID(tc.chat, tc.from); got != tc.want {
+			t.Errorf("%s: wireJID = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	if got := c.quoteSender(lidGroup, ""); got != ownLID.String() {
+		t.Errorf("quoteSender of the user's own Message = %q, want %q", got, ownLID)
+	}
+	if got := c.quoteSender(lidGroup, other.String()); got != otherLID.String() {
+		t.Errorf("quoteSender = %q, want %q", got, otherLID)
+	}
+}
+
+func TestALiveGroupMessageTeachesTheAddressingMode(t *testing.T) {
+	c := systemClient()
+	evt := groupMessage("m1", &waE2E.Message{Conversation: proto.String("hi")})
+	evt.Info.AddressingMode = types.AddressingModeLID
+	c.handle(evt)
+	if lid, _ := c.lidGroups.Load(sysGroup); lid != true {
+		t.Errorf("lidGroups = %v, want true", lid)
+	}
+}

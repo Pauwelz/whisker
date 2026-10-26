@@ -25,7 +25,7 @@ func (c *Client) Send(chat, id, text string, quote *Quote, timer int64) error {
 			info := &waE2E.ContextInfo{}
 			if quote != nil {
 				info.StanzaID = proto.String(quote.ID)
-				info.Participant = proto.String(c.quoteSender(quote.Sender))
+				info.Participant = proto.String(c.quoteSender(jid, quote.Sender))
 				info.QuotedMessage = &waE2E.Message{Conversation: proto.String(quote.Text)}
 			}
 			if timer > 0 {
@@ -38,11 +38,44 @@ func (c *Client) Send(chat, id, text string, quote *Quote, timer int64) error {
 }
 
 // quoteSender is the JID that WhatsApp expects for the author of a quoted Message. The Quote holds none for the user's own Messages.
-func (c *Client) quoteSender(sender string) string {
+func (c *Client) quoteSender(chat types.JID, sender string) string {
 	if sender == "" && c.cli.Store.ID != nil {
-		return c.cli.Store.ID.ToNonAD().String()
+		sender = c.cli.Store.ID.ToNonAD().String()
+	}
+	if jid, err := types.ParseJID(sender); err == nil {
+		if wire := c.wireJID(chat, jid); wire != jid {
+			return wire.String()
+		}
 	}
 	return sender
+}
+
+// noteAddressing remembers the addressing mode of a Group Chat. An unknown mode changes nothing.
+func (c *Client) noteAddressing(chat types.JID, mode types.AddressingMode) {
+	if chat.Server == types.GroupServer && mode != "" {
+		c.lidGroups.Store(chat, mode == types.AddressingModeLID)
+	}
+}
+
+// wireJID is the JID to put in a Message that every Participant of the Group Chat reads. The chat store keeps the phone JID of an author,
+// but a group that addresses by LID hides the phone numbers, and the other Participants must not learn one from a Quote or a Reaction.
+// The JID stays as it is for another Chat, a PN group, a group of unknown mode, or a JID without a LID in the store.
+func (c *Client) wireJID(chat, jid types.JID) types.JID {
+	if lid, _ := c.lidGroups.Load(chat); lid != true || jid.Server != types.DefaultUserServer {
+		return jid
+	}
+	if own := c.cli.Store.ID; own != nil && jid.User == own.User && !c.cli.Store.GetLID().IsEmpty() {
+		return c.cli.Store.GetLID().ToNonAD()
+	}
+	if c.cli.Store.LIDs == nil {
+		return jid
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
+	defer cancel()
+	if mapped, err := c.cli.Store.LIDs.GetLIDForPN(ctx, jid); err == nil && !mapped.IsEmpty() {
+		return mapped.ToNonAD()
+	}
+	return jid // shortcut: with no LID in the store the phone JID goes out, as before; upgrade when WhatsApp offers a lookup for it
 }
 
 func (c *Client) React(chat, id, sender, emoji string) error {
@@ -54,7 +87,7 @@ func (c *Client) React(chat, id, sender, emoji string) error {
 		}
 	}
 	return c.send(chat, editTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
-		return c.cli.BuildReaction(jid, senderJID, id, emoji), whatsmeow.SendRequestExtra{}
+		return c.cli.BuildReaction(jid, c.wireJID(jid, senderJID), id, emoji), whatsmeow.SendRequestExtra{}
 	})
 }
 

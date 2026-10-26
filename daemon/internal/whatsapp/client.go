@@ -47,6 +47,10 @@ type Client struct {
 
 	syncMu  sync.Mutex
 	pending []Event // the flag events of a full App State sync, until it completes
+
+	// lidGroups holds the addressing mode of each Group Chat that a live event or a joined-group event showed: true for LID.
+	// shortcut: only the current run knows it, so the first reply or Reaction in a group after a start, before any live event of it, still sends the phone JID. Upgrade with GetGroupInfo.
+	lidGroups sync.Map
 }
 
 // SetDeviceIdentity names the linked device "whisker (hostname)" on the phone. Call it once, before the first connect and pair.

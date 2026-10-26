@@ -51,6 +51,7 @@ func (c *Client) handle(evt any) {
 		if ReservedID(evt.Info.ID) {
 			return
 		}
+		c.noteAddressing(evt.Info.Chat, evt.Info.AddressingMode)
 		c.emitLiveAlias(evt.Info.MessageSource)
 		if c.handleProtocol(evt) || c.handleSecretEdit(evt) {
 			return
@@ -122,6 +123,7 @@ func (c *Client) handle(evt any) {
 			c.emitSystem(evt.JID, m)
 		}
 	case *events.JoinedGroup:
+		c.noteAddressing(evt.JID, evt.AddressingMode)
 		c.emitSystem(evt.JID, c.joinedGroupMessage(evt))
 	case *events.Pin:
 		c.emitFlag(Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}, evt.FromFullSync)
