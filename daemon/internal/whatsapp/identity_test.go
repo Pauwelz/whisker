@@ -1,6 +1,7 @@
 package whatsapp
 
 import (
+	"errors"
 	"testing"
 
 	"go.mau.fi/whatsmeow/types"
@@ -34,5 +35,17 @@ func TestIdentityChangeGivesOneSystemMessageForThePhoneJID(t *testing.T) {
 		if len(got) != 1 || got[0].Chat != jef.String() || got[0].Kind != KindDirect || got[0].Message.System == nil || got[0].Message.System.Kind != SystemIdentity || got[0].Message.Time != sysAt.Unix() {
 			t.Errorf("%s: events = %+v, want one identity System Message for %s", name, got, jef)
 		}
+	}
+}
+
+func TestDeviceIDsRefusesAnEmptyOrFailedList(t *testing.T) {
+	if _, ok := deviceIDs(nil, nil); ok {
+		t.Error("an empty list was accepted")
+	}
+	if _, ok := deviceIDs([]types.JID{jef}, errors.New("x")); ok {
+		t.Error("a failed call was accepted")
+	}
+	if ids, ok := deviceIDs([]types.JID{{User: "1", Device: 0}, {User: "1", Device: 3}}, nil); !ok || len(ids) != 2 || ids[1] != 3 {
+		t.Errorf("ids = %v, %v", ids, ok)
 	}
 }
