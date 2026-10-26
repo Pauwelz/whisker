@@ -18,6 +18,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- A deleted Message no longer stays readable in the store files. The chat store and the device store now overwrite deleted rows, and the first start after this update rewrites both stores once to remove old leftovers. This covers a Message that expires, "Delete for me", an edit and a revoke.
 - A reply no longer sends the names of your Phone Contacts. When you quote a message that mentions someone, whisker now keeps the original text in the quote. Before, a retry after the quoted message was deleted sent the names as plain text. whisker also no longer lets you edit a message that has mentions, because the edit would send the names as plain text and drop the real mentions.
 - A photo you send no longer carries its location, capture time or camera model. Before, whisker uploaded a JPEG, PNG or WebP file with its Exif, XMP and IPTC data, so every recipient could read it. Now the Daemon removes this metadata from every Image before it stores and uploads it. A JPEG keeps its Orientation, so photos do not turn sideways. A file that is not a valid image is refused. A Document stays byte for byte as it is.
 - A received voice note can no longer make mpv fetch a link. A file that holds a playlist made mpv open the sender's URL on Play. Now mpv reads every Media file as plain media, only from disk. Audio files now open in mpv too, with the same limits. The file badge of a document now shows its real extension, so a `.desktop` file sent as a PDF no longer shows "PDF".
