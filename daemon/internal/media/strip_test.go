@@ -185,3 +185,53 @@ func TestStripRefusesBrokenFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestStripJPEGDropsATrailerAfterEOI(t *testing.T) {
+	j := realJPEG(t)
+	second := withSegments(realJPEG(t), seg(0xE1, "Exif\x00\x00GPS"))
+	out, err := media.StripMetadata("image/jpeg", append(append([]byte{}, j...), second...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(out, j) {
+		t.Errorf("output differs from the first image: %d bytes, want %d", len(out), len(j))
+	}
+	if _, err := jpeg.Decode(bytes.NewReader(out)); err != nil {
+		t.Errorf("decode: %v", err)
+	}
+}
+
+func TestStripJPEGDropsMPFAndKeepsICC(t *testing.T) {
+	j := withSegments(realJPEG(t), seg(0xE2, "MPF\x00index"), seg(0xE2, "ICC_PROFILE\x00data"))
+	out, err := media.StripMetadata("image/jpeg", j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(out, []byte("MPF")) || !bytes.Contains(out, []byte("ICC_PROFILE")) {
+		t.Error("want MPF gone and ICC kept")
+	}
+}
+
+func TestStripJPEGStripsBetweenScans(t *testing.T) {
+	scan := append(seg(0xDA, "\x01\x01\x00"), 0x12, 0xFF, 0x00, 0xFF, 0xD0, 0x34)
+	j := append([]byte{0xFF, 0xD8}, seg(0xDB, "q")...)
+	j = append(j, scan...)
+	j = append(j, seg(0xFE, "comment")...)
+	j = append(j, scan...)
+	j = append(j, 0xFF, 0xD9)
+	out, err := media.StripMetadata("image/jpeg", j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := bytes.ReplaceAll(j, seg(0xFE, "comment"), nil)
+	if !bytes.Equal(out, want) {
+		t.Errorf("output = %x, want %x", out, want)
+	}
+}
+
+func TestStripJPEGWithoutEOIIsBroken(t *testing.T) {
+	j := realJPEG(t)
+	if _, err := media.StripMetadata("image/jpeg", j[:len(j)-2]); err == nil {
+		t.Error("no error")
+	}
+}

@@ -11,7 +11,7 @@ var ErrBadImage = errors.New("not a valid image")
 
 // StripMetadata removes the metadata of an image without a re-encode, so pixels stay as they are.
 // JPEG keeps its JFIF and ICC segments and gets a minimal Exif with only the Orientation of the original.
-// PNG and WebP lose their Exif, XMP and text chunks. Bytes after the end of the image are dropped.
+// PNG and WebP lose their Exif, XMP and text chunks. Bytes after the end of the image (EOI, IEND, the RIFF size) are dropped.
 // A file that does not parse as its type gives ErrBadImage.
 func StripMetadata(mime string, b []byte) ([]byte, error) {
 	var out []byte
@@ -29,26 +29,33 @@ func StripMetadata(mime string, b []byte) ([]byte, error) {
 	return out, nil
 }
 
-// stripJPEG walks the segments up to the scan and copies the rest as it is. It gives nil for a broken file.
+// stripJPEG walks the segments and the scans up to EOI and drops everything after it. It gives nil for a broken file.
+// It drops APP1 (Exif, XMP), APP13 (IPTC), COM and APP2 segments that are not an ICC profile (MPF points into the dropped trailer).
 func stripJPEG(b []byte) []byte {
 	if len(b) < 4 || b[0] != 0xFF || b[1] != 0xD8 {
 		return nil
 	}
 	out := append(make([]byte, 0, len(b)), b[:2]...)
-	insertAt, orientation := 2, 0
-	for i := 2; i < len(b); {
+	insertAt, orientation, scanned := 2, 0, false
+	for i := 2; i+1 < len(b); {
 		if b[i] != 0xFF {
 			return nil
 		}
-		if i+1 >= len(b) {
-			return nil
-		}
 		m := b[i+1]
-		if m == 0xFF { // fill byte
+		switch {
+		case m == 0xFF: // fill byte
 			i++
 			continue
-		}
-		if m == 0x01 || m >= 0xD0 && m <= 0xD8 { // markers without a length
+		case m == 0xD9: // EOI
+			if !scanned {
+				return nil
+			}
+			out = append(out, 0xFF, 0xD9)
+			if orientation == 0 {
+				return out
+			}
+			return append(out[:insertAt:insertAt], append(minimalExif(orientation), out[insertAt:]...)...)
+		case m == 0x01 || m >= 0xD0 && m <= 0xD8: // markers without a length
 			out = append(out, 0xFF, m)
 			i += 2
 			continue
@@ -62,20 +69,22 @@ func stripJPEG(b []byte) []byte {
 		}
 		seg := b[i:end]
 		switch {
-		case m == 0xE1 || m == 0xED || m == 0xFE: // APP1 (Exif, XMP), APP13 (IPTC), COM
+		case m == 0xE1 || m == 0xED || m == 0xFE:
 			if m == 0xE1 && orientation == 0 {
 				orientation = exifOrientation(seg[4:])
 			}
-		case m == 0xDA: // the scan data follows and runs to the end
-			out = append(out, b[i:]...)
-			if orientation == 0 {
-				return out
-			}
-			return append(out[:insertAt:insertAt], append(minimalExif(orientation), out[insertAt:]...)...)
+		case m == 0xE2 && !bytes.HasPrefix(seg[4:], []byte("ICC_PROFILE\x00")):
 		default:
 			out = append(out, seg...)
 			if m == 0xE0 && insertAt == len(out)-len(seg) {
 				insertAt = len(out)
+			}
+			if m == 0xDA { // the entropy-coded data follows
+				scanned = true
+				for end+1 < len(b) && (b[end] != 0xFF || b[end+1] == 0 || b[end+1] >= 0xD0 && b[end+1] <= 0xD7 || b[end+1] == 0xFF) {
+					end++
+				}
+				out = append(out, b[i+len(seg):end]...)
 			}
 		}
 		i = end
