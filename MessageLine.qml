@@ -215,15 +215,14 @@ Item {
             visible: active
             sourceComponent: MediaChip { message: line.message; panel: line.panel }
           }
-          // Open asks first for a file type that is not on the safe list: Open, Save as or Cancel.
+          // Open asks first for a file type that is not on the safe list. Save as stays in the links above.
           Question {
             visible: line.isMessage && line.panel.whiskerService.confirmOpen !== null && line.panel.whiskerService.confirmOpen.message.id === line.message.id
             width: parent.width
             panel: line.panel
-            text: "Open this file in the default app?"
+            text: "This file type is not on the safe list. Open it in its default app anyway?"
             answers: [
-              { label: "open", run: function() { line.panel.whiskerService.confirmLaunch() } },
-              { label: "save as…", run: function() { line.panel.whiskerService.cancelLaunch(); line.panel.savingId = line.message.id } },
+              { label: "open anyway", run: function() { line.panel.whiskerService.confirmLaunch() } },
               { label: "cancel", run: function() { line.panel.whiskerService.cancelLaunch() } }
             ]
           }

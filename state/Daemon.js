@@ -362,6 +362,7 @@ function draftSetDue(state, frame) {
 // Returns "closeChat", "closeSettings", "closePopout", "focusSearch" or "none".
 function shortcutAction(shortcut, state, local) {
   if (shortcut === "Escape") {
+    if (local.asking) return "closeQuestion" // the Open or the paste question
     if (state.openChat) return "closeChat"
     if (local.showNewChat) return "closeNewChat"
     return local.showSettings ? "closeSettings" : "closePopout"

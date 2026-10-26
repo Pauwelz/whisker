@@ -580,6 +580,7 @@ test("chatStatusLabel prefers the activity over Presence", () => {
 test("fixed shortcuts: Escape goes back one level, Ctrl+F searches the Chat list", () => {
   const list = { screen: "linked" };
   const none = { showSettings: false };
+  assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, { asking: true }), "closeQuestion");
   assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, none), "closeChat");
   assert.equal(Daemon.shortcutAction("Escape", list, { showSettings: true }), "closeSettings");
   assert.equal(Daemon.shortcutAction("Escape", list, none), "closePopout");
