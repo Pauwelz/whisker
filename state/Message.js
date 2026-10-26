@@ -1,6 +1,7 @@
 .pragma library
 
 .import "Common.js" as Common
+.import "Timeline.js" as Timeline
 
 // One Message: body, links, Edit, Revoke, Delete, Reactions, Quotes and the actions of its menu.
 
@@ -116,14 +117,21 @@ function reactionChips(message) {
 }
 
 // The Quote above a reply: who wrote the quoted Message and a one-line preview. Null when the Message has no Quote.
+// An unverified Quote (`verified` false) is a snapshot that the sender wrote. It is never "You" and carries `unverified`.
 var QUOTE_PREVIEW_LENGTH = 80
 
 function quoteView(message) {
   var quote = message.quote
   if (!quote) return null
-  var text = String(quote.text).replace(/\s+/g, " ").trim()
+  var unverified = quote.verified === false
+  var text = String(quote.revoked ? TOMBSTONE_TEXT : quote.text).replace(/\s+/g, " ").trim()
   if (text.length > QUOTE_PREVIEW_LENGTH) text = text.slice(0, QUOTE_PREVIEW_LENGTH - 1) + "…"
-  return { id: quote.id, sender: quote.fromMe ? "You" : quote.senderName, text: text }
+  var view = { id: quote.id, sender: quote.fromMe && !unverified ? "You" : Timeline.senderLabel(Object.assign({}, quote, { fromMe: false })), text: text }
+  if (unverified) {
+    view.unverified = true
+    if (!view.sender) view.sender = "Unknown"
+  }
+  return view
 }
 
 // A Message can be quoted unless it is a Tombstone.

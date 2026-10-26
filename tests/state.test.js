@@ -476,6 +476,15 @@ test("Reactions: the user picks, replaces or removes one; chips count the emoji"
   assert.equal(Message.canReactToMessage({ fromMe: false, revoked: true }), false);
 });
 
+test("Quotes: only a verified Quote shows \"You\"; an unverified one is marked and names no user", () => {
+  const view = (quote) => JSON.parse(JSON.stringify(Message.quoteView({ quote })));
+  assert.deepEqual(view({ verified: true, fromMe: true, senderName: "", text: "hi" }), { sender: "You", text: "hi" });
+  assert.deepEqual(view({ verified: true, fromMe: false, sender: "1@s.whatsapp.net", senderName: "Ann", senderPush: true, text: "hi" }), { sender: "~ Ann +1", text: "hi" });
+  assert.deepEqual(view({ verified: true, fromMe: false, senderName: "Ann", revoked: true, text: "" }), { sender: "Ann", text: "This message was deleted" });
+  assert.deepEqual(view({ verified: false, fromMe: true, senderName: "", text: "forged" }), { sender: "Unknown", text: "forged", unverified: true });
+  assert.deepEqual(view({ verified: false, fromMe: false, sender: "1@s.whatsapp.net", senderName: "Ann", text: "forged" }), { sender: "Ann", text: "forged", unverified: true });
+});
+
 test("Quotes: the preview names the author and is cut to one line; the composer sends the Quote", () => {
   assert.equal(Message.quoteView({ text: "no quote" }), null);
   assert.deepEqual(JSON.parse(JSON.stringify(Message.quoteView({ quote: { fromMe: true, senderName: "", text: "a\nb" } }))), { sender: "You", text: "a b" });

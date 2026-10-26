@@ -136,7 +136,9 @@ A Reaction, whether the user or another Participant set or removed it, also send
 
 A Message can carry two more keys. Both are left out when empty:
 
-- `quote`: the Message that this one replies to, as a snapshot: `{id, sender, senderName, fromMe, text}`. `text` is the preview. `sender` and `senderName` are empty and `fromMe` is true when the quoted Message is the user's.
+- `quote`: the Message that this one replies to: `{id, sender, senderName, fromMe, verified, text}`, with `senderPush` and `revoked` when true. `text` is the preview. The sender of a reply writes the snapshot in it, so the Daemon checks it against the chat store each time it reads the Message:
+  - `verified` is true when the quoted Message is stored in the same Chat. The Daemon then takes `sender`, `senderName`, `fromMe` and `text` from the stored Message, not from the snapshot. An edit shows through. When the stored Message is revoked, `revoked` is true and `text` is empty (a Tombstone). `sender` and `senderName` are empty and `fromMe` is true only when the stored Message is the user's. `senderName` follows the name rule, and `senderPush` is true for a Push Name, as on a Message.
+  - `verified` is false when the quoted Message is not stored (for example, not synced yet). The Daemon keeps the snapshot, `fromMe` is false, and an unverified Quote is never the user's. The Plugin marks it. When the quoted Message arrives later, the Quote becomes verified.
 - `reactions`: a list of `{sender, senderName, fromMe, emoji}`, one per Participant, in the order the Participants first reacted. `sender` is empty for the user. History Sync carries the Reactions of older Messages; a Reaction that a live event set wins over a later History Sync batch. Fixture: `chats-history-reactions.jsonl`.
 
 Later tickets add keys to the Message and send `messageChanged` for each change.
@@ -399,7 +401,7 @@ Params: `chat` (JID of a stored Chat), `text` (not blank, at most 65536 characte
 
 The Message has its WhatsApp ID from the start. A reconnect or a retry sends that same ID, so a Message never shows twice. Error -32006 means a blank or too long text, an unknown Chat, or a `quote` that is unknown or a Tombstone.
 
-With `quote`, the Message is a reply. The Daemon keeps a snapshot of the quoted Message (author and text) and sends it to WhatsApp with the reply. Incoming replies carry the same `quote` key.
+With `quote`, the Message is a reply. The Daemon keeps a snapshot of the quoted Message (author and text) and sends it to WhatsApp with the reply. Incoming replies carry the same `quote` key. The Daemon never trusts the snapshot of an incoming reply: see `verified` under `messageChanged`.
 
 Fixtures: `chat-quote.jsonl`, `chat-send.jsonl`, `chat-offline.jsonl`, `chat-failed.jsonl`.
 

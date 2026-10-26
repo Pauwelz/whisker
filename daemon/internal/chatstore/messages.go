@@ -45,14 +45,22 @@ type Message struct {
 	System bool `json:"system,omitempty"`
 }
 
-// Quote is the Message that a reply quotes: a snapshot taken when the reply was stored.
+// Quote is the Message that a reply quotes. The reply's sender wrote the snapshot, so the store never trusts it.
+// A verified Quote reads the stored quoted Message: its author, its current text, and a Tombstone when it is revoked.
+// An unverified Quote (the quoted Message is not stored) keeps the snapshot and is never FromMe.
 // Sender is the JID of its author, empty for the user. SenderName follows the name rule and is empty for the user.
 type Quote struct {
 	ID         string `json:"id"`
 	Sender     string `json:"sender"`
 	SenderName string `json:"senderName"`
-	FromMe     bool   `json:"fromMe"`
-	Text       string `json:"text"`
+	// SenderPush is true when SenderName is a Push Name, as on Message.
+	SenderPush bool `json:"senderPush,omitempty"`
+	FromMe     bool `json:"fromMe"`
+	// Verified is true when the quoted Message is stored.
+	Verified bool `json:"verified"`
+	// Revoked is true when the quoted Message is a Tombstone. Text is then empty.
+	Revoked bool   `json:"revoked,omitempty"`
+	Text    string `json:"text"`
 }
 
 // Reaction is the emoji of one Participant on a Message. Sender is empty for the user.
@@ -101,9 +109,11 @@ var stateOrder = []string{whatsapp.StatePending, whatsapp.StateSent, whatsapp.St
 const selectMessage = `
 	SELECT m.id, m.chat_jid, m.sender_jid, m.from_me, m.time, m.text, m.state, m.edited, m.revoked, COALESCE(n.contact_name, ''), COALESCE(n.push_name, ''),
 		       m.quote_id, m.quote_sender, m.quote_text, COALESCE(q.contact_name, ''), COALESCE(q.push_name, ''),
+	       qm.id IS NOT NULL, COALESCE(qm.from_me, 0), COALESCE(qm.revoked, 0), COALESCE(qm.sender_jid, ''), COALESCE(qm.text, ''),
 	       COALESCE(md.kind, ''), COALESCE(md.mime, ''), COALESCE(md.name, ''), COALESCE(md.size, 0), COALESCE(md.state, ''), m.mentions, m.expires_at, m.mentions_me, COALESCE(md.thumbnail, x''), COALESCE(md.duration, 0), COALESCE(md.played, 0), COALESCE(md.gif, 0),
 	       m.system_kind, m.system_targets, m.system_value
-	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN names q ON q.jid = m.quote_sender
+	FROM messages m LEFT JOIN names n ON n.jid = m.sender_jid LEFT JOIN messages qm ON qm.chat_jid = m.chat_jid AND qm.id = m.quote_id AND qm.system_kind = ''
+	LEFT JOIN names q ON q.jid = COALESCE(qm.sender_jid, m.quote_sender)
 	LEFT JOIN media md ON md.chat_jid = m.chat_jid AND md.id = m.id `
 
 // Messages returns one page of a Chat timeline. Offset 0 is the newest page.
@@ -387,10 +397,11 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var q Quote
+		var stored struct{ sender, text string } // the quoted Message, when it is stored
 		var mi MediaInfo
 		var sys whatsapp.System
 		if err := rows.Scan(&m.ID, &m.Chat, &m.Sender, &m.FromMe, &m.Time, &m.Text, &m.State, &m.Edited, &m.Revoked, &contact, &push,
-			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played, &mi.Gif,
+			&q.ID, &q.Sender, &q.Text, &qContact, &qPush, &q.Verified, &q.FromMe, &q.Revoked, &stored.sender, &stored.text, &mi.Kind, &mi.Mime, &mi.Name, &mi.Size, &mi.State, &mentions, &m.ExpiresAt, &m.MentionsMe, &mi.Thumbnail, &mi.Duration, &mi.Played, &mi.Gif,
 			&sys.Kind, &targets, &sys.Value); err != nil {
 			return nil, err
 		}
@@ -407,9 +418,15 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 			m.SenderPush = pushOnly(contact, push)
 		}
 		if q.ID != "" {
-			q.FromMe = q.Sender == ""
-			if !q.FromMe {
+			if q.Verified {
+				q.Sender, q.Text = stored.sender, stored.text
+				if q.FromMe {
+					q.Sender = ""
+				}
+			}
+			if q.Sender != "" {
 				q.SenderName = participantName(qContact, qPush, q.Sender)
+				q.SenderPush = pushOnly(qContact, qPush)
 			}
 			m.Quote = &q
 		}

@@ -158,14 +158,15 @@ Item {
         width: parent.width - bodyArea.markWidth
         spacing: Style.space(2)
 
-        // The Quote of a reply: the quoted author and a one-line preview. A click jumps to the quoted Message.
+        // The Quote of a reply: the quoted author and a one-line preview, in italics and marked when it is unverified. A click jumps to the quoted Message.
         Text {
           readonly property var quote: line.isMessage ? Message.quoteView(line.message) : null
           visible: quote !== null
           width: parent.width
           elide: Text.ElideRight
           textFormat: Text.PlainText
-          text: quote ? quote.sender + ": " + quote.text : ""
+          text: quote ? quote.sender + (quote.unverified ? " (unverified)" : "") + ": " + quote.text : ""
+          font.italic: quote !== null && quote.unverified === true
           opacity: 0.6
           color: line.panel.contentForeground
           font.family: line.panel.contentFontFamily
