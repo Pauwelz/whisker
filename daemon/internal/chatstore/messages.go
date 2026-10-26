@@ -37,6 +37,8 @@ type Message struct {
 	Reactions []Reaction `json:"reactions,omitempty"` // at most one per Participant, in the order they were first set
 	// Mentions are the names in Text that the Plugin highlights, each as "@name". Text already holds them.
 	Mentions []string `json:"mentions,omitempty"`
+	// RawText is the stored text, before the mentions got names. It never goes to the Plugin. Outgoing Quotes use it.
+	RawText string `json:"-"`
 	// MentionsMe is true when the Message mentions the user. The Plugin highlights the line.
 	MentionsMe bool `json:"mentionsMe,omitempty"`
 	// ExpiresAt is when a Disappearing Message goes (Unix seconds). It is 0 for a Message that stays.
@@ -408,6 +410,7 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 		if err := json.Unmarshal([]byte(targets), &sys.Targets); err != nil {
 			return nil, err
 		}
+		m.RawText = m.Text
 		m.System = sys.Kind != ""
 		systems = append(systems, sys)
 		if mi.Kind != "" {

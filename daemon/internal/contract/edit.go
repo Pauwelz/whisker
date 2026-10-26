@@ -19,12 +19,12 @@ func sentByWhatsApp(state string) bool {
 	return state != "" && state != whatsapp.StatePending && state != whatsapp.StateFailed
 }
 
-// chatEdit edits a Message of the user. The follow-up sends `messageChanged` for it.
+// chatEdit edits a Message of the user. A Message with mentions is refused: the edit would send the names as plain text. The follow-up sends `messageChanged` for it.
 // shortcut: the WhatsApp call blocks the Daemon loop (up to 15 s), upgrade when another request must run meanwhile.
 func (s *session) chatEdit(req *request) outcome {
 	p := req.Params
 	m, err := s.chats.Message(p.Chat, p.ID)
-	if err != nil || !m.FromMe || inert(m) || !sentByWhatsApp(m.State) ||
+	if err != nil || !m.FromMe || inert(m) || !sentByWhatsApp(m.State) || len(m.Mentions) > 0 ||
 		!validText(p.Text) ||
 		Clock.Now().Sub(time.Unix(m.Time, 0)) > EditWindow {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}

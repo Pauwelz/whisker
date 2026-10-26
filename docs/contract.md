@@ -423,7 +423,7 @@ Error -32013 means one or more paths that are relative, missing, empty, too larg
 
 Params: `chat`, `id` and `text` (not blank, at most 65536 characters). Valid once the Daemon is `ready` and linked. The Message must be a Message of the user that WhatsApp accepted (`sent` or later), not a Tombstone, and at most 15 minutes old. The Daemon sends the edit to WhatsApp, stores the new text with `edited: true`, answers `{"message": {...}}` and sends `messageChanged`. The Message keeps its place.
 
-Error -32006 means the Message cannot be edited (unknown, not the user's, not sent yet, a Tombstone, too old, or a blank or too long text). Error -32007 means WhatsApp could not be reached (offline or a failed call): nothing changed. The call blocks the Daemon for up to 15 s.
+Error -32006 means the Message cannot be edited (unknown, not the user's, not sent yet, a Tombstone, too old, has mentions, or a blank or too long text). Error -32007 means WhatsApp could not be reached (offline or a failed call): nothing changed. The call blocks the Daemon for up to 15 s.
 
 An edit from another device, or from another Participant, arrives as `messageChanged` with `edited: true`. The Daemon drops an edit from someone other than the author. Fixture: `chat-edit.jsonl`.
 
