@@ -652,7 +652,17 @@ type Unreceipted struct{ ID, Sender string }
 
 // Unreceipted returns the Messages of a Chat that wait for a Read Receipt, oldest first.
 func (s *Store) Unreceipted(chat string) ([]Unreceipted, error) {
-	rows, err := s.db.Query(`SELECT id, sender_jid FROM messages WHERE chat_jid = ? AND read_pending = 1 ORDER BY time, rowid`, chat)
+	return s.senders(`SELECT id, sender_jid FROM messages WHERE chat_jid = ? AND read_pending = 1 ORDER BY time, rowid`, chat)
+}
+
+// Counted returns the Messages of a Chat that count in its unreadCount, oldest first.
+func (s *Store) Counted(chat string) ([]Unreceipted, error) {
+	return s.senders(`SELECT id, sender_jid FROM messages WHERE chat_jid = ? AND in_unread_count = 1 ORDER BY time, rowid`, chat)
+}
+
+// senders runs a query that selects the id and sender of Messages.
+func (s *Store) senders(query string, chat string) ([]Unreceipted, error) {
+	rows, err := s.db.Query(query, chat)
 	if err != nil {
 		return nil, err
 	}

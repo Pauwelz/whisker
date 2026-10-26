@@ -48,3 +48,16 @@ func TestPlayed(t *testing.T) {
 		}
 	}
 }
+
+func TestSelfDue(t *testing.T) {
+	for mode, want := range map[string]bool{
+		settings.ReadReceiptsOff:           false,
+		settings.ReadReceiptsOnOpen:        false, // its Read Receipts reach the user's own devices too
+		settings.ReadReceiptsOnInteraction: true,
+		"unknown":                          false,
+	} {
+		if got := SelfDue(mode); got != want {
+			t.Errorf("SelfDue(%q) = %v, want %v", mode, got, want)
+		}
+	}
+}

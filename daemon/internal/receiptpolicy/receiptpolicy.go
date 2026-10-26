@@ -30,6 +30,11 @@ func Due(mode string, t Trigger, attended bool) bool {
 	return false
 }
 
+// SelfDue reports whether opening a Chat sends read-self receipts for its unread Messages.
+// A read-self receipt clears the Chat on the user's own devices, and the sender gets no Read Receipt.
+// onOpen needs none: its Read Receipts reach the user's own devices too.
+func SelfDue(mode string) bool { return mode == settings.ReadReceiptsOnInteraction }
+
 // Played reports what to send when the user starts a voice note.
 // played: send Played. read: also send Read for that Message only (never for the rest of the Chat).
 func Played(mode string) (played, read bool) {

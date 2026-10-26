@@ -40,6 +40,7 @@ type Fake struct {
 	unreads        []string
 	deletes        []string
 	plays          []Read
+	selfReads      []Read
 	edits          []string
 	revokes        []string
 	quotes         []string
@@ -389,6 +390,24 @@ func (f *Fake) MarkPlayed(chat, sender, id string) error {
 		return f.readErr
 	}
 	f.plays = append(f.plays, Read{chat, sender, []string{id}})
+	return nil
+}
+
+// SelfReads lists the MarkReadSelf calls that worked, in order.
+func (f *Fake) SelfReads() []Read {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Read{}, f.selfReads...)
+}
+
+// MarkReadSelf fails with the read error, like MarkRead.
+func (f *Fake) MarkReadSelf(chat, sender string, ids []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.readErr != nil {
+		return f.readErr
+	}
+	f.selfReads = append(f.selfReads, Read{chat, sender, append([]string{}, ids...)})
 	return nil
 }
 

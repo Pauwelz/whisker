@@ -15,6 +15,7 @@ import (
 type receiptPort interface {
 	MarkRead(chat, sender string, ids []string) error
 	MarkPlayed(chat, sender, id string) error
+	MarkReadSelf(chat, sender string, ids []string) error
 	MarkChatRead(chat string) error
 }
 
@@ -22,6 +23,7 @@ type receiptPort interface {
 // The policy (receiptpolicy) decides when. It runs on the Daemon loop only.
 // shortcut: MarkRead and MarkChatRead block the loop while they send, upgrade if a slow network shows.
 // shortcut: a Read Receipt that fails stays due and goes out with the next one for that Chat.
+// shortcut: a read-self receipt that fails is not sent again, so the phone keeps the Chat unread; retry it if that shows.
 type reader struct {
 	chats  *chatstore.Store
 	port   receiptPort
@@ -53,6 +55,7 @@ func (r *reader) attend(t receiptpolicy.Trigger) bool {
 	if chat == "" {
 		return false
 	}
+	seen := r.counted(chat) // before ClearUnread, which empties the list
 	cleared, err := r.chats.ClearUnread(chat)
 	if err != nil {
 		fmt.Fprintln(r.logOut, "chat store write failed")
@@ -61,8 +64,46 @@ func (r *reader) attend(t receiptpolicy.Trigger) bool {
 			fmt.Fprintln(r.logOut, "read marker failed")
 		}
 	}
+	if err == nil {
+		r.readSelf(chat, seen)
+	}
 	r.receipts(chat, t)
 	return cleared
+}
+
+// counted lists the Messages that leave unreadCount when the Read Marker clears, if the mode wants read-self receipts for them.
+func (r *reader) counted(chat string) []chatstore.Unreceipted {
+	prefs, err := r.prefs.Get()
+	if err != nil || !receiptpolicy.SelfDue(prefs.ReadReceipts) {
+		return nil
+	}
+	list, err := r.chats.Counted(chat)
+	if err != nil {
+		fmt.Fprintln(r.logOut, "chat store read failed")
+	}
+	return list
+}
+
+// readSelf sends a read-self receipt for these Messages, one call per sender.
+func (r *reader) readSelf(chat string, list []chatstore.Unreceipted) {
+	senders, ids := bySender(list)
+	for _, sender := range senders {
+		if err := r.port.MarkReadSelf(chat, sender, ids[sender]); err != nil {
+			fmt.Fprintln(r.logOut, "read-self receipt failed")
+		}
+	}
+}
+
+// bySender groups Messages by sender. senders is in order of the first Message of each.
+func bySender(list []chatstore.Unreceipted) (senders []string, ids map[string][]string) {
+	ids = map[string][]string{}
+	for _, u := range list {
+		if ids[u.Sender] == nil {
+			senders = append(senders, u.Sender)
+		}
+		ids[u.Sender] = append(ids[u.Sender], u.ID)
+	}
+	return senders, ids
 }
 
 // receipts sends a Read Receipt for each unread Message of the Chat, one call per sender, when the policy says so.
@@ -80,14 +121,7 @@ func (r *reader) receipts(chat string, t receiptpolicy.Trigger) {
 		fmt.Fprintln(r.logOut, "chat store read failed")
 		return
 	}
-	var senders []string // in order of first Message
-	ids := map[string][]string{}
-	for _, u := range unread {
-		if ids[u.Sender] == nil {
-			senders = append(senders, u.Sender)
-		}
-		ids[u.Sender] = append(ids[u.Sender], u.ID)
-	}
+	senders, ids := bySender(unread)
 	for _, sender := range senders {
 		if err := r.port.MarkRead(chat, sender, ids[sender]); err != nil {
 			fmt.Fprintln(r.logOut, "read receipt failed")

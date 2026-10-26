@@ -314,6 +314,7 @@ When a Chat becomes attended, or a new Message arrives in it:
 
 1. The Read Marker clears in every mode, locally and on the phone (App State). If it was set, `chatsChanged` follows the reply.
 2. Read Receipts go out when the policy says so (`daemon/internal/receiptpolicy`), one call per sender, so each sender in a Group Chat gets their own.
+3. In `onInteraction` mode, a `read-self` receipt goes out for each Message that step 1 takes out of `unreadCount`, one call per sender. It clears the Chat on the user's own devices, such as the phone. The sender gets no Read Receipt. Each Message gets one `read-self` receipt. One that fails is not sent again.
 
 A new Message of another Participant sets the Read Marker (`unread`) of its Chat, then step 1 clears it if the Chat is attended.
 
@@ -621,7 +622,7 @@ A fixture is a JSON Lines file. Each line is one object with a `dir` key:
 | `view` | `expect` | After the `out` frames above it, the Plugin view state holds every key of `expect`. |
 | `keyring` | `state` | The Go test sets the fake keyring: `missing` (calls fail), `ok`, `locked` (calls block) or `unlocked`. |
 | `profile` | `state` | The Go test, before the start: `unreadable` leaves old stores with no key. |
-| `read` | `receipts`, `plays`, `markers` | The Go test checks the Read Receipts and the Played receipts (`chat`, `sender`, `ids`) and the Chats whose Read Marker the fake port cleared, all so far, in order. |
+| `read` | `receipts`, `plays`, `selfReads`, `markers` | The Go test checks the Read Receipts, the Played receipts and the `read-self` receipts (`chat`, `sender`, `ids`). It also checks the Chats whose Read Marker the fake port cleared. Each list holds all calls so far, in order. |
 | `clock` | `advance` | The Go test fires the oldest keyring timeout (30 s). |
 | `sent` | `ids`, `timers` (optional) | The Go test checks the Message IDs that the fake port has sent so far, in order. With `timers`, it also checks the Disappearing timer of each, in seconds. |
 | `edited` | `edits` | The Go test checks the edits that the fake port has sent so far, in order, as `"id:text"`. |

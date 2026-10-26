@@ -145,6 +145,10 @@ func (c *Client) MarkPlayed(chat, sender, id string) error {
 	return c.receipt(chat, sender, []string{id}, types.ReceiptTypePlayed)
 }
 
+func (c *Client) MarkReadSelf(chat, sender string, ids []string) error {
+	return c.receipt(chat, sender, ids, types.ReceiptTypeReadSelf)
+}
+
 func (c *Client) receipt(chat, sender string, ids []string, kind ...types.ReceiptType) error {
 	chatJID, err := types.ParseJID(chat)
 	if err != nil {
