@@ -213,6 +213,18 @@ function leavesChatFor(state, jid, option) {
   return option.unread === true && !!state.openChat && state.openChat.jid === jid
 }
 
+// Another device deleted a Chat. It leaves the Chat list, and the open Chat closes: its timeline would be stale.
+function chatRemoved(state, removed) {
+  var next = Common.withChanges(state, {})
+  if (next.chats) next.chats = next.chats.filter(function (chat) { return chat.jid !== removed.chat })
+  return removesOpenChat(state, removed) ? Timeline.closeChat(next) : next
+}
+
+// True when the frame removes the open Chat. The Plugin ends what belongs to the open Chat before it folds the frame.
+function removesOpenChat(state, removed) {
+  return !!state.openChat && state.openChat.jid === removed.chat
+}
+
 // The listed Chat of a jid, or null. The links of the open Chat need its pin and mute state.
 function chatRow(state, jid) {
   var chats = state.chats || []

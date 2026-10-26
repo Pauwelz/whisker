@@ -396,7 +396,10 @@ Item {
         var frame = Daemon.parseLine(line)
         if (!frame) return
         var draftSetDue = Daemon.draftSetDue(root.view, frame) // the answer to a send: store the restored or typed Draft
+        var removesOpenChat = Daemon.removesOpenChat(root.view, frame)
+        if (removesOpenChat) root.leaveChat()
         root.view = Daemon.applyFrame(root.view, frame)
+        if (removesOpenChat) root.syncAttention()
         if (draftSetDue) root.send(Draft.draftSetRequest, root.view.openChat.jid, Draft.draftOf(root.view))
         root.handleMediaFrame(frame)
         var pasted = Draft.pastedAttachment(root.view, frame)

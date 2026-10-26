@@ -521,6 +521,12 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.MessageEdited](r.t, f, line.Event)
 		case "messageRevoked":
 			emitJSON[whatsapp.MessageRevoked](r.t, f, line.Event)
+		case "deletedForMe":
+			emitJSON[whatsapp.DeletedForMe](r.t, f, line.Event)
+		case "chatCleared":
+			emitJSON[whatsapp.ChatCleared](r.t, f, line.Event)
+		case "chatDeleted":
+			emitJSON[whatsapp.ChatDeleted](r.t, f, line.Event)
 		case "chatTimer":
 			emitJSON[whatsapp.ChatTimer](r.t, f, line.Event)
 		case "chatAlias":

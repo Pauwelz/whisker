@@ -110,6 +110,12 @@ func (c *Client) handle(evt any) {
 		c.emitFlag(Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}, evt.FromFullSync)
 	case *events.Archive:
 		c.emitFlag(Archive{JID: c.phone(evt.JID).String(), Archived: evt.Action.GetArchived()}, evt.FromFullSync)
+	case *events.DeleteForMe: // these three apply at once, also in a full sync: a Message that is gone must not wait for the sync to end
+		c.events <- DeletedForMe{Chat: c.phone(evt.ChatJID).String(), ID: evt.MessageID}
+	case *events.ClearChat:
+		c.events <- ChatCleared{Chat: c.phone(evt.JID).String(), Until: evt.Action.GetMessageRange().GetLastMessageTimestamp()}
+	case *events.DeleteChat:
+		c.events <- ChatDeleted{Chat: c.phone(evt.JID).String()}
 	case *events.UnarchiveChatsSetting:
 		c.emitFlag(UnarchiveChats{On: evt.Action.GetUnarchiveChats()}, evt.FromFullSync)
 	case *events.Mute:

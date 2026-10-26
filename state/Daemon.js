@@ -158,12 +158,19 @@ var NOTIFICATIONS = {
   connected: { fold: function (state) { return Common.withChanges(state, { connection: "online" }) } },
   disconnected: { fold: function (state) { return Common.withChanges(state, { connection: "offline", activity: {} }) } },
   messageExpired: { fold: Timeline.removeMessage },
+  chatCleared: { fold: Timeline.clearMessages, refreshesChats: true },
+  chatRemoved: { fold: ChatList.chatRemoved, refreshesChats: true },
   historyReceived: { fold: Timeline.historyReceived },
   messageChanged: { fold: function (state, params) { return Timeline.upsertMessage(state, params.message) } },
   chatMerged: { fold: Timeline.chatMerged },
   presenceChanged: { fold: ChatList.presenceChanged },
   pictureChanged: { fold: ChatList.pictureChanged },
   activityChanged: { fold: ChatList.activityChanged }
+}
+
+// True when the frame removes the open Chat (chatRemoved). Call it before the fold, to end what belongs to the open Chat.
+function removesOpenChat(state, frame) {
+  return !!frame && frame.method === "chatRemoved" && ChatList.removesOpenChat(state, frame.params)
 }
 
 // The row of a notification, or null for a response and for a method with no row.

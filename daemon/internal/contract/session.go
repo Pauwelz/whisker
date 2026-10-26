@@ -221,6 +221,12 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		ok = s.box.reacted(ev)
 	case whatsapp.Receipt:
 		ok = s.box.receipt(ev)
+	case whatsapp.DeletedForMe:
+		ok = s.deletedForMe(ev)
+	case whatsapp.ChatCleared:
+		ok = s.chatCleared(ev)
+	case whatsapp.ChatDeleted:
+		ok = s.chatDeleted(ev)
 	case whatsapp.ChatAlias:
 		ok = s.merge(ev)
 	case whatsapp.PictureChanged:

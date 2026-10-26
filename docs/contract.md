@@ -162,11 +162,33 @@ Fixtures: see `chat.requestHistory`.
 
 ### `messageExpired`
 
-A Disappearing Message reached the end of its timer, or `chat.deleteForMe` deleted it. The Daemon has deleted it from the chat store, with its Media. The Plugin takes it out of the open Chat. No `chatsChanged` follows.
+A Disappearing Message reached the end of its timer, `chat.deleteForMe` deleted it, or the user deleted it for themself on another device. The Daemon has deleted it from the chat store, with its Media. The Plugin takes it out of the open Chat. No `chatsChanged` follows.
 
 ```json
 {"jsonrpc":"2.0","method":"messageExpired","params":{"chat":"1@s.whatsapp.net","id":"3EB0"}}
 ```
+
+A Delete for me on another device (also in a full App State sync) deletes the Message the same way. The Daemon ignores an unknown Message and sends nothing. It stores no tombstone. Fixture: `delete-for-me-elsewhere.jsonl`.
+
+### `chatCleared`
+
+The user cleared a Chat on another device. The Daemon has deleted the Messages of the Chat up to `until` (Unix seconds), with their Media files and Reactions. Newer Messages stay. `until` 0 means every Message. The Chat, its Draft and its settings stay. The Plugin takes the matching Messages out of the open Chat and asks for the Chat list again. One frame is sent, not one per Message. A repeat of the same event deletes nothing and sends nothing.
+
+```json
+{"jsonrpc":"2.0","method":"chatCleared","params":{"chat":"1@s.whatsapp.net","until":55}}
+```
+
+Fixture: `clear-chat-elsewhere.jsonl`.
+
+### `chatRemoved`
+
+The user deleted a Chat on another device. The Daemon has deleted the Chat and every row that keys it: Messages, Media rows and files, Reactions, Draft (with its pasted files), picture and Recipients. The names stay, because they belong to people. The Plugin takes the Chat out of the Chat list. When it is the open Chat, the Plugin closes it and shows the Chat list. A repeat of the same event sends nothing.
+
+```json
+{"jsonrpc":"2.0","method":"chatRemoved","params":{"chat":"1@s.whatsapp.net"}}
+```
+
+Fixture: `delete-chat-elsewhere.jsonl`.
 
 ### Disappearing Messages
 
@@ -475,7 +497,7 @@ A revoke from the phone or from the other Participant arrives as `messageChanged
 
 Params: `chat` and `id`. Valid once the Daemon is `ready` and linked. It deletes one Message on the user's devices only, also a Tombstone, as an App State write (`deleteMessageForMe`). Other Participants keep the Message.
 
-The store changes only after WhatsApp accepts the write: the Message goes with its Media file and its Reactions. Then the Daemon answers `{}` and sends `messageExpired` for it, which takes it out of the open Chat. Error -32010 means an unknown Chat. Error -32006 means an unknown Message. Error -32007 means WhatsApp could not be reached: nothing changes. Fixture: `chat-delete-for-me.jsonl`.
+The store changes only after WhatsApp accepts the write: the Message goes with its Media file and its Reactions. Then the Daemon answers `{}` and sends `messageExpired` for it, which takes it out of the open Chat. Error -32010 means an unknown Chat. Error -32006 means an unknown Message. Error -32007 means WhatsApp could not be reached: nothing changes. The same happens when the user deletes a Message for themself on another device (see `messageExpired`). Fixture: `chat-delete-for-me.jsonl`.
 
 ### `draft.get`
 
@@ -676,6 +698,8 @@ Keys of a `whatsapp` line. Each line has exactly one:
 The `event` kinds `historySync`, `pushName`, `contactName`, `pin`, `archive`, `unarchiveChats`, `mute` and `readMarker` carry the JSON keys of their type in `daemon/internal/whatsapp/whatsapp.go`. Keys that a fixture leaves out take their zero value. `mutedUntil` and `until` are Unix seconds: 0 is not muted and -1 is muted for ever.
 
 The `event` kinds `newMessage`, `receipt`, `readElsewhere`, `messageEdited`, `messageRevoked` and `reaction` also carry the JSON keys of their type. The fixtures fix the Message time of the Daemon at 1000 (Unix seconds).
+
+The `event` kinds `deletedForMe` (`chat`, `id`), `chatCleared` (`chat`, `until`) and `chatDeleted` (`chat`) play a delete from another device of the user.
 
 The `event` kind `chatAlias` (`lid`, `phone`) tells the Daemon that a LID and a phone JID are one contact.
 
