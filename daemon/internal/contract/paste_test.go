@@ -160,7 +160,7 @@ func TestPasteFallsBackToText(t *testing.T) {
 	}
 }
 
-const imageScript = `if [ "$1" = --list-types ]; then printf 'text/html\nimage/png\ntext/plain\n'; else printf 'png'; fi`
+const imageScript = `if [ "$1" = --list-types ]; then printf 'text/html\nimage/png\ntext/plain\n'; else printf '\211PNG\r\n\032\n\000\000\000\000IEND\256B\140\202'; fi`
 
 // pastedPath sends draft.paste and returns the one path in its result.
 func pastedPath(t *testing.T, r *runner, id int) string {
@@ -208,7 +208,7 @@ func TestPastedImageLivesUntilTheDraftDropsItOrItIsSent(t *testing.T) {
 	if st, err := os.Stat(first); err != nil || st.Mode().Perm() != 0o600 {
 		t.Fatalf("pasted file: %v, %v", st, err)
 	}
-	if b, _ := os.ReadFile(first); string(b) != "png" {
+	if b, _ := os.ReadFile(first); string(b) != "\x89PNG\r\n\x1a\n\x00\x00\x00\x00IEND\xaeB`\x82" {
 		t.Errorf("content = %q", b)
 	}
 	setAttachments(t, r, 2, []string{first})

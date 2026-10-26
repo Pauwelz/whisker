@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -54,6 +55,9 @@ func statSendable(path string) (os.FileInfo, error) {
 // errMediaCopy marks a file that could not be copied into the Media store.
 var errMediaCopy = errors.New("media copy failed")
 
+// errBadImage marks an Image that does not parse as its type, so its metadata cannot be stripped.
+var errBadImage = errors.New("image not sendable")
+
 // chatSendMedia checks every path, then stores each file encrypted in the Profile as a pending Message, in order.
 // Only the first Message has the caption. The follow-up sends them after the reply and clears the Draft once.
 // It is all or nothing: one bad path gives error -32013 with `error.data.paths`, and a failure while storing deletes the Messages already stored.
@@ -80,6 +84,9 @@ func (s *session) chatSendMedia(req *request) outcome {
 					fmt.Fprintln(s.logOut, "message delete failed")
 				}
 			}
+			if errors.Is(err, errBadImage) {
+				return outcome{reply: errorReplyData(req.ID, errNotSendable, msgNotSendable, map[string]any{"paths": []string{path}})}
+			}
 			if errors.Is(err, errMediaCopy) {
 				return outcome{reply: errorReply(req.ID, errMediaFailed, msgMediaCopy)}
 			}
@@ -95,6 +102,7 @@ func (s *session) chatSendMedia(req *request) outcome {
 }
 
 // storeMedia copies one checked file into the Media store and adds its pending Message.
+// An Image loses its metadata first (Orientation stays), so the stored copy, the upload and the hash hold the stripped bytes. A Document stays byte-exact.
 func (s *session) storeMedia(chat, path, caption string) (chatstore.Message, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -109,12 +117,24 @@ func (s *session) storeMedia(chat, path, caption string) (chatstore.Message, err
 	if sendableImages[m.Mime] {
 		m.Kind, m.Name = media.Image, ""
 	}
+	var plain io.Reader = f
+	if m.Kind == media.Image {
+		raw, err := io.ReadAll(f)
+		if err != nil {
+			return chatstore.Message{}, errMediaCopy
+		}
+		stripped, err := media.StripMetadata(m.Mime, raw)
+		if err != nil {
+			return chatstore.Message{}, errBadImage
+		}
+		m.Size, plain = int64(len(stripped)), bytes.NewReader(stripped)
+	}
 	if _, err := rand.Read(m.Key); err != nil {
 		fmt.Fprintln(s.logOut, "media copy failed")
 		return chatstore.Message{}, errMediaCopy
 	}
 	msgID := s.port.NewMessageID()
-	if err := s.media.Put(chat, msgID, m.Kind, m.Key, f); err != nil {
+	if err := s.media.Put(chat, msgID, m.Kind, m.Key, plain); err != nil {
 		fmt.Fprintln(s.logOut, "media copy failed") // the error text could hold paths
 		return chatstore.Message{}, errMediaCopy
 	}
