@@ -47,10 +47,11 @@ type Settings struct {
 	AutoDownloadLimit string `json:"autoDownloadLimit"`
 }
 
-// AutoDownloads tells whether Media of size bytes downloads by itself. An unknown size (0) does.
+// AutoDownloads tells whether Media of size bytes downloads by itself.
+// An unknown size (0 or less) waits for a click, unless the limit is "any": the sender wrote the size, so it proves nothing.
 func (s Settings) AutoDownloads(size int64) bool {
 	limit := autoDownloadBytes[s.AutoDownloadLimit]
-	return s.AutoDownload && (limit == 0 || size <= limit)
+	return s.AutoDownload && (limit == 0 || (size > 0 && size <= limit))
 }
 
 // Update is a partial change. A nil field stays as it is.

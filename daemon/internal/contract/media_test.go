@@ -26,7 +26,7 @@ func startWithImage(t *testing.T, r *runner) {
 	r.nextFrame() // linked
 	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
 		ID: "m1", Sender: mediaChat, Time: 5,
-		Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Key: make([]byte, 32)},
+		Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Size: 6, Key: make([]byte, 32)},
 	}})
 	for _, want := range []string{`"downloading"`, "chatsChanged", `"ready"`} {
 		if f := r.nextFrame(); !strings.Contains(f, want) {
@@ -209,7 +209,7 @@ func TestListedImageWithoutAnyThumbnailDownloads(t *testing.T) {
 	r.nextFrame() // ready
 	r.nextFrame() // linked
 	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: mediaChat, LastActive: 5, Messages: []whatsapp.Message{
-		{ID: "i1", Sender: mediaChat, Time: 5, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Key: make([]byte, 32)}},
+		{ID: "i1", Sender: mediaChat, Time: 5, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Size: 6, Key: make([]byte, 32)}},
 		{ID: "d1", Sender: mediaChat, Time: 6, Media: &whatsapp.Media{Kind: media.Document, Mime: "application/pdf", Key: make([]byte, 32)}},
 	}}}})
 	r.nextFrame() // chatsChanged

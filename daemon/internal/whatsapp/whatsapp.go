@@ -55,8 +55,9 @@ type Port interface {
 	// sender is the author of the Message ("" for the user). It returns ErrOffline when there is no connection.
 	React(chat, id, sender, emoji string) error
 	// Download downloads the plain Media into dst, and checks it against its hashes.
+	// It fails with ErrDownloadTooLarge when it would write more than limit bytes (see DownloadCap).
 	// It can block for a long time: call it off the Daemon loop.
-	Download(ref Media, dst *os.File) error
+	Download(ref Media, dst *os.File, limit int64) error
 	// DownloadThumbnail downloads the separate thumbnail of Media (ThumbDirectPath), and checks it against its hashes.
 	DownloadThumbnail(ref Media) ([]byte, error)
 	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.

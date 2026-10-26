@@ -22,6 +22,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - A member of a group could write a line of JSON into the stream the Plugin reads. A short group Message made libsignal print its raw bytes to stdout. The Plugin then treated that line as a frame. Now only the frame encoder writes to the stdout of the Daemon. The Daemon discards all libsignal log lines.
 - A sender can no longer crash the Daemon with a large "separate thumbnail" link. The Daemon stops a thumbnail download at 256 KiB, times it out after 30 seconds, and runs at most three at once. It drops a larger thumbnail, also an inline one, and does not fetch an oversized link again. An update removes oversized thumbnails that chat.db already holds.
 - A sender can no longer crash or stall the Daemon with a long mention list. The Daemon now keeps at most 256 different mentions per Message, and only those whose `@<number>` is in the text. It also replaces names in the text in one pass, so a push name that holds `@<number>` cannot grow the text. Before, one small Message could exhaust the memory of the Daemon.
+- The auto-download size limit now holds even when a sender misstates the file size. A file of unknown size (0, or too large to count) now waits for a click, unless the limit is `any`. Every download, automatic or by click, stops and fails once it writes more than the declared size plus encryption overhead, and never more than 2 GiB. At most three files download at once.
 
 ## [1.0.1] - 2026-10-26
 
