@@ -12,8 +12,8 @@ import (
 
 const (
 	colGroup = "g@g.us"
-	annJID      = "1@s.whatsapp.net"
-	bobJID      = "2@s.whatsapp.net"
+	annJID   = "1@s.whatsapp.net"
+	bobJID   = "2@s.whatsapp.net"
 )
 
 func live(t *testing.T, s *chatstore.Store, m whatsapp.Message) bool {
