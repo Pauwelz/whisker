@@ -2,6 +2,8 @@ module github.com/Pauwelz/whisker/daemon
 
 go 1.26.0
 
+toolchain go1.27.3
+
 require (
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/ncruces/go-sqlite3 v0.35.6

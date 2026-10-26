@@ -34,6 +34,9 @@ omarchy plugin add https://github.com/Pauwelz/whisker   # install
 omarchy plugin remove pauwelz.whisker                    # remove whisker and its background program
 ```
 
+Choose **Log out** in the pop-out before you run `omarchy plugin remove`. A leftover or backed-up Profile stays a working WhatsApp login.
+If you skipped Log out, or it could not reach WhatsApp, remove "whisker (hostname)" under **Settings → Linked devices** on your phone.
+
 ## First run
 
 1. Click the whisker icon in the bar.
@@ -66,7 +69,7 @@ The media folder shows how many media files each chat has and their sizes. It sh
 
 A pasted image waits in `$XDG_RUNTIME_DIR/whisker/pasted` (in memory) until you send or remove it.
 
-Log out in the pop-out deletes the Profile and the key. It keeps your settings. `omarchy plugin remove` does not delete any of these.
+Log out in the pop-out also unlinks the device from WhatsApp, and deletes the Profile and the key. It keeps your settings. `omarchy plugin remove` does not delete any of these.
 To delete everything by hand, remove both folders and the keyring item.
 
 The key protects the stores only as well as your keyring. Set a password on the default keyring. Without one, a person with a copy of your files can read the key.

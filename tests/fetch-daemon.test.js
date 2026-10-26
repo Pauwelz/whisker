@@ -60,3 +60,21 @@ test("a changed byte exits 23 and leaves no binary or temp file", () => {
   assert.equal(fs.existsSync(r.bin), false);
   assert.deepEqual(fs.readdirSync(path.dirname(r.bin)), []);
 });
+
+test("WHISKER_RELEASE_URL does not allow plain http", async () => {
+  const http = require("node:http");
+  const { spawn } = require("node:child_process");
+  const server = http.createServer((_, res) => res.end(BODY));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "whisker-fetch-"));
+  fs.mkdirSync(path.join(dir, "scripts"));
+  for (const script of ["fetch-daemon.sh", "manifest-version.sh"])
+    fs.copyFileSync(path.join(__dirname, "..", "scripts", script), path.join(dir, "scripts", script));
+  fs.writeFileSync(path.join(dir, "manifest.json"), '{\n  "version": "1.2.3"\n}');
+  fs.writeFileSync(path.join(dir, "SHA256SUMS"), goodSums);
+  const env = { ...process.env, WHISKER_RELEASE_URL: `http://127.0.0.1:${server.address().port}` };
+  const status = await new Promise((resolve) =>
+    spawn("sh", [path.join(dir, "scripts", "fetch-daemon.sh")], { env }).on("close", resolve));
+  server.close();
+  assert.equal(status, 22);
+});

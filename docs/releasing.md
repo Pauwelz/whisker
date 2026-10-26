@@ -108,3 +108,5 @@ Use these steps only when the workflow cannot run.
    ```
 
 `SHA256SUMS` has one line per architecture. v1 has only `linux/amd64`.
+
+`scripts/build-daemon.sh` now builds with `-trimpath`, and `daemon/go.mod` pins the toolchain. The binary hash then differs from earlier releases. The next release must regenerate `SHA256SUMS` from a new build.

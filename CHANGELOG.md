@@ -13,12 +13,14 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- The README now says to Log out before `omarchy plugin remove`. The docs now say that a mention comes from the sender's mention list, that the store key crosses the session bus, and how sent Media is stored.
 - The README and the architecture now say that Omarchy keeps the text of each notification in plain text for up to 24 h, also after the message is revoked, deleted or expires. Turn Show preview off to keep message text out of that history.
 - The README now explains what whisker does, what it needs, how to link your phone and which dependencies it uses. It also states that whisker is unofficial and not affiliated with WhatsApp or Meta.
 - The plugin description in Omarchy is longer and names whatsmeow. The bar widget description is "WhatsApp chats in a pop-out".
 
 ### Security
 
+- The Release workflow now pins `actions/checkout`, `actions/setup-go` and `actions/setup-node` to commit SHAs. `daemon/go.mod` pins Go 1.27.3, and `scripts/build-daemon.sh` builds with `-trimpath`. `scripts/fetch-daemon.sh` ignores `~/.curlrc`, allows only https (and `file://` when `WHISKER_RELEASE_URL` is set), and refuses a file over 100 MB.
 - A click on a notification no longer puts the Chat id in a process argument. Before, the click command was `omarchy-shell pauwelz.whisker openChat <chat id>`, so other local users could read the phone number or group id in `/proc`. Omarchy also saved it in its notification history for up to 24 h. Now the command holds a random token, and the Daemon looks up the Chat. After a Daemon restart, an old notification opens the Chat list. The architecture now lists what whisker still passes in arguments: the path of a plain Media copy and the URL of a map link.
 - Settings now shows a notice when the keyring that holds the store key has no password, because then a copy of your files holds the key. The README and the architecture notes now say what the store encryption protects in that case.
 - whisker now shows when a contact's security code changes and when a new device joins your account. A change of a contact's key shows "Security code changed" in the Direct Chat, once for a repeat, without a notification or unread count. At each connection the Daemon reads your own device list. A device that was not in the earlier list shows "A new device was linked to your account" in your own Direct Chat. The first list after an update only fills the stored set. whatsmeow still accepts a changed key without asking and does not check signed device lists, so the Companion Device trusts the WhatsApp server. The architecture now says so.

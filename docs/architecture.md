@@ -72,10 +72,12 @@ The scheme covers the device store, the chat store and the Media. Profile Settin
 1. **SQLite stores.** `ncruces/go-sqlite3` with the `adiantum` VFS, in pure Go. The main file, the WAL and the journal are encrypted. Both stores use the same key. SQLCipher is out, because it needs cgo.
 2. **Known limit.** The encryption gives confidentiality only. It does not detect tampering or rollback.
 3. **Key.** The Daemon makes one random 32-byte store key per Profile on first start. It keeps the key in the Secret Service through `go-keyring`, base64-encoded. whisker never writes the key to disk itself. The Secret Service provider decides how it stores the key ([research](research/go-keyring.md)).
-4. **No keyring or locked keyring.** The Daemon waits at most about 30 s. `go-keyring` has no timeout, so the Daemon sets its own. Then it sends a "keyring unavailable" state to the Plugin, with a Retry action. There is no plain-file or key-file fallback.
+4. **No keyring or locked keyring.** The Daemon waits at most about 30 s. `go-keyring` has no timeout, so the Daemon sets its own. Then it sends a "keyring unavailable" state to the Plugin, with a Retry action. There is no plain-file or key-file fallback for the store key. The Daemon reads the default keyring file only to detect a plain one (`keystore.PlainKeyring`, see Threat boundary).
 5. **Lost key.** The Daemon deletes the unreadable Profile and starts linking again. There is no recovery code.
 6. **Media at rest.** The Profile keeps Media in WhatsApp's CDN format: AES-256-CBC with a truncated HMAC-SHA256. The HMAC detects tampering. The `mediaKey` of each Media lives in the chat store.
-   - Sent Media: the Daemon keeps the `tempFile` that `UploadReader` encrypts into.
+   - Sent Media: the Daemon encrypts the picked file into the Profile under its own random `mediaKey`, in CDN format.
+     Each upload attempt decrypts a plain copy into `$XDG_RUNTIME_DIR/whisker/media/upload/`. The Daemon removes it when the attempt ends, and wipes the folder at start and at exit.
+     whatsmeow encrypts that copy again under a fresh key, which is the key WhatsApp knows. The Daemon does not keep that key.
    - Received Media: whatsmeow downloads the plaintext into `$XDG_RUNTIME_DIR/whisker/media/`. The Daemon encrypts it again into the Profile with `cbcutil.EncryptStream` and the same `mediaKey`.
 7. **Media on request.** The Daemon copies the file to `$XDG_RUNTIME_DIR/whisker/media/` (tmpfs, mode `0700`). It checks the HMAC and decrypts the copy in place with `cbcutil.DecryptFile`. It gives the path to the Plugin.
    - The Daemon deletes the plain copy when the Chat closes. It wipes the folder at Daemon start, before it needs the store key, and at exit, also when the Profile never opened. A hard kill (SIGKILL) skips the exit wipe, so copies stay until the next Daemon start. The pasted images of Drafts are in a different folder and stay.
@@ -86,6 +88,8 @@ The scheme covers the device store, the chat store and the Media. Profile Settin
 ### Threat boundary
 
 A `0600` file is readable by every process of the same user. A key in the Secret Service is too. The encryption keeps the stores and Media away from indexers, backup or sync tools and sandboxed apps. It does not keep them from a hostile native process of the same user.
+
+The Daemon reads the store key through go-keyring, which opens a 'plain' Secret Service session. The key then crosses the session bus in clear text, and a bus monitor of the same user can read it.
 
 Other local users can read the arguments of every process (`/proc/<pid>/cmdline`, because `/proc` has no `hidepid`). So whisker never passes message text, names or Chat ids as arguments to show a notification. The Daemon shows notifications itself over D-Bus (section 4). The click command of a notification holds an opaque token, not the Chat id (`notification.open` in `docs/contract.md`). Two places still put data in arguments: whisker passes the path of a plain Media copy to mpv or `xdg-open` (the names are opaque keyed hashes), and it passes the URL of a map link to `xdg-open`, which hands it to the browser. The coordinates in that URL then stay in the browser arguments. Nothing else goes into arguments.
 
