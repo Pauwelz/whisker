@@ -89,12 +89,17 @@ function canOpenMedia(message) {
   return !!message.media && message.media.state === MEDIA_STATE.READY
 }
 
-// The command that opens a plain copy: video in mpv, a GIF in mpv on a loop, a voice note in mpv without a window,
+// mpv detects a playlist by content, so a sender could make it fetch a URL. These flags make mpv read the file as media
+// and only from disk.
+var MPV_LOCAL_ONLY = ["--demuxer=lavf", "--demuxer-lavf-o=protocol_whitelist=file", "--ytdl=no", "--"]
+
+// The command that opens a plain copy: video in mpv, a GIF in mpv on a loop, a voice note or audio in mpv without a window,
 // everything else in the default app.
 function openCommand(message, path) {
-  if (message.media.kind === "voice") return ["mpv", "--no-video", path]
-  if (message.media.gif) return ["mpv", "--loop", path]
-  return message.media.kind === "video" ? ["mpv", path] : ["xdg-open", path]
+  var kind = message.media.kind
+  var flag = kind === "voice" || kind === "audio" ? ["--no-video"] : message.media.gif ? ["--loop"] : []
+  if (flag.length === 0 && kind !== "video") return ["xdg-open", path]
+  return ["mpv"].concat(flag, MPV_LOCAL_ONLY, [path])
 }
 
 // Voice notes play in the pop-out. `playingKey` is the mediaKey of the note that plays now, or "".
@@ -210,7 +215,7 @@ function fileBadge(m) {
   if (md.kind === "image") return "IMG"
   if (md.kind === "video") return md.gif ? "GIF" : "VID"
   if (md.kind !== "document" && md.kind !== "audio") return ""
-  var ext = /\.([A-Za-z0-9]{1,5})$/.exec(md.name || "")
+  var ext = /\.([^.]+)$/.exec(md.name || "")
   if (ext) return ext[1].toUpperCase()
   return MIME_BADGES[String(md.mime).split(";")[0]] || (md.kind === "audio" ? "AUDIO" : "FILE")
 }

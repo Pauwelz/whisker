@@ -26,6 +26,9 @@ test("a video that is not downloaded is blurred", () => {
 test("chips without a thumbnail show a file-type badge", () => {
   assert.equal(Media.fileBadge(media("document", "none", { name: "report.pdf" })), "PDF");
   assert.equal(Media.fileBadge(media("document", "none", { name: "a.tar.gz" })), "GZ");
+  assert.equal(Media.fileBadge(media("document", "none", { name: "invoice.desktop", mime: "application/pdf" })), "DESKTOP");
+  assert.equal(Media.fileBadge(media("document", "none", { name: "a.longext1", mime: "application/pdf" })), "LONGEXT1");
+  assert.equal(Media.fileBadge(media("document", "none", { name: "README", mime: "application/pdf" })), "PDF");
   assert.equal(Media.fileBadge(media("document", "none", { mime: "application/pdf" })), "PDF");
   assert.equal(Media.fileBadge(media("audio", "none", { mime: "audio/mpeg" })), "MP3");
   assert.equal(Media.fileBadge(media("audio", "none", { mime: "audio/x-weird" })), "AUDIO");

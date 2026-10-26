@@ -221,7 +221,7 @@ Item {
     send(Media.playedRequest, message)
   }
 
-  // voice in mpv without a window, video in mpv, the rest in the default app
+  // voice in mpv without a window, audio and video in mpv, the rest in the default app
   function launch(message, path) {
     if (Media.isVoice(message)) {
       playVoice(message, path)
