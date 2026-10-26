@@ -75,7 +75,14 @@ func TestIncomingReactionsAreChecked(t *testing.T) {
 		{"default emoji", "m1", "👍", true},
 		{"removal", "m1", "", true},
 		{"free text", "m1", "VERIFIED by the bank", false},
-		{"emoji outside the picker", "m1", "🔥", false},
+		{"emoji outside the picker", "m1", "🔥", true},
+		{"emoji with a skin tone", "m1", "👍🏽", true},
+		{"ZWJ family", "m1", "👨‍👩‍👧‍👦", true},
+		{"flag", "m1", "🇳🇱", true},
+		{"keycap", "m1", "1️⃣", true},
+		{"text with an emoji", "m1", "ok👍", false},
+		{"digit without keycap", "m1", "1", false},
+		{"too long", "m1", "👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍👍", false},
 		{"reserved target", reservedID, "👍", false},
 	} {
 		c := systemClient()
@@ -100,13 +107,13 @@ func TestHistorySyncDropsReservedIDsAndBadReactions(t *testing.T) {
 	}
 	batch, _ := c.historySync(&waHistorySync.HistorySync{Conversations: []*waHistorySync.Conversation{{
 		ID:       proto.String("3201@s.whatsapp.net"),
-		Messages: []*waHistorySync.HistorySyncMsg{msg(reservedID), msg("m1", react("👍"), react("fake label"), react(""))},
+		Messages: []*waHistorySync.HistorySyncMsg{msg(reservedID), msg("m1", react("👍"), react("🔥"), react("fake label"), react(""))},
 	}}})
 	got := batch.Chats[0].Messages
 	if len(got) != 1 || got[0].ID != "m1" {
 		t.Fatalf("Messages = %+v, want only m1", got)
 	}
-	if len(got[0].Reactions) != 1 || got[0].Reactions[0].Emoji != "👍" {
-		t.Errorf("Reactions = %+v, want only 👍", got[0].Reactions)
+	if len(got[0].Reactions) != 2 || got[0].Reactions[0].Emoji != "👍" || got[0].Reactions[1].Emoji != "🔥" {
+		t.Errorf("Reactions = %+v, want 👍 and 🔥", got[0].Reactions)
 	}
 }

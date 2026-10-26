@@ -471,7 +471,7 @@ Params: `chat`, `id` and `emoji`. Valid once the Daemon is `ready` and linked. T
 
 A Participant has one Reaction per Message, so a new `emoji` replaces the old one. The Message can be anyone's, but not a Tombstone. The Daemon sends the Reaction to WhatsApp, stores it, answers `{"message": {...}}` and sends `messageChanged`.
 
-A Reaction from another device or another Participant arrives as `messageChanged` too. The Daemon drops an incoming Reaction with an emoji outside the six defaults, live and in History Sync. A Reaction on an unknown Message sends nothing. Error -32006 means an unknown or revoked Message or an emoji that is not allowed. Error -32007 means WhatsApp could not be reached: nothing changed. Fixtures: `chat-reaction.jsonl`, `read-reaction-quote.jsonl`.
+A Reaction from another device or another Participant arrives as `messageChanged` too. The Daemon drops an incoming Reaction whose text is not one emoji (symbols, skin tones, joined sequences, flags and keycaps, at most 16 characters), live and in History Sync. Any emoji is allowed there; only `chat.react` is limited to the six. A Reaction on an unknown Message sends nothing. Error -32006 means an unknown or revoked Message or an emoji that is not allowed. Error -32007 means WhatsApp could not be reached: nothing changed. Fixtures: `chat-reaction.jsonl`, `read-reaction-quote.jsonl`.
 
 ### `chat.markUnread`
 

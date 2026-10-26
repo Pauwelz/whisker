@@ -29,11 +29,12 @@ func (s *session) chatEdit(req *request) outcome {
 		Clock.Now().Sub(time.Unix(m.Time, 0)) > EditWindow {
 		return outcome{reply: s.storeOrInvalid(req.ID, err)}
 	}
+	at := Clock.Now().Unix() // taken before the send, which can take long: WhatsApp accepted the edit at this time
 	if err := s.port.Edit(p.Chat, p.ID, p.Text); err != nil {
 		return outcome{reply: s.whatsappFailed(req.ID, err)}
 	}
 	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) {
-		return s.chats.Edit(whatsapp.MessageEdited{Chat: p.Chat, ID: p.ID, FromMe: true, Text: p.Text, Time: Clock.Now().Unix()}, EditWindow)
+		return s.chats.Edit(whatsapp.MessageEdited{Chat: p.Chat, ID: p.ID, FromMe: true, Text: p.Text, Time: at}, EditWindow)
 	}, func() { s.clearDraft(p.Chat) })
 }
 

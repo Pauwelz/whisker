@@ -833,3 +833,11 @@ test("the keyring notice stays through later frames and ends with a new ready", 
   state = Daemon.applyFrame(state, { method: "ready", params: { keyringPlain: false } });
   assert.equal(Daemon.keyringNotice(state), "");
 });
+
+const linked = Daemon.applyFrame(Daemon.initialState(), { method: "linked" });
+test("the Offline banner shows why WhatsApp ended the session, and a connect clears it", () => {
+  let state = Daemon.applyFrame(Daemon.applyFrame(linked, { method: "connected" }), { method: "disconnected", params: { reason: "stream-replaced" } })
+  assert.match(Daemon.connectionBanner(state), /^Offline\n.*another device/)
+  assert.equal(Daemon.connectionBanner(Daemon.applyFrame(linked, { method: "disconnected" })), "Offline")
+  assert.equal(Daemon.connectionBanner(Daemon.applyFrame(state, { method: "connected" })), "")
+})

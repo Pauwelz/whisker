@@ -504,7 +504,7 @@ func (DeletedForMe) isEvent()   {}
 func (ChatCleared) isEvent()    {}
 func (ChatDeleted) isEvent()    {}
 
-// ReactionEmoji is the Reaction picker: the six default emoji of WhatsApp. A Reaction with another emoji, set by the user or by another Participant, is refused.
+// ReactionEmoji is the Reaction picker: the six default emoji of WhatsApp. The user can send only these. Incoming Reactions follow validReaction.
 var ReactionEmoji = []string{"👍", "❤️", "😂", "😮", "😢", "🙏"}
 
 // Reasons for Disconnected. whatsmeow does not reconnect after any of them. docs/contract.md mirrors this list.

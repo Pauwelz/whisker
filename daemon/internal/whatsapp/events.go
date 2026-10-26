@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
@@ -58,7 +59,7 @@ func (c *Client) handle(evt any) {
 		}
 		chat := c.chatOf(evt.Info.MessageSource)
 		if r := evt.Message.GetReactionMessage(); r != nil {
-			if ReservedID(r.GetKey().GetID()) || (r.GetText() != "" && !slices.Contains(ReactionEmoji, r.GetText())) { // empty text removes
+			if ReservedID(r.GetKey().GetID()) || !validReaction(r.GetText()) { // empty text removes
 				return
 			}
 			c.events <- Reaction{Chat: chat.String(), ID: r.GetKey().GetID(), Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
@@ -147,6 +148,37 @@ func (c *Client) handle(evt any) {
 		c.emitFlag(ReadMarker{JID: c.phone(evt.JID).String(), Unread: !evt.Action.GetRead()}, evt.FromFullSync)
 	}
 }
+
+// maxReactionRunes caps an incoming Reaction. The longest emoji sequences (ZWJ families) are about 11 runes.
+const maxReactionRunes = 16
+
+// validReaction tells that the text of an incoming Reaction is one emoji and no free text. Empty text removes a Reaction and is valid.
+// It accepts symbols (unicode.So), skin tones, ZWJ, variation selector, tag characters, regional indicators and keycaps.
+// shortcut: it does not check that the runes form a real emoji, so "©©©" passes; upgrade with an emoji table if that matters.
+func validReaction(text string) bool {
+	runes := []rune(text)
+	if len(runes) > maxReactionRunes {
+		return false
+	}
+	for i, r := range runes {
+		switch {
+		case unicode.Is(unicode.So, r), r >= 0x1F3FB && r <= 0x1F3FF, r == 0x200D, r == 0xFE0F, r >= 0xE0020 && r <= 0xE007F, r >= 0x1F1E6 && r <= 0x1F1FF:
+		case r == 0x20E3: // keycap: [0-9#*] FE0F? 20E3
+			if i == 0 || (runes[i-1] != 0xFE0F && !isKeycapBase(runes[i-1])) {
+				return false
+			}
+		case isKeycapBase(r):
+			if i+1 >= len(runes) || (runes[i+1] != 0xFE0F && runes[i+1] != 0x20E3) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isKeycapBase(r rune) bool { return (r >= '0' && r <= '9') || r == '#' || r == '*' }
 
 // emitOwnDevices reads the device list of the user's own account. whatsmeow sends no event when it changes.
 // It runs off the event loop: the call can block.
@@ -466,7 +498,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 func historyReactions(rs []*waWeb.Reaction, phone func(string) string) []HistoryReaction {
 	var out []HistoryReaction
 	for _, r := range rs {
-		if !slices.Contains(ReactionEmoji, r.GetText()) { // also drops the empty text of a removed Reaction
+		if r.GetText() == "" || !validReaction(r.GetText()) { // the empty text of a removed Reaction is no entry
 			continue
 		}
 		key := r.GetKey()
