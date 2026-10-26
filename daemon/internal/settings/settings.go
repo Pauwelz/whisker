@@ -74,6 +74,11 @@ func Defaults() Settings {
 	return Settings{ReadReceipts: ReadReceiptsOnOpen, SendOnline: true, SendTyping: true, Notifications: true, NotificationPreview: true, AutoDownload: true, AutoDownloadLimit: AutoDownloadLimit5MB}
 }
 
+// mostPrivate returns the settings that share the least. They replace a file that does not parse.
+func mostPrivate() Settings {
+	return Settings{ReadReceipts: ReadReceiptsOff, Notifications: true, AutoDownloadLimit: AutoDownloadLimit5MB}
+}
+
 func validMode(m string) bool {
 	return m == ReadReceiptsOff || m == ReadReceiptsOnOpen || m == ReadReceiptsOnInteraction
 }
@@ -100,7 +105,10 @@ func (s *Store) Set(u Update) (Settings, error) {
 	defer s.mu.Unlock()
 	cur, err := s.load()
 	// A file that does not parse is replaced, so the user can repair it from the Plugin.
-	if err != nil && !errors.Is(err, errBroken) {
+	// The keys the update leaves out take the most private values, not the defaults.
+	if errors.Is(err, errBroken) {
+		cur = mostPrivate()
+	} else if err != nil {
 		return cur, err
 	}
 	if u.ReadReceipts != nil {

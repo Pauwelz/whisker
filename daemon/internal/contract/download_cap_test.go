@@ -131,3 +131,24 @@ func TestFullDownloadsRunThreeAtATime(t *testing.T) {
 		t.Errorf("peak of concurrent downloads = %d, want 3 at most (and some overlap)", peak)
 	}
 }
+
+// A settings file that does not parse turns auto-download off: the image waits for a click.
+func TestNoAutoDownloadWhenSettingsDoNotParse(t *testing.T) {
+	r := newRunner(t)
+	if err := os.WriteFile(filepath.Join(r.dir, "..", "settings.json"), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.SetDownload("pixels", nil)
+	emitMedia(r, "m1", media.Image, kib)
+	if f := r.nextFrame(); !strings.Contains(f, `"state":"none"`) {
+		t.Fatalf("frame = %s, want the image waiting", f)
+	}
+	r.nextFrame() // chatsChanged
+	if n := r.port.Downloads(); n != 0 {
+		t.Errorf("downloads = %d, want 0", n)
+	}
+}

@@ -99,12 +99,14 @@ func TestSetRepairsABrokenFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	os.WriteFile(path, []byte("{"), 0o600)
 	s := settings.New(path)
-	off := false
-	if _, err := s.Set(settings.Update{SendOnline: &off}); err != nil {
+	on := true
+	if _, err := s.Set(settings.Update{Notifications: &on}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.Get(); err != nil || got.SendOnline {
-		t.Errorf("Get = %+v, %v; want the repaired file", got, err)
+	// Only the changed key is sent, so the rest must be the most private values.
+	want := settings.Settings{ReadReceipts: "off", Notifications: true, AutoDownloadLimit: "5mb"}
+	if got, err := s.Get(); err != nil || got != want {
+		t.Errorf("Get = %+v, %v; want %+v", got, err, want)
 	}
 }
 
