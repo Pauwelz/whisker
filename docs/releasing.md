@@ -46,6 +46,10 @@ If `dev` moved after the run started, this push fails and nothing is published.
 The release notes are the `[V]` section of `CHANGELOG.md`.
 A V with a pre-release part, such as `1.0.0-rc.1`, becomes a pre-release and does not move `main`.
 
+The pushes use the repository secret `RELEASE_TOKEN`: a fine-grained personal access token for this repository only, with **Contents: Read and write**.
+GitHub does not close issues on a push with the workflow token, so without the secret the issues that "Closes #N" lines name stay open.
+The release itself is published with the workflow token. When the token expires, make a new one and replace the secret.
+
 ## Manual release steps
 
 Use these steps only when the workflow cannot run.

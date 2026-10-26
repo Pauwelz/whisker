@@ -23,6 +23,9 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0 # the full history, so the push to main can tell that it is a fast-forward
+          # The pushes use the maintainer's token: a push with the workflow token does not close the issues
+          # that "Closes #N" lines name. Without the secret, the workflow token pushes and issues stay open.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
       - name: Check the guards
         run: |
