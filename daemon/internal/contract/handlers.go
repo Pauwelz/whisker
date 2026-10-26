@@ -159,7 +159,9 @@ func (s *session) onLine(line []byte) int {
 	} else if len(req.ID) == 0 {
 		return keepGoing // a notification gets no reply
 	} else if h, ok := handlers[req.Method]; ok && s.available(h.when) {
+		s.current = req.ID
 		out = h.run(s, &req)
+		s.current = nil // the reply may be sent later; a panic in `then` is not a failed request
 	} else {
 		out.reply = errorReply(req.ID, errMethodNotFound, msgMethodNotFound)
 	}

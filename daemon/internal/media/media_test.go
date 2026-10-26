@@ -378,3 +378,34 @@ func TestEmptyNamesAreRefused(t *testing.T) {
 		t.Errorf("files = %v, want the one file to stay", m)
 	}
 }
+
+func TestExportReplacesASymlinkAndSetsMode0600(t *testing.T) {
+	s, _, _ := newStore(t)
+	if err := s.Put("c", "m", media.Document, key, strings.NewReader("data")); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	os.WriteFile(victim, []byte("keep"), 0o644)
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(victim, link); err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(dir, "old")
+	os.WriteFile(old, []byte("old"), 0o644)
+	for _, dst := range []string{link, old} {
+		if err := s.Export("c", "m", media.Document, key, dst); err != nil {
+			t.Fatal(err)
+		}
+		st, _ := os.Lstat(dst)
+		if st.Mode()&os.ModeSymlink != 0 || st.Mode().Perm() != 0o600 {
+			t.Errorf("%s mode = %v", dst, st.Mode())
+		}
+		if got, _ := os.ReadFile(dst); string(got) != "data" {
+			t.Errorf("%s = %q", dst, got)
+		}
+	}
+	if got, _ := os.ReadFile(victim); string(got) != "keep" {
+		t.Errorf("Export followed the symlink: victim = %q", got)
+	}
+}
