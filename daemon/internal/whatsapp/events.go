@@ -162,6 +162,8 @@ func validReaction(text string) bool {
 	}
 	for i, r := range runes {
 		switch {
+		case r >= 0x2460 && r <= 0x24FF, r >= 0x1F100 && r <= 0x1F1E5, r >= 0x2800 && r <= 0x28FF: // enclosed letters and Braille spell words
+			return false
 		case unicode.Is(unicode.So, r), r >= 0x1F3FB && r <= 0x1F3FF, r == 0x200D, r == 0xFE0F, r >= 0xE0020 && r <= 0xE007F, r >= 0x1F1E6 && r <= 0x1F1FF:
 		case r == 0x20E3: // keycap: [0-9#*] FE0F? 20E3
 			if i == 0 || (runes[i-1] != 0xFE0F && !isKeycapBase(runes[i-1])) {
