@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -15,7 +16,7 @@ import (
 // Notification is what the user sees. A click on it opens the pop-out on Chat.
 type Notification struct {
 	Summary string
-	Body    string // never parsed as options; Omarchy still renders it as markup (#87)
+	Body    string // never parsed as options; the D-Bus call neutralises it, as Omarchy renders markup
 	Chat    string // the Chat id
 }
 
@@ -58,8 +59,14 @@ func call(n Notification) error {
 	defer cancel()
 	return conn.Object("org.freedesktop.Notifications", "/org/freedesktop/Notifications").CallWithContext(ctx,
 		"org.freedesktop.Notifications.Notify", 0,
-		appName, uint32(0), "", n.Summary, n.Body, []string{}, h, int32(-1)).Err
+		appName, uint32(0), "", neutralise(n.Summary), neutralise(n.Body), []string{}, h, int32(-1)).Err
 }
+
+// neutraliser stops Omarchy from reading text as markup. It decodes entities up to 3 times,
+// restores tags and links, and linkifies bare URLs. A zero-width space breaks each trigger.
+var neutraliser = strings.NewReplacer("<", "<\u200b", "&", "&\u200b", "://", ":/\u200b/")
+
+func neutralise(s string) string { return neutraliser.Replace(s) }
 
 // hints makes the click command: `omarchy-shell pauwelz.whisker openChat <chat>`, one argv word each.
 func hints(n Notification) (map[string]dbus.Variant, error) {
