@@ -19,6 +19,9 @@ func (s *session) draftGet(req *request) outcome {
 		fmt.Fprintln(s.logOut, "draft read failed")
 		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
 	}
+	for _, path := range d.Attachments {
+		delete(s.pastedPending, path) // the Plugin shows this image now
+	}
 	d.Quote = liveTarget(s.chats, chat, d.Quote)
 	d.Edit = liveTarget(s.chats, chat, d.Edit)
 	return outcome{reply: resultReply(req.ID, map[string]any{"chat": chat, "draft": d, "unsendable": unsendable(d.Attachments)})}
@@ -82,8 +85,11 @@ func (s *session) draftSet(req *request) outcome {
 		fmt.Fprintln(s.logOut, "draft write failed")
 		return outcome{reply: errorReply(req.ID, errChatStore, msgChatStore)}
 	}
+	for _, path := range d.Attachments {
+		delete(s.pastedPending, path) // the Plugin knows this image now
+	}
 	for _, path := range old.Attachments {
-		if !slices.Contains(d.Attachments, path) {
+		if !slices.Contains(d.Attachments, path) && !s.pastedPending[path] { // a pending image stays: the reply to the Plugin is on its way
 			dropPasted(path) // removed, or dropped for a Quote or an Edit
 		}
 	}

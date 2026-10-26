@@ -37,16 +37,18 @@ func exitIf(ok bool) int {
 // session is the state of one Run. It lives on the Daemon loop; only the sends and downloads run on other goroutines.
 // The fields below `ready` are nil until the Profile is open, and nil again after an unlink.
 type session struct {
-	profile   Profile
-	prefs     *settings.Store
-	newPort   NewPort
-	desktop   desktop.Notifier
-	send      func(map[string]any) bool
-	logOut    io.Writer
-	attn      attention.Attention // the pop-out state: it outlives the Profile, so a new link keeps it
-	noWlPaste bool                // wl-paste is missing; the Daemon logged it once
-	pasteDone chan pasteResult    // the results of the clipboard reads of draft.paste
-	current   json.RawMessage     // the id of the request in progress; guard answers it after a panic
+	profile       Profile
+	prefs         *settings.Store
+	newPort       NewPort
+	desktop       desktop.Notifier
+	send          func(map[string]any) bool
+	logOut        io.Writer
+	attn          attention.Attention // the pop-out state: it outlives the Profile, so a new link keeps it
+	noWlPaste     bool                // wl-paste is missing; the Daemon logged it once
+	pastedPending map[string]bool     // pasted images that pasted() stored and no draft.set lists yet: draft.set keeps their files
+	pasteBusy     bool                // a clipboard read of draft.paste runs
+	pasteDone     chan pasteResult    // the results of the clipboard reads of draft.paste
+	current       json.RawMessage     // the id of the request in progress; guard answers it after a panic
 
 	ready            bool
 	port             whatsapp.Port
@@ -156,6 +158,7 @@ func (s *session) unlink(by string) int {
 	s.wipeMedia()
 	dropAllPasted() // the Drafts go with the Profile
 	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader, s.hist = false, nil, nil, nil, nil, nil, nil, nil, nil, nil
+	s.pastedPending = nil
 	s.sent, s.participantsDone, s.mediaDone, s.historyEnded, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, nil, nil, 0
 	s.attn.Set(s.attn.Open(), "") // the Chat is gone with the Profile
 	if err := s.profile.Delete(); err != nil {

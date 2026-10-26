@@ -264,3 +264,102 @@ func TestSlowClipboardDoesNotBlockOtherRequests(t *testing.T) {
 		t.Errorf("second frame = %s, want the late reply to draft.paste", f)
 	}
 }
+
+func TestPastedImageIsStoredInTheDraftOfTheReplyChat(t *testing.T) {
+	fakeClipboard(t, imageScript)
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "1@s.whatsapp.net", LastActive: 1}}})
+	r.nextFrame() // chatsChanged
+	path := pastedPath(t, r, 1)
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"attachments":[`+mustJSON(path)+`]`) {
+		t.Errorf("frame = %s, want the pasted image in the stored Draft", f)
+	}
+	r.finish()
+}
+
+func TestPasteOfFilesAndTextAsksTheUser(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "a.pdf")
+	if err := os.WriteFile(file, []byte("pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := `case "$2" in text/uri-list) printf 'file://` + file + `\r\n';; *) printf 'some words';; esac`
+	fakeClipboard(t, `if [ "$1" = --list-types ]; then printf 'text/uri-list\ntext/plain\n'; else `+script+`; fi`)
+	if f, _ := paste(t); !strings.Contains(f, `"alsoText":true`) || !strings.Contains(f, mustJSON(file)) {
+		t.Errorf("frame = %s, want the file and alsoText", f)
+	}
+	// The file list as text is no text.
+	fakeClipboard(t, uriScript("file://"+file+"\\n"))
+	if f, _ := paste(t); strings.Contains(f, "alsoText") {
+		t.Errorf("frame = %s, want no alsoText", f)
+	}
+}
+
+func TestPasteReadsOutputOnlyUpToTheLimit(t *testing.T) {
+	fakeClipboard(t, `exec cat /dev/zero`)
+	start := time.Now()
+	if f, _ := paste(t); !strings.Contains(f, `"pasted":[]`) {
+		t.Errorf("frame = %s, want a text paste", f)
+	}
+	if time.Since(start) > time.Second {
+		t.Error("the read ran to the timeout instead of stopping at the limit")
+	}
+}
+
+func TestSecondPasteWhileOneRunsPastesText(t *testing.T) {
+	fakeClipboard(t, `/usr/bin/sleep 1; printf 'text/plain\n'`)
+	r := newRunner(t)
+	r.start()
+	r.nextFrame() // ready
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"draft.paste","params":{"chat":"a@s.whatsapp.net"}}`)
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"draft.paste","params":{"chat":"a@s.whatsapp.net"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"id":2`) || !strings.Contains(f, `"pasted":[]`) {
+		t.Errorf("first frame = %s, want the at-once reply to the second paste", f)
+	}
+	r.finish()
+}
+
+func TestDraftSetBeforeThePasteReplyKeepsThePastedImage(t *testing.T) {
+	fakeClipboard(t, imageScript)
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "1@s.whatsapp.net", LastActive: 1}}})
+	r.nextFrame() // chatsChanged
+	path := pastedPath(t, r, 1)
+	setAttachments(t, r, 2, nil) // a keystroke whose draft.set left before the Plugin saw the reply
+	if !exists(path) {
+		t.Fatal("draft.set deleted the pasted image before the Plugin knew it")
+	}
+	setAttachments(t, r, 3, []string{path}) // the Plugin adds it
+	setAttachments(t, r, 4, nil)            // the user removes it
+	if exists(path) {
+		t.Error("a removed pasted image stays")
+	}
+	r.finish()
+}
+
+func TestDraftGetAfterAMissedPasteReplyLetsTheUserRemoveTheImage(t *testing.T) {
+	fakeClipboard(t, imageScript)
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: "1@s.whatsapp.net", LastActive: 1}}})
+	r.nextFrame()               // chatsChanged
+	path := pastedPath(t, r, 1) // the Plugin dropped this reply: the user left the Chat
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}`)
+	r.nextFrame()
+	setAttachments(t, r, 3, nil)
+	if exists(path) {
+		t.Error("a pasted image that the user removed stays")
+	}
+	r.finish()
+}

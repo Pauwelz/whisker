@@ -157,6 +157,7 @@ func (s *session) chatSendMedia(req *request) outcome {
 		sent = append(sent, m)
 	}
 	for _, path := range p.Paths {
+		delete(s.pastedPending, path)
 		dropPasted(path) // the Media store holds the encrypted copies now
 	}
 	return s.sentOutcome(p.Chat, resultReply(req.ID, map[string]any{"sent": sent}), sent)
