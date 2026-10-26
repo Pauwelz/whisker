@@ -63,7 +63,7 @@ func TestAQuoteFollowsTheStoredMessage(t *testing.T) {
 	if q := quoteOf(t, s, "r"); !q.Verified || q.Text != "real" {
 		t.Errorf("Quote = %+v, want verified with the stored text", q)
 	}
-	if _, err := s.Revoke(colGroup, "x"); err != nil {
+	if _, err := s.Revoke(colGroup, "x", annJID, false); err != nil {
 		t.Fatal(err)
 	}
 	if q := quoteOf(t, s, "r"); !q.Verified || !q.Revoked || q.Text != "" {
