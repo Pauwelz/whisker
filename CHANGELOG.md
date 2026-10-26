@@ -21,6 +21,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 - A far-future Mute end no longer makes the Daemon send `chatsChanged` in an endless loop. The Mute timer waits at most 24 hours and checks the end again.
 - Bad Profile Settings now fail closed. An unknown `readReceipts` value means `off`. Auto-download is off when `settings.json` cannot be read. `settings.set` repairs a file that does not parse. Settings are saved through a random temp file, so a planted symlink is not followed. Presence goes Unavailable when `settings.json` breaks while the pop-out closes.
+- Messages you read while Read Receipts are `off` no longer get a Read Receipt after you switch to `onOpen` or `onInteraction`.
 @@
 - A click on a notification no longer puts the Chat id in a process argument. Before, the click command was `omarchy-shell pauwelz.whisker openChat <chat id>`, so other local users could read the phone number or group id in `/proc`. Omarchy also saved it in its notification history for up to 24 h. Now the command holds a random token, and the Daemon looks up the Chat. After a Daemon restart, an old notification opens the Chat list. The architecture now lists what whisker still passes in arguments: the path of a plain Media copy and the URL of a map link.
 - Settings now shows a notice when the keyring that holds the store key has no password, because then a copy of your files holds the key. The README and the architecture notes now say what the store encryption protects in that case.
