@@ -6,13 +6,13 @@
 {"dir":"whatsapp","event":{"kind":"connected"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
 {"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
-{"dir":"file","path":"$RUNTIME/src/photo.png","content":"pix","write":true}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look","attachments":["$RUNTIME/src/photo.png"]}}}
+{"dir":"file","path":"$RUNTIME/src/photo.webp","content":"RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx","write":true}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look","attachments":["$RUNTIME/src/photo.webp"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{}}}
-{"dir":"file","path":"$RUNTIME/src/photo.png","remove":true}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look more","attachments":["$RUNTIME/src/photo.png"]}}}
+{"dir":"file","path":"$RUNTIME/src/photo.webp","remove":true}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look more","attachments":["$RUNTIME/src/photo.webp"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"look more","quote":"","edit":"","attachments":["$RUNTIME/src/photo.png"]},"unsendable":["$RUNTIME/src/photo.png"]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"look more","quote":"","edit":"","attachments":["$RUNTIME/src/photo.webp"]},"unsendable":["$RUNTIME/src/photo.webp"]}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","attachments":["$RUNTIME/src"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"error":{"code":-32006,"message":"invalid message"}}}

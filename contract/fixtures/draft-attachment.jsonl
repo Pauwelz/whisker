@@ -6,15 +6,15 @@
 {"dir":"whatsapp","event":{"kind":"connected"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
 {"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
-{"dir":"file","path":"$RUNTIME/src/photo.png","content":"pix","write":true}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look","attachments":["$RUNTIME/src/photo.png"]}}}
+{"dir":"file","path":"$RUNTIME/src/photo.webp","content":"RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx","write":true}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look","attachments":["$RUNTIME/src/photo.webp"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","attachments":["relative.png"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"error":{"code":-32006,"message":"invalid message"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","attachments":["$RUNTIME/src/missing.png"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"error":{"code":-32006,"message":"invalid message"}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"look","quote":"","edit":"","attachments":["$RUNTIME/src/photo.png"]},"unsendable":[]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"look","quote":"","edit":"","attachments":["$RUNTIME/src/photo.webp"]},"unsendable":[]}}}
 {"dir":"restart"}
 {"dir":"whatsapp","linked":true}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
@@ -23,21 +23,21 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
 {"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"look","quote":"","edit":"","attachments":["$RUNTIME/src/photo.png"]},"unsendable":[]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"look","quote":"","edit":"","attachments":["$RUNTIME/src/photo.webp"]},"unsendable":[]}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"look","quote":"","edit":"","attachments":[]},"unsendable":[]}}}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look","attachments":["$RUNTIME/src/photo.png"]}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"look","attachments":["$RUNTIME/src/photo.webp"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{}}}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","caption":"look","paths":["$RUNTIME/src/photo.png"]}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"sent":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"pending","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}}]}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"sent","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}}}}}
-{"dir":"uploaded","uploads":["fake-1|image|image/png||look|pix"]}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","caption":"look","paths":["$RUNTIME/src/photo.webp"]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"sent":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"pending","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/webp","name":"","size":24,"state":"ready"}}]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"sent","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/webp","name":"","size":24,"state":"ready"}}}}}
+{"dir":"uploaded","uploads":["fake-1|image|image/webp||look|RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx"]}
 {"dir":"sent","ids":["fake-1"]}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":6,"method":"draft.get","params":{"chat":"1@s.whatsapp.net"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":6,"result":{"chat":"1@s.whatsapp.net","draft":{"text":"","quote":"","edit":"","attachments":[]},"unsendable":[]}}}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":7,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","edit":"fake-1","attachments":["$RUNTIME/src/photo.png"]}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":7,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","edit":"fake-1","attachments":["$RUNTIME/src/photo.webp"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":7,"error":{"code":-32006,"message":"invalid message"}}}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":8,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","quote":"fake-1","attachments":["$RUNTIME/src/photo.png"]}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":8,"method":"draft.set","params":{"chat":"1@s.whatsapp.net","text":"x","quote":"fake-1","attachments":["$RUNTIME/src/photo.webp"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":8,"error":{"code":-32006,"message":"invalid message"}}}

@@ -3,11 +3,11 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","subject":"","lastActive":10,"messages":[]}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
-{"dir":"file","path":"$RUNTIME/src/photo.png","content":"pix","write":true}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","paths":["$RUNTIME/src/photo.png"]}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"sent":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"pending","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}}]}}}
+{"dir":"file","path":"$RUNTIME/src/photo.webp","content":"RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx","write":true}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","paths":["$RUNTIME/src/photo.webp"]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"sent":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"pending","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/webp","name":"","size":24,"state":"ready"}}]}}}
 {"dir":"uploaded","uploads":[]}
 {"dir":"whatsapp","event":{"kind":"connected"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"sent","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}}}}}
-{"dir":"uploaded","uploads":["fake-1|image|image/png|||pix"]}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"sent","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/webp","name":"","size":24,"state":"ready"}}}}}
+{"dir":"uploaded","uploads":["fake-1|image|image/webp|||RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx"]}

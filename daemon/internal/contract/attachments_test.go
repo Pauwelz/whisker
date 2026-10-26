@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
@@ -162,6 +163,75 @@ func TestSendMediaFailingOnTheSecondCopyStoresNothingAndKeepsTheFirstPastedImage
 	r.send(`{"jsonrpc":"2.0","id":5,"method":"chat.messages","params":{"chat":"1@s.whatsapp.net"}}`)
 	if f := r.nextFrame(); !strings.Contains(f, `"messages":[]`) {
 		t.Errorf("frame = %s, want no stored Message", f)
+	}
+	r.finish()
+}
+
+// gpsJPEG is a tiny JPEG with an APP1 Exif segment that holds a GPS marker.
+func gpsJPEG() []byte {
+	exif := "Exif\x00\x00GPSLatitude"
+	app1 := append([]byte{0xFF, 0xE1, 0, byte(len(exif) + 2)}, exif...)
+	b := append([]byte{0xFF, 0xD8}, app1...)
+	return append(b, 0xFF, 0xDA, 0, 2, 1, 2, 3, 0xFF, 0xD9)
+}
+
+func writeFile(t *testing.T, name string, b []byte) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// uploadAfterConnect connects the Daemon, sends one file and returns the reply and the upload.
+func uploadAfterConnect(t *testing.T, r *runner, path string) (reply string, upload string) {
+	t.Helper()
+	r.port.Emit(whatsapp.Connected{})
+	r.nextFrame() // connected
+	sendMedia(r, 1, []string{path}, "")
+	reply = r.nextFrame()
+	for len(r.port.Uploads()) == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	return reply, r.port.Uploads()[0]
+}
+
+func TestSendMediaStripsTheGPSMarkerFromAnImage(t *testing.T) {
+	r := linkedRunner(t)
+	in := gpsJPEG()
+	reply, upload := uploadAfterConnect(t, r, writeFile(t, "a.jpg", in))
+	content := upload[strings.LastIndex(upload, "|")+1:]
+	if strings.Contains(content, "GPS") || strings.Contains(content, "Exif") {
+		t.Errorf("upload still holds metadata: %q", content)
+	}
+	if want := `"size":` + mustJSON(len(content)); !strings.Contains(reply, want) {
+		t.Errorf("reply = %s, want %s", reply, want)
+	}
+	r.finish()
+}
+
+func TestSendMediaOfABrokenImageIsRefusedAndStoresNothing(t *testing.T) {
+	r := linkedRunner(t)
+	path := writeFile(t, "bad.jpg", []byte("not a jpeg"))
+	sendMedia(r, 1, []string{path}, "")
+	want := `"error":{"code":-32013,"data":{"paths":` + mustJSON([]string{path}) + `},"message":"file not sendable"}`
+	if f := r.nextFrame(); !strings.Contains(f, want) {
+		t.Fatalf("frame = %s, want %s", f, want)
+	}
+	r.send(`{"jsonrpc":"2.0","id":3,"method":"chat.messages","params":{"chat":"1@s.whatsapp.net"}}`)
+	if f := r.nextFrame(); !strings.Contains(f, `"messages":[]`) {
+		t.Errorf("frame = %s, want no stored Message", f)
+	}
+	r.finish()
+}
+
+func TestSendMediaKeepsADocumentByteExact(t *testing.T) {
+	r := linkedRunner(t)
+	in := gpsJPEG()
+	_, upload := uploadAfterConnect(t, r, writeFile(t, "a.bin", in))
+	if !strings.Contains(upload, "|document|") || !strings.HasSuffix(upload, string(in)) {
+		t.Errorf("upload = %q, want the unchanged bytes as a document", upload)
 	}
 	r.finish()
 }

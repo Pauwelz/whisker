@@ -6,21 +6,21 @@
 {"dir":"whatsapp","event":{"kind":"connected"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"connected","params":{}}}
 {"dir":"plugin","openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct"}}
-{"dir":"file","path":"$RUNTIME/src/photo.png","content":"pix","write":true}
+{"dir":"file","path":"$RUNTIME/src/photo.webp","content":"RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx","write":true}
 {"dir":"file","path":"$RUNTIME/src/report.pdf","content":"doc","write":true}
-{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","caption":"look","paths":["$RUNTIME/src/photo.png"]}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"sent":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"pending","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}}]}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"sent","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}}}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","caption":"look","paths":["$RUNTIME/src/photo.webp"]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"sent":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"pending","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/webp","name":"","size":24,"state":"ready"}}]}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"sent","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/webp","name":"","size":24,"state":"ready"}}}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","caption":"","paths":["$RUNTIME/src/report.pdf"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"sent":[{"id":"fake-2","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"pending","edited":false,"revoked":false,"media":{"kind":"document","mime":"application/pdf","name":"report.pdf","size":3,"state":"ready"}}]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-2","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"sent","edited":false,"revoked":false,"media":{"kind":"document","mime":"application/pdf","name":"report.pdf","size":3,"state":"ready"}}}}}
-{"dir":"uploaded","uploads":["fake-1|image|image/png||look|pix","fake-2|document|application/pdf|report.pdf||doc"]}
+{"dir":"uploaded","uploads":["fake-1|image|image/webp||look|RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx","fake-2|document|application/pdf|report.pdf||doc"]}
 {"dir":"sent","ids":["fake-1","fake-2"]}
-{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"sent","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/png","name":"","size":3,"state":"ready"}},{"id":"fake-2","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"sent","edited":false,"revoked":false,"media":{"kind":"document","mime":"application/pdf","name":"report.pdf","size":3,"state":"ready"}}],"moreMessages":false}}}
+{"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"look","state":"sent","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/webp","name":"","size":24,"state":"ready"}},{"id":"fake-2","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"sent","edited":false,"revoked":false,"media":{"kind":"document","mime":"application/pdf","name":"report.pdf","size":3,"state":"ready"}}],"moreMessages":false}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","paths":["relative.png"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"error":{"code":-32013,"message":"file not sendable","data":{"paths":["relative.png"]}}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":4,"method":"chat.sendMedia","params":{"chat":"1@s.whatsapp.net","paths":["$RUNTIME/src/missing.png"]}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"error":{"code":-32013,"message":"file not sendable","data":{"paths":["$RUNTIME/src/missing.png"]}}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"fake-1"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chat":"1@s.whatsapp.net","id":"fake-1","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/fake-1.png"}}}
-{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/fake-1.png","content":"pix"}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chat":"1@s.whatsapp.net","id":"fake-1","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/fake-1.webp"}}}
+{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/fake-1.webp","content":"RIFF\u0010\u0000\u0000\u0000WEBPVP8L\u0004\u0000\u0000\u0000pixx"}
