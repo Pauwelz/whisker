@@ -280,7 +280,7 @@ func TestPutLiveWritesTheReadMarkerOnlyWhenTold(t *testing.T) {
 	live := func(chat, id string, p chatstore.LivePolicy) {
 		t.Helper()
 		ev := whatsapp.NewMessage{Chat: chat, Message: whatsapp.Message{ID: id, Sender: chat, Time: 5, Text: "hi"}}
-		if err := s.PutLive(ev, p); err != nil {
+		if _, err := s.PutLive(ev, p); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -304,7 +304,7 @@ func TestPutLiveWritesTheReadMarkerOnlyWhenTold(t *testing.T) {
 
 func TestMentionsUseTheNameRuleAndRevokeClearsThem(t *testing.T) {
 	s, _ := newStore(t)
-	if err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+	if _, err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
 		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: "@3 and @4",
 		Mentions: []string{"3@s.whatsapp.net", "4@s.whatsapp.net"}}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 		t.Fatal(err)
@@ -333,7 +333,7 @@ func history(pinned bool, muted int64, unread bool, timer int64) whatsapp.Histor
 
 func TestHistorySyncFillsFlagsOfAChatThatALiveMessageCreated(t *testing.T) {
 	s, _ := newStore(t)
-	if err := s.PutLive(whatsapp.NewMessage{Chat: syncJID, Message: whatsapp.Message{ID: "m1", Time: 5, Text: "hi"}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+	if _, err := s.PutLive(whatsapp.NewMessage{Chat: syncJID, Message: whatsapp.Message{ID: "m1", Time: 5, Text: "hi"}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 		t.Fatal(err)
 	}
 	apply(t, s, history(true, -1, true, 60))
@@ -365,7 +365,7 @@ func TestLiveFlagsSurviveALateHistorySync(t *testing.T) {
 
 func TestLiveMessageUnreadStaysOverALateHistorySync(t *testing.T) {
 	s, _ := newStore(t)
-	if err := s.PutLive(whatsapp.NewMessage{Chat: syncJID, Message: whatsapp.Message{ID: "m1", Time: 5}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone, MarkUnread: true}); err != nil {
+	if _, err := s.PutLive(whatsapp.NewMessage{Chat: syncJID, Message: whatsapp.Message{ID: "m1", Time: 5}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone, MarkUnread: true}); err != nil {
 		t.Fatal(err)
 	}
 	apply(t, s, history(false, 0, false, 0))
@@ -379,7 +379,7 @@ func TestListCountsWaitingMessagesAndFlagsMentions(t *testing.T) {
 	live := func(id string, mentionsMe bool) {
 		t.Helper()
 		ev := whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: id, Sender: "b@s.whatsapp.net", Time: 5, Text: "hi", MentionsMe: mentionsMe}}
-		if err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone, MarkUnread: true}); err != nil {
+		if _, err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone, MarkUnread: true}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -503,7 +503,7 @@ func TestALiveMessageSetsTheKindOfAChatThatAPinStored(t *testing.T) {
 	const g = "g@g.us"
 	apply(t, s, whatsapp.Pin{JID: g, Pinned: true})
 	ev := whatsapp.NewMessage{Chat: g, Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: "m1", Sender: "b@s.whatsapp.net", Time: 5, Text: "hi"}}
-	if err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+	if _, err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 		t.Fatal(err)
 	}
 	if c, err := s.Chat(g); err != nil || c.Kind != whatsapp.KindGroup {
@@ -578,7 +578,7 @@ func TestANewMessageUnarchivesOnlyWhenTheSettingIsOn(t *testing.T) {
 				apply(t, s, ev)
 			}
 			ev := whatsapp.NewMessage{Chat: "a@s.whatsapp.net", Message: whatsapp.Message{ID: "1", Sender: "a@s.whatsapp.net", Time: 5, Text: "hi"}}
-			if err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+			if _, err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 				t.Fatal(err)
 			}
 			c, err := s.Chat("a@s.whatsapp.net")
@@ -630,7 +630,7 @@ func TestApplyHistoryCountsOnlyNewMessages(t *testing.T) {
 
 func TestMentionsOfNearNumbersEachGetTheirName(t *testing.T) {
 	s, _ := newStore(t)
-	if err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+	if _, err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
 		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: "@12 and @123",
 		Mentions: []string{"12@s.whatsapp.net", "123@s.whatsapp.net"}}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 		t.Fatal(err)
@@ -648,7 +648,7 @@ func TestMentionNamesAreNotScannedAgain(t *testing.T) {
 	for i := range jids {
 		jids[i] = "2@s.whatsapp.net"
 	}
-	if err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+	if _, err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
 		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: "@2", Mentions: jids}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +670,7 @@ func TestManyStoredMentionsReadFast(t *testing.T) {
 	for text.Len() < 60000 {
 		text.WriteString("filler @ text ")
 	}
-	if err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
+	if _, err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{
 		ID: "m1", Sender: "2@s.whatsapp.net", Time: 5, Text: text.String(), Mentions: jids}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 		t.Fatal(err)
 	}

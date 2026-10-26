@@ -191,23 +191,28 @@ func (b *outbox) disconnected() bool {
 }
 
 // incomingMessage stores a new Message and tells the Plugin: the Message, the Chat list, and the desktop notification if the policy says so.
-func (b *outbox) incomingMessage(ev whatsapp.NewMessage) bool {
+// It reports whether the Message is new: a stored Message, or one with the ID of another author's Message, tells nobody.
+func (b *outbox) incomingMessage(ev whatsapp.NewMessage) (ok, isNew bool) {
 	if ev.Message.System != nil {
-		return b.systemMessage(ev)
+		return b.systemMessage(ev), false
 	}
-	if err := b.chats.PutLive(ev, livePolicy(ev, b.autoDownloads)); err != nil {
+	isNew, err := b.chats.PutLive(ev, livePolicy(ev, b.autoDownloads))
+	if err != nil {
 		fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
-		return true
+		return true, false
+	}
+	if !isNew {
+		return true, false
 	}
 	b.incoming(ev)
 	if ev.Message.FromMe && ev.Kind == whatsapp.KindGroup { // sent from another device of the user
 		b.freeze(ev.Chat, ev.Message.ID)
 	}
 	if !b.notify(ev.Chat, ev.Message.ID) {
-		return false
+		return false, true
 	}
 	b.notice(ev) // before `chatsChanged`, so a test that read the frame has seen the notification
-	return b.send(notification("chatsChanged", nil))
+	return b.send(notification("chatsChanged", nil)), true
 }
 
 // systemMessage stores a System Message and tells the Plugin. It raises no notification and no Read Receipt.

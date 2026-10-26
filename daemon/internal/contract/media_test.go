@@ -347,3 +347,27 @@ func TestOversizedThumbnailsAreDroppedAndNotRetried(t *testing.T) {
 		t.Errorf("thumbnail downloads in the new run = %d, want 0", n)
 	}
 }
+
+// A Message that reuses the ID of a stored Message of another author tells nobody and starts no download.
+func TestAReusedIDOfAnotherAuthorStartsNothing(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetDownload("pixels", nil)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{ID: "m1", Sender: mediaChat, Time: 5, Text: "real"}})
+	r.nextFrame() // messageChanged
+	r.nextFrame() // chatsChanged
+	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
+		ID: "m1", FromMe: true, Time: 6, Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Key: make([]byte, 32)},
+	}})
+	r.send(listVideoChat) // its reply proves no frame came in between
+	f := r.nextFrame()
+	if !strings.Contains(f, `"messages"`) || strings.Contains(f, `"media"`) {
+		t.Fatalf("frame = %s, want the page of the real Message and no other frame before it", f)
+	}
+	if n := r.port.Downloads(); n != 0 {
+		t.Errorf("downloads = %d, want 0", n)
+	}
+}

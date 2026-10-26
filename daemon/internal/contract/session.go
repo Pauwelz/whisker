@@ -208,8 +208,11 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 	case whatsapp.Disconnected:
 		ok = s.box.disconnected() && s.hist.disconnected()
 	case whatsapp.NewMessage:
-		ok = s.box.incomingMessage(ev)
-		s.loader.autoStart(ev)
+		var isNew bool
+		ok, isNew = s.box.incomingMessage(ev)
+		if isNew {
+			s.loader.autoStart(ev)
+		}
 	case whatsapp.MessageEdited:
 		ok = s.box.edited(ev)
 	case whatsapp.MessageRevoked:
