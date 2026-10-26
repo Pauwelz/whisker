@@ -138,12 +138,9 @@ func (s *session) connect() bool {
 	return true
 }
 
-// wipeMedia deletes the plain copies of Media. They never outlive the Daemon.
-func (s *session) wipeMedia() {
-	if s.media != nil {
-		s.media.Wipe()
-	}
-}
+// wipeMedia deletes the plain copies of Media, also when the Profile never opened (the store needs no key).
+// A hard kill skips it. The Daemon then wipes at the next start (see main.go).
+func (s *session) wipeMedia() { s.profile.Media().Wipe() }
 
 // unlink runs the delete-the-Profile routine, then links again as on a fresh Profile.
 // `by` is "user" for Log out. It is empty when the phone removed the Companion Device.

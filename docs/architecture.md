@@ -78,7 +78,7 @@ The scheme covers the device store, the chat store and the Media. Profile Settin
    - Sent Media: the Daemon keeps the `tempFile` that `UploadReader` encrypts into.
    - Received Media: whatsmeow downloads the plaintext into `$XDG_RUNTIME_DIR/whisker/media/`. The Daemon encrypts it again into the Profile with `cbcutil.EncryptStream` and the same `mediaKey`.
 7. **Media on request.** The Daemon copies the file to `$XDG_RUNTIME_DIR/whisker/media/` (tmpfs, mode `0700`). It checks the HMAC and decrypts the copy in place with `cbcutil.DecryptFile`. It gives the path to the Plugin.
-   - The Daemon deletes the plain copy when the Chat closes. It wipes the folder at Daemon start and exit.
+   - The Daemon deletes the plain copy when the Chat closes. It wipes the folder at Daemon start, before it needs the store key, and at exit, also when the Profile never opened. A hard kill (SIGKILL) skips the exit wipe, so copies stay until the next Daemon start. The pasted images of Drafts are in a different folder and stay.
    - "Save as" and "open in another app" are explicit exports to a path the user chooses. That copy is plain.
 8. **Re-implemented helpers.** whatsmeow has no public function to decrypt a Media file on disk. The Daemon re-implements `getMediaKeys` (HKDF-SHA256 of `mediaKey` with the Media type as info, 112 bytes: IV, cipher key, MAC key) and `validateMedia` (HMAC over IV and ciphertext, truncated to 10 bytes). This takes about 20 lines. It uses the public `util/hkdfutil.SHA256`. A whatsmeow version bump that changes `util/` breaks the build, so the change is caught at compile time.
 9. **Logs.** Logs are plain. They never hold message text, captions, contact names or Media paths. They hold only ids and error codes.
