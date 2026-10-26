@@ -37,7 +37,7 @@ func TestNeutraliseBreaksEveryMarkupTrigger(t *testing.T) {
 			t.Errorf("neutralise(%q) = %q, has ://", in, out)
 		}
 		for i := 0; i < len(out)-1; i++ {
-			if (out[i] == '<' || out[i] == '&') && !strings.HasPrefix(out[i+1:], "​") {
+			if (out[i] == '<' || out[i] == '&') && !strings.HasPrefix(out[i+1:], "\u200b") {
 				t.Errorf("neutralise(%q) = %q, has a bare %c", in, out, out[i])
 			}
 		}
