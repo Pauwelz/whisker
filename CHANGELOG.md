@@ -19,6 +19,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- The Daemon now fetches a profile picture only over `https` from a host that ends in `.whatsapp.net` or `.fbcdn.net`. It applies the same rule to each redirect. Before, a bad URL from the server made the Daemon send a request to any host, such as one inside your network.
 - A reply or a Reaction in a Group Chat that hides phone numbers no longer sends the phone number of the quoted author. The Daemon now sends the LID of the author, and of you, when the group addresses by LID. The Daemon learns the mode of a group from a live Message. After a start, the first reply in a group, before any live Message of it, still sends the phone number.
 - whisker now shows Offline when WhatsApp ends the session, and says why. Before, a replaced session, a temporary ban and a refused connection were dropped without a sign. The `disconnected` notification now has an optional `reason`: `stream-replaced`, `temporary-ban` or `connect-failure`. The Daemon does not connect again by itself after these, so it cannot fight another client for the session.
 - A Participant can no longer edit an old Message. The Daemon now drops an edit that WhatsApp stamps more than 15 minutes after the Message, the same limit as for your own edits. The time of the edit itself counts, so an edit that arrives late still applies. An edit also updates the mentions and the highlight of the Message. Before, a later edit kept the old mentions.
