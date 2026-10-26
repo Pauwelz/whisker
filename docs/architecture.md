@@ -95,6 +95,8 @@ On a default Omarchy install, the default keyring (`Default_keyring`) has no pas
 
 The Daemon checks the header of the default keyring file (`keystore.PlainKeyring`) on each start and sends `keyringPlain` in `ready`. The Plugin then shows a notice in Settings. The README tells users to set a password and, after a possible leak, to Log out and link again.
 
+whatsmeow does not check the signed device lists of contacts or of the user's own account, and it accepts a changed identity key without asking (`AutoTrustIdentity`). The Companion Device trusts the WhatsApp server for the end-to-end keys. Against a malicious server it is weaker than the official apps. For this, the Daemon shows two System Messages: "Security code changed" in the Direct Chat of a contact, and "A new device was linked to your account" in the user's own Direct Chat. The Daemon reads the own device list at each connection, because whatsmeow sends no event for it. The first list after a new link only fills the stored set.
+
 Deletion: both stores use `secure_delete(1)`, so SQLite overwrites a deleted row in the store file. On the first start after the update, `Profile.Open` runs `VACUUM` once on both stores to clear old free space. The `VACUUM` copy stays in memory (`temp_store(2)`). The rollback journal is a separate file. The filesystem can keep its (encrypted) blocks until it reuses them.
 
 ### Lock

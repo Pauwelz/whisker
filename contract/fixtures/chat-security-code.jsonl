@@ -1,0 +1,14 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","kind":"direct","lastActive":5,"messages":[{"id":"m1","sender":"1@s.whatsapp.net","time":5,"text":"hi"}]}]}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","chatKind":"direct","message":{"id":"sys-c1","time":10,"system":{"kind":"identity"}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"sys-c1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":false,"time":10,"text":"Security code changed","state":"","edited":false,"revoked":false,"system":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","chatKind":"direct","message":{"id":"sys-c2","time":11,"system":{"kind":"identity"}}}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"2@s.whatsapp.net","chatKind":"direct","message":{"id":"sys-c3","time":12,"system":{"kind":"identity"}}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"+1","lastActive":5,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0,"unreadChats":0}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"chat.messages","params":{"chat":"1@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{"chat":"1@s.whatsapp.net","messages":[{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"+1","fromMe":false,"time":5,"text":"hi","state":"","edited":false,"revoked":false},{"id":"sys-c1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":false,"time":10,"text":"Security code changed","state":"","edited":false,"revoked":false,"system":true}],"more":false,"offset":0}}}

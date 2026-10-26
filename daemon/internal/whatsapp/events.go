@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
@@ -34,6 +35,10 @@ func (c *Client) handle(evt any) {
 	case *events.Connected:
 		c.events <- Connected{}
 		c.emitContactBook()
+		go c.emitOwnDevices()
+	case *events.IdentityChange: // implicit or announced: the user sees the change either way
+		chat := c.phone(evt.JID)
+		c.emitSystem(chat, c.systemMessage(chat, types.EmptyJID, types.EmptyJID, SystemIdentity, nil, "", evt.Timestamp))
 	case *events.Disconnected:
 		c.events <- Disconnected{}
 	case *events.Message:
@@ -127,6 +132,40 @@ func (c *Client) handle(evt any) {
 	case *events.MarkChatAsRead:
 		c.emitFlag(ReadMarker{JID: c.phone(evt.JID).String(), Unread: !evt.Action.GetRead()}, evt.FromFullSync)
 	}
+}
+
+// emitOwnDevices reads the device list of the user's own account. whatsmeow sends no event when it changes.
+// It runs off the event loop: the call can block.
+// shortcut: the sends below can block for ever after Disconnect when nobody reads events; every other send of this Client does the same, upgrade with a done channel for all of them.
+// shortcut: whatsmeow does not check the signed list, so the server decides what this list holds (docs/architecture.md, Threat boundary).
+func (c *Client) emitOwnDevices() {
+	id := c.cli.Store.GetJID()
+	if id.IsEmpty() {
+		return
+	}
+	own := id.ToNonAD()
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	devices, err := c.cli.GetUserDevices(ctx, []types.JID{own})
+	ids, ok := deviceIDs(devices, err)
+	if !ok {
+		c.events <- OwnDevices{Failed: true}
+		return
+	}
+	c.events <- OwnDevices{Chat: own.String(), IDs: ids, Notice: c.systemMessage(own, types.EmptyJID, types.EmptyJID, SystemDevice, nil, "", time.Now())}
+}
+
+// deviceIDs is the device ids of a list. An empty list counts as a failure: the user always has this device,
+// and an empty list would clear the stored set.
+func deviceIDs(devices []types.JID, err error) ([]uint16, bool) {
+	if err != nil || len(devices) == 0 {
+		return nil, false
+	}
+	ids := make([]uint16, len(devices))
+	for i, d := range devices {
+		ids[i] = d.Device
+	}
+	return ids, true
 }
 
 // emitSystem sends a live System Message of a Chat.

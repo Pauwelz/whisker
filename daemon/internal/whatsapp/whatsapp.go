@@ -215,7 +215,7 @@ type System struct {
 	Value   string   `json:"value"`
 }
 
-// System kinds. The timer kind applies to every Chat, the others to Group Chats only.
+// System kinds. The timer kind applies to every Chat, the identity and device kinds to Direct Chats, the others to Group Chats only.
 const (
 	SystemAdd         = "add"
 	SystemInvite      = "invite" // joined using an invite link
@@ -228,6 +228,8 @@ const (
 	SystemIcon        = "icon"
 	SystemCreate      = "create"
 	SystemTimer       = "timer"
+	SystemIdentity    = "identity" // the security code of a contact changed; Direct Chats only
+	SystemDevice      = "device"   // a new device was linked to the account of the user; the own Direct Chat only
 )
 
 // SystemDeleted is the Value of a description or icon that was deleted.
@@ -454,6 +456,16 @@ type ChatAlias struct {
 type Connected struct{}
 type Disconnected struct{}
 
+// OwnDevices is the device list of the user's own account, read on each connection. IDs are the device ids.
+// Notice is the System Message to store when the list holds a device that the Chat store has not seen. Failed means the call failed.
+type OwnDevices struct {
+	Chat   string   `json:"chat"` // the own Direct Chat
+	IDs    []uint16 `json:"ids"`
+	Notice Message  `json:"notice"`
+	Failed bool     `json:"failed,omitempty"`
+}
+
+func (OwnDevices) isEvent()     {}
 func (NewMessage) isEvent()     {}
 func (Receipt) isEvent()        {}
 func (ChatTimer) isEvent()      {}

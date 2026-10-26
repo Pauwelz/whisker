@@ -218,8 +218,12 @@ func (b *outbox) incomingMessage(ev whatsapp.NewMessage) (ok, isNew bool) {
 // systemMessage stores a System Message and tells the Plugin. It raises no notification and no Read Receipt.
 // The Chat list hears of it too: a new subject renames the Chat.
 func (b *outbox) systemMessage(ev whatsapp.NewMessage) bool {
-	if err := b.chats.PutSystem(ev); err != nil {
+	stored, err := b.chats.PutSystem(ev)
+	if err != nil {
 		fmt.Fprintln(b.logOut, "chat store write failed")
+		return true
+	}
+	if !stored {
 		return true
 	}
 	return b.notify(ev.Chat, ev.Message.ID) && b.send(notification("chatsChanged", nil))

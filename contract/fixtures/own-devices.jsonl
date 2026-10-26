@@ -1,0 +1,13 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","event":{"kind":"ownDevices","chat":"9@s.whatsapp.net","ids":[0,3],"notice":{"id":"sys-d1","time":10,"system":{"kind":"device"}}}}
+{"dir":"whatsapp","event":{"kind":"ownDevices","chat":"9@s.whatsapp.net","ids":[0,3],"notice":{"id":"sys-d2","time":11,"system":{"kind":"device"}}}}
+{"dir":"whatsapp","event":{"kind":"ownDevices","failed":true}}
+{"dir":"whatsapp","event":{"kind":"ownDevices","chat":"9@s.whatsapp.net","ids":[0,3,7],"notice":{"id":"sys-d3","time":12,"system":{"kind":"device"}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"sys-d3","chat":"9@s.whatsapp.net","sender":"","senderName":"","fromMe":false,"time":12,"text":"A new device was linked to your account","state":"","edited":false,"revoked":false,"system":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"ownDevices","chat":"9@s.whatsapp.net","ids":[0,3,7],"notice":{"id":"sys-d4","time":13,"system":{"kind":"device"}}}}
+{"dir":"whatsapp","event":{"kind":"ownDevices","chat":"9@s.whatsapp.net","ids":[0,7],"notice":{"id":"sys-d5","time":14,"system":{"kind":"device"}}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chat.messages","params":{"chat":"9@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"9@s.whatsapp.net","messages":[{"id":"sys-d3","chat":"9@s.whatsapp.net","sender":"","senderName":"","fromMe":false,"time":12,"text":"A new device was linked to your account","state":"","edited":false,"revoked":false,"system":true}],"more":false,"offset":0}}}

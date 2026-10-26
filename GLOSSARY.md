@@ -69,7 +69,7 @@ A chronological entry in a Chat timeline sent by a Participant, carrying text or
 _Avoid_: Post, item, event, packet, bubble
 
 **System Message**:
-A Message that records a change to a Chat, such as a Participant who joins, a new subject or a new Disappearing timer. No Participant writes it, and nobody can react to it, quote it, edit it or revoke it.
+A Message that records a change to a Chat, such as a Participant who joins, a new subject, a new Disappearing timer, a changed security code of a contact or a new device on the account of the user. No Participant writes it, and nobody can react to it, quote it, edit it or revoke it.
 _Avoid_: System line, group event, stub, notice
 
 **Quote**:

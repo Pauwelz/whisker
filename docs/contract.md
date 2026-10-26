@@ -200,15 +200,16 @@ Fixtures: `disappearing-expire.jsonl`, `disappearing-expire-location.jsonl`, `di
 
 ### System Messages
 
-A System Message records a change to a Chat. The Daemon stores each one as a Message, from live events and from History Sync, and returns it in time order. These kinds exist: a Participant was added, joined using an invite link, left or was removed, was made an admin or no longer is. The subject, the description or the group icon changed. The group was created, or the Disappearing timer changed. The timer kind applies to every Chat, the other kinds to Group Chats only. WhatsApp sends more kinds of change; the Daemon drops them.
+A System Message records a change to a Chat. The Daemon stores each one as a Message, from live events and from History Sync, and returns it in time order. These kinds exist: a Participant was added, joined using an invite link, left or was removed, was made an admin or no longer is. The subject, the description or the group icon changed. The group was created, or the Disappearing timer changed. Two kinds are about trust: the security code of a contact changed ("Security code changed", in the Direct Chat of the contact), and a new device was linked to the account of the user ("A new device was linked to your account", in the own Direct Chat). The timer kind applies to every Chat, the trust kinds to Direct Chats, the other kinds to Group Chats only. WhatsApp sends more kinds of change; the Daemon drops them.
 
 - The Daemon stores the change as data and builds `text` when it reads the Message, with the name rule. A later Phone Contact name replaces a number. The user is "You" at the start of the line and "you" in other places.
 - The ID is `sys-` and a hash of the change and its time in whole seconds. A live change and its History Sync copy have one ID, so the Chat shows it once.
 - A System Message is quiet: no notification, no Read Marker, and the Chat keeps its place in the Chat list. It never expires.
 - `chat.react`, `chat.edit`, `chat.revoke` and a `quote` of `chat.send` or `draft.set` refuse a System Message with -32006, as for an unknown Message.
+- A security code change adds no Chat and no notice when the Direct Chat is not stored. It adds no second notice while the last Message of the Chat is already one. The Daemon lists the own devices at each connection and keeps their ids. The first list after a new link or an update shows nothing. A new device id shows the notice once, in the own Direct Chat, which the Daemon creates if it is missing. A removed device id shows nothing. A failed call is logged without ids.
 - A live subject change also renames the Group Chat. `messageChanged` and `chatsChanged` follow each live System Message.
 
-Fixture: `chat-system-messages.jsonl`.
+Fixtures: `chat-system-messages.jsonl`, `chat-security-code.jsonl`, `own-devices.jsonl`.
 
 ### Desktop notification
 

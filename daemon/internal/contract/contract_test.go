@@ -516,6 +516,8 @@ func (r *runner) playWhatsApp(line fixtureLine) {
 			emitJSON[whatsapp.ReadMarker](r.t, f, line.Event)
 		case "newMessage":
 			emitJSON[whatsapp.NewMessage](r.t, f, line.Event)
+		case "ownDevices":
+			emitJSON[whatsapp.OwnDevices](r.t, f, line.Event)
 		case "receipt":
 			emitJSON[whatsapp.Receipt](r.t, f, line.Event)
 		case "readElsewhere":
