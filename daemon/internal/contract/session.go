@@ -278,6 +278,7 @@ func (s *session) mergeKnownLIDs() bool {
 
 // merge folds the LID Chat of an alias into the phone Chat. The Plugin hears of it when something merged.
 func (s *session) merge(a whatsapp.ChatAlias) bool {
+	ids, idsErr := s.chats.MediaIDs(a.LID) // before the merge moves the rows
 	changed, err := s.chats.MergeChat(a.LID, a.Phone)
 	if err != nil {
 		fmt.Fprintln(s.logOut, "chat store write failed")
@@ -286,7 +287,7 @@ func (s *session) merge(a whatsapp.ChatAlias) bool {
 	if !changed {
 		return true
 	}
-	if s.media.MoveChat(a.LID, a.Phone) != nil {
+	if idsErr != nil || s.media.MoveChat(a.LID, a.Phone, ids) != nil {
 		fmt.Fprintln(s.logOut, "media move failed")
 	}
 	s.box.chatMerged(a.LID, a.Phone)

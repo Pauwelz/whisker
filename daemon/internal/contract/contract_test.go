@@ -3,6 +3,10 @@ package contract_test
 import (
 	"bufio"
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +24,7 @@ import (
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
 	"github.com/Pauwelz/whisker/daemon/internal/desktop"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
 	"github.com/Pauwelz/whisker/daemon/internal/settings"
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
@@ -242,7 +248,7 @@ func TestFixtures(t *testing.T) {
 				case "out":
 					r.start()
 					var want, got any
-					if err := json.Unmarshal(bytes.ReplaceAll(line.Frame, []byte("$RUNTIME"), []byte(r.runtime)), &want); err != nil {
+					if err := json.Unmarshal([]byte(r.expand(string(bytes.ReplaceAll(line.Frame, []byte("$RUNTIME"), []byte(r.runtime))))), &want); err != nil {
 						t.Fatal(err)
 					}
 					text := r.nextFrame()
@@ -394,9 +400,32 @@ func (r *runner) restart(t *testing.T, now *int64) {
 	}
 }
 
+var mediaToken = regexp.MustCompile(`\$MEDIA\[([^|\]]+)\|([^\]]+)\]`)
+
+// expand turns $MEDIA[chat|id] into the hashed folder and file name of that Media. It computes the names itself, as a check on the store.
+func (r *runner) expand(text string) string {
+	if !strings.Contains(text, "$MEDIA[") {
+		return text // the fake keyring blocks while it is locked
+	}
+	value, err := r.fake.Get()
+	if err != nil {
+		return text
+	}
+	key, _ := base64.StdEncoding.DecodeString(value)
+	hash := func(parts ...string) string {
+		h := hmac.New(sha256.New, media.NameKey(key))
+		h.Write([]byte(strings.Join(parts, "\x00")))
+		return hex.EncodeToString(h.Sum(nil))
+	}
+	return mediaToken.ReplaceAllStringFunc(text, func(m string) string {
+		p := mediaToken.FindStringSubmatch(m)
+		return hash("chat", p[1]) + "/" + hash("file", p[1], p[2])
+	})
+}
+
 // checkFile checks a plain Media copy in the runtime folder: its content, or that it is gone.
 func (r *runner) checkFile(line fixtureLine) {
-	path := strings.ReplaceAll(strings.ReplaceAll(line.Path, "$RUNTIME", r.runtime), "$PROFILE", r.dir)
+	path := r.expand(strings.ReplaceAll(strings.ReplaceAll(line.Path, "$RUNTIME", r.runtime), "$PROFILE", r.dir))
 	if line.Remove {
 		if err := os.Remove(path); err != nil {
 			r.t.Fatal(err)

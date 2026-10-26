@@ -6,11 +6,13 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/keystore"
+	"github.com/Pauwelz/whisker/daemon/internal/media"
 	"github.com/Pauwelz/whisker/daemon/internal/profile"
 )
 
@@ -166,5 +168,76 @@ func TestDeleteRemovesTheProfileAndItsKey(t *testing.T) {
 	}
 	if _, err := fake.Get(); err == nil {
 		t.Error("store key still in the keyring")
+	}
+}
+
+// The old layout was <jid>/<id>. Open renames each file once.
+func TestOpenRenamesTheMediaOfTheOldLayoutOnce(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	fake := keystore.NewFake()
+	p := newProfile(t, fake)
+	if err := p.Open(); err != nil {
+		t.Fatal(err)
+	}
+	mk := bytes.Repeat([]byte{3}, 32)
+	const jid = "31612345678@s.whatsapp.net"
+	if err := p.Media().Put(jid, "m1", media.Image, mk, strings.NewReader("pic")); err != nil {
+		t.Fatal(err)
+	}
+	// Put it back in the old layout.
+	root := filepath.Join(p.Dir, "media")
+	hashed, _ := filepath.Glob(filepath.Join(root, "*", "*"))
+	os.MkdirAll(filepath.Join(root, jid), 0o700)
+	if err := os.Rename(hashed[0], filepath.Join(root, jid, "m1")); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Dir(hashed[0]))
+	p.Close()
+
+	snapshot := func() string {
+		var all []string
+		filepath.WalkDir(root, func(path string, d os.DirEntry, _ error) error {
+			rel, _ := filepath.Rel(root, path)
+			all = append(all, rel)
+			return nil
+		})
+		return strings.Join(all, "\n")
+	}
+	p2 := profile.New(p.Dir, keystore.New(fake, clock.Real))
+	if err := p2.Open(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, jid)); err == nil {
+		t.Error("the old folder stayed")
+	}
+	if !p2.Media().Has(jid, "m1") {
+		t.Fatal("the file has no new name")
+	}
+	if path, err := p2.Media().Plain(jid, "m1", "", media.Image, mk); err != nil {
+		t.Fatal(err)
+	} else if got, _ := os.ReadFile(path); string(got) != "pic" {
+		t.Errorf("file = %q", got)
+	}
+	before := snapshot()
+	p2.Close()
+	p3 := profile.New(p.Dir, keystore.New(fake, clock.Real))
+	if err := p3.Open(); err != nil {
+		t.Fatal(err)
+	}
+	defer p3.Close()
+	if snapshot() != before {
+		t.Error("a second Open changed the Media folder")
+	}
+}
+
+func TestMediaBeforeOpenCanWipe(t *testing.T) {
+	rt := t.TempDir()
+	t.Setenv("XDG_RUNTIME_DIR", rt)
+	plain := filepath.Join(rt, "whisker", "media")
+	os.MkdirAll(plain, 0o700)
+	p := newProfile(t, keystore.NewFake())
+	p.Media().Wipe()
+	if _, err := os.Stat(plain); err == nil {
+		t.Error("Wipe left the plain folder")
 	}
 }

@@ -9,13 +9,13 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"downloading"},"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"ready"},"senderPush":true}}}}
-{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg","missing":true}
+{"dir":"file","path":"$RUNTIME/whisker/media/$MEDIA[1@s.whatsapp.net|m1].jpg","missing":true}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"m1"}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","id":"m1","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg"}}}
-{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg","content":"pixels"}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","id":"m1","path":"$RUNTIME/whisker/media/$MEDIA[1@s.whatsapp.net|m1].jpg"}}}
+{"dir":"file","path":"$RUNTIME/whisker/media/$MEDIA[1@s.whatsapp.net|m1].jpg","content":"pixels"}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"media.release","params":{"chat":"1@s.whatsapp.net"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":2,"result":{}}}
-{"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg","missing":true}
+{"dir":"file","path":"$RUNTIME/whisker/media/$MEDIA[1@s.whatsapp.net|m1].jpg","missing":true}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"media.save","params":{"chat":"1@s.whatsapp.net","id":"m1","path":"$RUNTIME/export.jpg"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{}}}
 {"dir":"file","path":"$RUNTIME/export.jpg","content":"pixels"}
