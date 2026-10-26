@@ -230,7 +230,7 @@ The policy is pure logic in `daemon/internal/notifypolicy`. A Message notifies u
 | Rule | Fixture |
 |---|---|
 | The notifications setting is off. | `notify-off.jsonl` |
-| The Chat is Muted, and the Message does not mention the user. | `notify-muted.jsonl`, `notify-mention-muted.jsonl` |
+| The Chat is Muted, and the Message does not mention the user (the mention list decides, also when the text has no "@"). | `notify-muted.jsonl`, `notify-mention-muted.jsonl` |
 | The Chat stays archived after the Message ("Keep chats archived" is on or unknown), and the Message does not mention the user. A Message that unarchives its Chat notifies. | `chats-archived.jsonl` |
 | The Chat is the Attended Chat. | `notify-attended.jsonl` |
 | The user sent the Message from another device. | `notify-own-message.jsonl` |
@@ -392,7 +392,7 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 - `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
 - Text that WhatsApp cannot show gets a one-line text, so no Message is blank: `Poll: <name>. Open it on your phone.`, `Event: ...`, `View-once media. ...`, `Contact: <name>, <number>` (one line per card), `Location: <place>` with a map link on the next line, and `Unsupported message. ...`. The port adapter makes these lines. Reactions, poll votes and protocol Messages show nothing. Fixture: `message-types.jsonl`.
 - `mentions` lists the mentioned names, each as `@name` (name rule). `text` already holds them: the Daemon replaces `@<number>`. Only Messages with a mention have the key.
-- `mentionsMe` is true when the Message mentions the user. Only such Messages have the key. Fixture: `notify-mention-muted.jsonl`.
+- `mentionsMe` is true when the Message mentions the user. The sender's mention list decides this, as in WhatsApp, also when `text` has no "@". Such a Message breaks through a mute or an archive. Only such Messages have the key. Fixture: `notify-mention-muted.jsonl`.
 - `senderPush` is true when `senderName` is a Push Name: the user has no phone contact for the sender. Only such Messages have the key. The Plugin shows "~" and the phone number from `sender`.
 - `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline.
 - `system` is true for a System Message: a change to the Chat. Only such Messages have the key. `text` holds the line, such as `Jef Cools added Robert Maes and Ann`. `sender`, `senderName` and `fromMe` name who made the change, and `state` is empty. See System Messages below.
@@ -571,7 +571,7 @@ The automatic rule is fixed. Media from History Sync never downloads by itself.
 
 Every state change sends `messageChanged`. A revoked Message (Tombstone) has no `media`, and its stored file is deleted. The Daemon sets Media that was `downloading` at a restart back to `none`.
 
-The Daemon stores received Media encrypted again in the Profile, in WhatsApp's CDN format (see architecture, section 5). It makes a plain copy only on `media.open`, in `$XDG_RUNTIME_DIR/whisker/media/<chat>/`. It checks the HMAC first. A changed byte gives error -32009 and no copy. It deletes the copies of a Chat on `media.release`, and all copies at start and at exit. The start wipe needs no key. The exit wipe also runs when the keyring was unavailable. SIGKILL skips the exit wipe, so copies then stay until the next start. Logs never hold a Chat, a name or a path.
+The Daemon stores received Media encrypted again in the Profile, in WhatsApp's CDN format (see architecture, section 5). It makes a plain copy on `media.open`, in `$XDG_RUNTIME_DIR/whisker/media/<chat>/`. It also makes one for each upload attempt of sent Media, in `$XDG_RUNTIME_DIR/whisker/media/upload/`, and removes it when the attempt ends. It checks the HMAC first. A changed byte gives error -32009 and no copy. It deletes the copies of a Chat on `media.release`, and all copies at start and at exit. The start wipe needs no key. The exit wipe also runs when the keyring was unavailable. SIGKILL skips the exit wipe, so copies then stay until the next start. Logs never hold a Chat, a name or a path.
 
 #### `media.download`
 

@@ -194,7 +194,8 @@ type Message struct {
 	PushName string `json:"pushName"` // the author's Push Name as sent with the Message, may be empty
 	Quote    *Quote `json:"quote"`    // the Message that this one replies to, nil for none
 	Media    *Media `json:"media"`
-	// Mentions are the JIDs that Text mentions as "@<user part>". MentionsMe tells that one of them is the user.
+	// Mentions are the listed JIDs that Text mentions as "@<user part>". MentionsMe tells that the sender's mention list
+	// holds the user, also when Text has no "@".
 	Mentions   []string `json:"mentions"`
 	MentionsMe bool     `json:"mentionsMe"`
 	Timer      int64    `json:"timer"` // the Disappearing timer in seconds that the Message carries, 0 for none
