@@ -46,12 +46,18 @@ test("Media rows say what they are and what the user can do", () => {
   assert.equal(Media.mediaStatus({ ...pdf, media: { ...pdf.media, state: "failed" } }), "Download failed");
 });
 
-test("video opens in mpv and everything else in the default app", () => {
-  assert.deepEqual(plain(Media.openCommand({ media: { kind: "video" } }, "/p/v.mp4")), ["mpv", "/p/v.mp4"]);
-  assert.deepEqual(plain(Media.openCommand({ media: { kind: "video", gif: true } }, "/p/g.mp4")), ["mpv", "--loop", "/p/g.mp4"]);
+test("audio, voice and video open in mpv that reads only local files", () => {
+  const hardening = ["--demuxer=lavf", "--demuxer-lavf-o=protocol_whitelist=file", "--ytdl=no", "--"];
+  assert.deepEqual(plain(Media.openCommand({ media: { kind: "video" } }, "/p/v.mp4")), ["mpv", ...hardening, "/p/v.mp4"]);
+  assert.deepEqual(plain(Media.openCommand({ media: { kind: "video", gif: true } }, "/p/g.mp4")), ["mpv", "--loop", ...hardening, "/p/g.mp4"]);
+  assert.deepEqual(plain(Media.openCommand({ media: { kind: "voice" } }, "/p/v.ogg")), ["mpv", "--no-video", ...hardening, "/p/v.ogg"]);
+  assert.deepEqual(plain(Media.openCommand({ media: { kind: "audio" } }, "/p/a.mp3")), ["mpv", "--no-video", ...hardening, "/p/a.mp3"]);
   assert.equal(Media.mediaLabel({ media: { kind: "video", gif: true, size: 2048 } }), "GIF (2.0 KB)");
+});
+
+test("documents and images open in the default app", () => {
   assert.deepEqual(plain(Media.openCommand({ media: { kind: "document" } }, "/p/a.pdf")), ["xdg-open", "/p/a.pdf"]);
-  assert.deepEqual(plain(Media.openCommand({ media: { kind: "voice" } }, "/p/v.ogg")), ["mpv", "--no-video", "/p/v.ogg"]);
+  assert.deepEqual(plain(Media.openCommand({ media: { kind: "image" } }, "/p/a.jpg")), ["xdg-open", "/p/a.jpg"]);
 });
 
 test("Media requests carry the Chat and the Message id", () => {

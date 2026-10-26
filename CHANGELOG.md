@@ -18,6 +18,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- A received voice note can no longer make mpv fetch a link. A file that holds a playlist made mpv open the sender's URL on Play. Now mpv reads every Media file as plain media, only from disk. Audio files now open in mpv too, with the same limits. The file badge of a document now shows its real extension, so a `.desktop` file sent as a PDF no longer shows "PDF".
 - Only the author of a message can now delete it for everyone in whisker. Before, any member of a shared chat could make any message, including yours, show as deleted and remove its media.
 - A name that a stranger chose for themselves now shows as "~ name +number" in the Chat list, the Chat header and notifications, as it already did in the timeline. Before, anyone could appear as "Mom" there. Names with a phone contact and group names stay as they are.
 - Notifications no longer pass message text and names to a helper process, where other local users could read them.
