@@ -91,6 +91,8 @@ Other local users can read the arguments of every process (`/proc/<pid>/cmdline`
 
 On a default Omarchy install, the login keyring has no password, and gnome-keyring stores it in plain text in `~/.local/share/keyrings/`. A backup of `~/.local/share` then holds the stores and their key. The README tells users to set a password on the login keyring for real protection at rest.
 
+Deletion: both stores use `secure_delete(1)`, so SQLite overwrites a deleted row in the store file. On the first start after the update, `Profile.Open` runs `VACUUM` once on both stores to clear old free space. The `VACUUM` copy stays in memory (`temp_store(2)`). The rollback journal is a separate file. The filesystem can keep its (encrypted) blocks until it reuses them.
+
 ### Lock
 
 The Profile lock is in `$XDG_RUNTIME_DIR/whisker/` (see section 3).

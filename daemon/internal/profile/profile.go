@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -26,6 +27,9 @@ type Profile struct {
 
 	device *sqlstore.Container
 	chat   *sql.DB
+
+	vacuumed   bool         // the last Open ran the one-time VACUUM; the tests read it
+	vacuumHook func() error // the tests make VACUUM fail with it
 }
 
 func New(dir string, keys *keystore.Store) *Profile { return &Profile{Dir: dir, keys: keys} }
@@ -91,10 +95,48 @@ func (p *Profile) openStores(key []byte) (err error) {
 		p.Close()
 		return err
 	}
-	// Migrate reads the header first, which proves the key is right.
+	// Reading the version also proves the key is right. Version 0 is a new store: it has no residue.
+	var before int
+	if err := p.chat.QueryRow("PRAGMA user_version").Scan(&before); err != nil {
+		p.Close()
+		return err
+	}
+	// VACUUM runs before Migrate: the version reaches 25 only when both stores are clean, so a failed VACUUM runs again at the next Open.
+	p.vacuumed = before > 0 && before < vacuumVersion
+	if p.vacuumed {
+		if err := p.vacuum(hexKey); err != nil {
+			p.Close()
+			return err
+		}
+	}
 	if err := chatstore.Migrate(p.chat); err != nil {
 		p.Close()
 		return err
+	}
+	return nil
+}
+
+// vacuumVersion is the chat store version of migration 0025_vacuum.sql.
+// A store below it was written without secure_delete, so its free space can hold deleted data.
+const vacuumVersion = 25
+
+// vacuum rewrites both stores once, which drops the old free space. VACUUM cannot run in a migration transaction.
+func (p *Profile) vacuum(hexKey string) error {
+	if p.vacuumHook != nil {
+		if err := p.vacuumHook(); err != nil {
+			return err
+		}
+	}
+	for _, name := range []string{"chat.db", "device.db"} {
+		db, err := sql.Open("sqlite3", dsn(filepath.Join(p.Dir, name), hexKey))
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("VACUUM")
+		db.Close()
+		if err != nil {
+			return fmt.Errorf("vacuum %s: %w", name, err)
+		}
 	}
 	return nil
 }
@@ -127,6 +169,7 @@ func (p *Profile) removeData() error {
 }
 
 // dsn opens an adiantum-encrypted file. whatsmeow needs foreign keys on. Setting any _pragma drops the default busy timeout.
+// secure_delete(1) overwrites deleted rows in the file. temp_store(2) keeps the temporary copy of VACUUM in memory, not in a plain file.
 func dsn(path, hexKey string) string {
-	return "file:" + path + "?vfs=adiantum&hexkey=" + hexKey + "&_pragma=foreign_keys(1)&_pragma=busy_timeout(10000)"
+	return "file:" + path + "?vfs=adiantum&hexkey=" + hexKey + "&_pragma=foreign_keys(1)&_pragma=busy_timeout(10000)&_pragma=temp_store(2)&_pragma=secure_delete(1)"
 }
