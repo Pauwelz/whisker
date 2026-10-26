@@ -172,13 +172,13 @@ Item {
           font.pixelSize: Style.font.caption
           TapHandler { onTapped: line.panel.jumpToMessage(parent.quote.id) }
         }
-        // The text. An edited Message ends with "(edited)". A Tombstone shows its fixed text in italics.
+        // The text. A Tombstone shows its fixed text in italics.
         Text {
           visible: text !== ""
           width: parent.width
           wrapMode: Text.Wrap
           textFormat: Text.StyledText
-          text: line.isMessage ? Message.messageHtml(line.message) + (Message.editedLabel(line.message) !== "" ? " <i>" + Message.editedLabel(line.message) + "</i>" : "") : ""
+          text: line.isMessage ? Message.messageHtml(line.message) : ""
           font.italic: line.isMessage && line.message.revoked === true
           opacity: line.isMessage && line.message.revoked === true ? 0.6 : 1
           color: line.panel.contentForeground
@@ -234,6 +234,17 @@ Item {
               event.accepted = true
             }
           }
+        }
+
+        // "(edited)" under the body of an edited Message, in the style of the Quote.
+        Text {
+          visible: text !== ""
+          textFormat: Text.PlainText
+          text: line.isMessage ? Message.editedLabel(line.message) : ""
+          opacity: 0.6
+          color: line.panel.contentForeground
+          font.family: line.panel.contentFontFamily
+          font.pixelSize: Style.font.caption
         }
 
         // Reactions row: one chip per emoji with its count. Your own Reaction is outlined. A click adds or removes yours.

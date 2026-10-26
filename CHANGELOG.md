@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- "(edited)" now shows on its own line under an edited Message, in the small, dimmed style of a Quote. Before, it was at the end of the text.
+
 ### Fixed
 
 - A Chat that you read on your phone, or on another linked device, now shows as read in whisker. whisker sends no Read Receipt of its own for those Messages.
