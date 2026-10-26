@@ -582,7 +582,7 @@ The automatic rule is fixed. Media from History Sync never downloads by itself.
 
 Every state change sends `messageChanged`. A revoked Message (Tombstone) has no `media`, and its stored file is deleted. The Daemon sets Media that was `downloading` at a restart back to `none`.
 
-The Daemon stores received Media encrypted again in the Profile, in WhatsApp's CDN format (see architecture, section 5). It makes a plain copy on `media.open`, in `$XDG_RUNTIME_DIR/whisker/media/<chat>/`. It also makes one for each upload attempt of sent Media, in `$XDG_RUNTIME_DIR/whisker/media/upload/`, and removes it when the attempt ends. It checks the HMAC first. A changed byte gives error -32009 and no copy. It deletes the copies of a Chat on `media.release`, and all copies at start and at exit. The start wipe needs no key. The exit wipe also runs when the keyring was unavailable. SIGKILL skips the exit wipe, so copies then stay until the next start. Logs never hold a Chat, a name or a path.
+The Daemon stores received Media encrypted again in the Profile, in the CDN format of WhatsApp but under a key derived from the store key (see architecture, section 5). It makes a plain copy on `media.open`, in `$XDG_RUNTIME_DIR/whisker/media/<chat>/`. It also makes one for each upload attempt of sent Media, in `$XDG_RUNTIME_DIR/whisker/media/upload/`, and removes it when the attempt ends. It checks the HMAC first. A changed byte gives error -32009 and no copy. It deletes the copies of a Chat on `media.release`, and all copies at start and at exit. The start wipe needs no key. The exit wipe also runs when the keyring was unavailable. SIGKILL skips the exit wipe, so copies then stay until the next start. Logs never hold a Chat, a name or a path.
 
 #### `media.download`
 

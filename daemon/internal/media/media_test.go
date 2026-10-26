@@ -2,6 +2,7 @@ package media_test
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"github.com/Pauwelz/whisker/daemon/internal/media"
+	"go.mau.fi/whatsmeow/util/cbcutil"
+	"go.mau.fi/whatsmeow/util/hkdfutil"
 )
 
 var key = bytes.Repeat([]byte{7}, 32)
@@ -19,6 +22,7 @@ func newStore(t *testing.T) (*media.Store, string, string) {
 	enc, plain := filepath.Join(t.TempDir(), "media"), filepath.Join(t.TempDir(), "plain")
 	s := media.New(enc, plain)
 	s.SetNameKey(media.NameKey(key))
+	s.SetFileKey(media.FileKey(key))
 	return s, enc, plain
 }
 
@@ -35,7 +39,7 @@ func stored1(t *testing.T, enc string) string {
 func TestStoredMediaIsEncryptedAndComesBackPlain(t *testing.T) {
 	s, enc, _ := newStore(t)
 	text := []byte(strings.Repeat("secret picture ", 5000))
-	if err := s.Put("c@s.whatsapp.net", "m1", media.Image, key, bytes.NewReader(text)); err != nil {
+	if err := s.Put("c@s.whatsapp.net", "m1", media.Image, bytes.NewReader(text)); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := os.ReadFile(stored1(t, enc))
@@ -45,7 +49,7 @@ func TestStoredMediaIsEncryptedAndComesBackPlain(t *testing.T) {
 	if bytes.Contains(stored, []byte("secret picture")) {
 		t.Fatal("the stored file holds plain text")
 	}
-	path, err := s.Plain("c@s.whatsapp.net", "m1", ".jpg", media.Image, key)
+	path, err := s.Plain("c@s.whatsapp.net", "m1", ".jpg", media.Image)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +67,7 @@ func TestChangedByteFailsTheIntegrityCheck(t *testing.T) {
 	text := []byte(strings.Repeat("x", 100))
 	for _, at := range []int{0, 50, 111, 112, 121} { // 112 bytes of ciphertext, then a 10-byte MAC
 		s, enc, plain := newStore(t)
-		if err := s.Put("c", "m", media.Audio, key, bytes.NewReader(text)); err != nil {
+		if err := s.Put("c", "m", media.Audio, bytes.NewReader(text)); err != nil {
 			t.Fatal(err)
 		}
 		file := stored1(t, enc)
@@ -75,7 +79,7 @@ func TestChangedByteFailsTheIntegrityCheck(t *testing.T) {
 		if err := os.WriteFile(file, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Plain("c", "m", "", media.Audio, key); !errors.Is(err, media.ErrIntegrity) {
+		if _, err := s.Plain("c", "m", "", media.Audio); !errors.Is(err, media.ErrIntegrity) {
 			t.Errorf("byte %d: err = %v, want ErrIntegrity", at, err)
 		}
 		if left, _ := filepath.Glob(filepath.Join(plain, "*", "*")); len(left) > 0 {
@@ -86,10 +90,10 @@ func TestChangedByteFailsTheIntegrityCheck(t *testing.T) {
 
 func TestWrongKindFailsTheIntegrityCheck(t *testing.T) {
 	s, _, _ := newStore(t)
-	if err := s.Put("c", "m", media.Image, key, strings.NewReader("hello")); err != nil {
+	if err := s.Put("c", "m", media.Image, strings.NewReader("hello")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Plain("c", "m", "", media.Video, key); !errors.Is(err, media.ErrIntegrity) {
+	if _, err := s.Plain("c", "m", "", media.Video); !errors.Is(err, media.ErrIntegrity) {
 		t.Errorf("err = %v, want ErrIntegrity", err)
 	}
 }
@@ -97,12 +101,12 @@ func TestWrongKindFailsTheIntegrityCheck(t *testing.T) {
 func TestReleaseWipeAndExport(t *testing.T) {
 	s, _, plain := newStore(t)
 	for _, c := range []string{"c1", "c2"} {
-		if err := s.Put(c, "m", media.Document, key, strings.NewReader(c)); err != nil {
+		if err := s.Put(c, "m", media.Document, strings.NewReader(c)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	p1, _ := s.Plain("c1", "m", ".pdf", media.Document, key)
-	p2, _ := s.Plain("c2", "m", ".pdf", media.Document, key)
+	p1, _ := s.Plain("c1", "m", ".pdf", media.Document)
+	p2, _ := s.Plain("c2", "m", ".pdf", media.Document)
 	s.Release("c1")
 	if _, err := os.Stat(p1); err == nil {
 		t.Error("Release left the copy of the closed Chat")
@@ -111,7 +115,7 @@ func TestReleaseWipeAndExport(t *testing.T) {
 		t.Error("Release removed the copy of another Chat")
 	}
 	dst := filepath.Join(t.TempDir(), "out.pdf")
-	if err := s.Export("c2", "m", media.Document, key, dst); err != nil {
+	if err := s.Export("c2", "m", media.Document, dst); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(dst); string(got) != "c2" {
@@ -125,21 +129,21 @@ func TestReleaseWipeAndExport(t *testing.T) {
 
 func TestIngestEncryptsWhatTheFetchWrites(t *testing.T) {
 	s, _, plain := newStore(t)
-	err := s.Ingest("c", "m", media.Video, key, func(f *os.File) error { _, err := f.WriteString("movie"); return err })
+	err := s.Ingest("c", "m", media.Video, func(f *os.File) error { _, err := f.WriteString("movie"); return err })
 	if err != nil {
 		t.Fatal(err)
 	}
 	if entries, _ := os.ReadDir(plain); len(entries) != 0 {
 		t.Error("Ingest left its temp file")
 	}
-	path, err := s.Plain("c", "m", "", media.Video, key)
+	path, err := s.Plain("c", "m", "", media.Video)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(path); string(got) != "movie" {
 		t.Errorf("got %q", got)
 	}
-	failed := s.Ingest("c", "m2", media.Video, key, func(*os.File) error { return errors.New("net") })
+	failed := s.Ingest("c", "m2", media.Video, func(*os.File) error { return errors.New("net") })
 	if failed == nil || s.Has("c", "m2") {
 		t.Error("a failed fetch must store nothing")
 	}
@@ -148,7 +152,7 @@ func TestIngestEncryptsWhatTheFetchWrites(t *testing.T) {
 func TestMoveChatKeepsTheFilesOfTheTargetChat(t *testing.T) {
 	s, _, _ := newStore(t)
 	for _, c := range []struct{ chat, id, text string }{{"lid", "a", "A"}, {"lid", "dup", "from lid"}, {"phone", "dup", "from phone"}} {
-		if err := s.Put(c.chat, c.id, media.Image, key, strings.NewReader(c.text)); err != nil {
+		if err := s.Put(c.chat, c.id, media.Image, strings.NewReader(c.text)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -156,7 +160,7 @@ func TestMoveChatKeepsTheFilesOfTheTargetChat(t *testing.T) {
 	if s.Has("lid", "a") || s.Has("lid", "dup") || !s.Has("phone", "a") {
 		t.Error("the files did not move")
 	}
-	path, err := s.Plain("phone", "dup", "", media.Image, key)
+	path, err := s.Plain("phone", "dup", "", media.Image)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +172,7 @@ func TestMoveChatKeepsTheFilesOfTheTargetChat(t *testing.T) {
 func TestMoveChatKeepsTheFolderWhenAMoveFails(t *testing.T) {
 	s, enc, _ := newStore(t)
 	for _, c := range []struct{ chat, id string }{{"lid", "a"}, {"phone", "b"}} {
-		if err := s.Put(c.chat, c.id, media.Image, key, strings.NewReader("x")); err != nil {
+		if err := s.Put(c.chat, c.id, media.Image, strings.NewReader("x")); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -193,7 +197,7 @@ func TestMoveChatKeepsTheFolderWhenAMoveFails(t *testing.T) {
 
 func TestUnsafeNamesAreRejected(t *testing.T) {
 	s, _, _ := newStore(t)
-	if err := s.Put("../x", "m", media.Image, key, strings.NewReader("a")); err == nil {
+	if err := s.Put("../x", "m", media.Image, strings.NewReader("a")); err == nil {
 		t.Error("a path in the Chat id must fail")
 	}
 }
@@ -202,14 +206,14 @@ func TestUnsafeNamesAreRejected(t *testing.T) {
 func TestUploadCopyIsApartFromThePlainCopy(t *testing.T) {
 	s, _, _ := newStore(t)
 	text := []byte(strings.Repeat("picture ", 5000))
-	if err := s.Put("c@s.whatsapp.net", "m", media.Image, key, bytes.NewReader(text)); err != nil {
+	if err := s.Put("c@s.whatsapp.net", "m", media.Image, bytes.NewReader(text)); err != nil {
 		t.Fatal(err)
 	}
-	upload, err := s.UploadCopy("c@s.whatsapp.net", "m", media.Image, key)
+	upload, err := s.UploadCopy("c@s.whatsapp.net", "m", media.Image)
 	if err != nil {
 		t.Fatal(err)
 	}
-	plain, err := s.Plain("c@s.whatsapp.net", "m", ".png", media.Image, key)
+	plain, err := s.Plain("c@s.whatsapp.net", "m", ".png", media.Image)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +228,7 @@ func TestUploadCopyIsApartFromThePlainCopy(t *testing.T) {
 		t.Error("removing the upload copy removed the Plain copy")
 	}
 	s.Release("c@s.whatsapp.net")
-	again, err := s.UploadCopy("c@s.whatsapp.net", "m", media.Image, key)
+	again, err := s.UploadCopy("c@s.whatsapp.net", "m", media.Image)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,10 +241,10 @@ const jid, msgID = "31612345678@s.whatsapp.net", "3EB0ABCDEF"
 
 func TestNamesHideTheChatTheIdAndTheTime(t *testing.T) {
 	s, enc, plain := newStore(t)
-	if err := s.Put(jid, msgID, media.Image, key, strings.NewReader("x")); err != nil {
+	if err := s.Put(jid, msgID, media.Image, strings.NewReader("x")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Plain(jid, msgID, ".jpg", media.Image, key); err != nil {
+	if _, err := s.Plain(jid, msgID, ".jpg", media.Image); err != nil {
 		t.Fatal(err)
 	}
 	for _, root := range []string{enc, plain} {
@@ -268,16 +272,16 @@ func TestNamesHideTheChatTheIdAndTheTime(t *testing.T) {
 
 func TestEveryMethodFindsTheFileUnderItsNewName(t *testing.T) {
 	s, enc, plain := newStore(t)
-	if err := s.Put(jid, msgID, media.Image, key, strings.NewReader("pic")); err != nil {
+	if err := s.Put(jid, msgID, media.Image, strings.NewReader("pic")); err != nil {
 		t.Fatal(err)
 	}
 	if !s.Has(jid, msgID) || s.Has(jid, "other") {
 		t.Error("Has")
 	}
-	if p, err := s.Plain(jid, msgID, ".jpg", media.Image, key); err != nil || filepath.Ext(p) != ".jpg" {
+	if p, err := s.Plain(jid, msgID, ".jpg", media.Image); err != nil || filepath.Ext(p) != ".jpg" {
 		t.Errorf("Plain = %q, %v", p, err)
 	}
-	up, err := s.UploadCopy(jid, msgID, media.Image, key)
+	up, err := s.UploadCopy(jid, msgID, media.Image)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,14 +290,14 @@ func TestEveryMethodFindsTheFileUnderItsNewName(t *testing.T) {
 	}
 	os.Remove(up) // the caller removes the upload copy
 	dst := filepath.Join(t.TempDir(), "out")
-	if err := s.Export(jid, msgID, media.Image, key, dst); err != nil {
+	if err := s.Export(jid, msgID, media.Image, dst); err != nil {
 		t.Errorf("Export: %v", err)
 	}
 	s.Release(jid)
 	if m, _ := filepath.Glob(filepath.Join(plain, "*", "*")); len(m) != 0 {
 		t.Errorf("Release left %v", m)
 	}
-	s.Plain(jid, msgID, ".jpg", media.Image, key)
+	s.Plain(jid, msgID, ".jpg", media.Image)
 	s.Remove(jid, msgID)
 	if s.Has(jid, msgID) {
 		t.Error("Remove kept the file")
@@ -309,13 +313,13 @@ func TestEveryMethodFindsTheFileUnderItsNewName(t *testing.T) {
 func TestMoveChatOpensTheMediaUnderTheNewChat(t *testing.T) {
 	s, _, _ := newStore(t)
 	lid := "1234567890@lid"
-	if err := s.Put(lid, "a", media.Image, key, strings.NewReader("lid file")); err != nil {
+	if err := s.Put(lid, "a", media.Image, strings.NewReader("lid file")); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.MoveChat(lid, jid, []string{"a"}); err != nil {
 		t.Fatal(err)
 	}
-	path, err := s.Plain(jid, "a", "", media.Image, key)
+	path, err := s.Plain(jid, "a", "", media.Image)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,10 +332,10 @@ func TestStoreWithoutTheKeyWipesAndRefusesTheRest(t *testing.T) {
 	plain := filepath.Join(t.TempDir(), "plain")
 	os.MkdirAll(filepath.Join(plain, "x"), 0o700)
 	s := media.New(filepath.Join(t.TempDir(), "media"), plain)
-	if err := s.Put(jid, msgID, media.Image, key, strings.NewReader("x")); err == nil {
+	if err := s.Put(jid, msgID, media.Image, strings.NewReader("x")); err == nil {
 		t.Error("Put without the key must fail")
 	}
-	if _, err := s.Plain(jid, msgID, "", media.Image, key); err == nil {
+	if _, err := s.Plain(jid, msgID, "", media.Image); err == nil {
 		t.Error("Plain without the key must fail")
 	}
 	if s.Has(jid, msgID) || s.MoveChat(jid, "b", nil) == nil || s.Rename() == nil {
@@ -349,7 +353,8 @@ func TestOtherKeysGiveOtherNames(t *testing.T) {
 		enc := filepath.Join(t.TempDir(), "media")
 		s := media.New(enc, "")
 		s.SetNameKey(media.NameKey(k))
-		if err := s.Put(jid, msgID, media.Image, key, strings.NewReader("x")); err != nil {
+		s.SetFileKey(media.FileKey(k))
+		if err := s.Put(jid, msgID, media.Image, strings.NewReader("x")); err != nil {
 			t.Fatal(err)
 		}
 		names[stored1(t, enc)[len(enc):]] = true
@@ -361,16 +366,16 @@ func TestOtherKeysGiveOtherNames(t *testing.T) {
 
 func TestEmptyNamesAreRefused(t *testing.T) {
 	s, enc, _ := newStore(t)
-	if err := s.Put(jid, msgID, media.Image, key, strings.NewReader("x")); err != nil {
+	if err := s.Put(jid, msgID, media.Image, strings.NewReader("x")); err != nil {
 		t.Fatal(err)
 	}
 	if s.Has(jid, "") || s.Has("", msgID) {
 		t.Error("Has accepted an empty name")
 	}
-	if s.Put(jid, "", media.Image, key, strings.NewReader("x")) == nil || s.Put("", msgID, media.Image, key, strings.NewReader("x")) == nil {
+	if s.Put(jid, "", media.Image, strings.NewReader("x")) == nil || s.Put("", msgID, media.Image, strings.NewReader("x")) == nil {
 		t.Error("Put accepted an empty name")
 	}
-	if s.Export(jid, "", media.Image, key, filepath.Join(t.TempDir(), "o")) == nil {
+	if s.Export(jid, "", media.Image, filepath.Join(t.TempDir(), "o")) == nil {
 		t.Error("Export accepted an empty id")
 	}
 	s.Remove(jid, "")
@@ -381,7 +386,7 @@ func TestEmptyNamesAreRefused(t *testing.T) {
 
 func TestExportReplacesASymlinkAndSetsMode0600(t *testing.T) {
 	s, _, _ := newStore(t)
-	if err := s.Put("c", "m", media.Document, key, strings.NewReader("data")); err != nil {
+	if err := s.Put("c", "m", media.Document, strings.NewReader("data")); err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
@@ -394,7 +399,7 @@ func TestExportReplacesASymlinkAndSetsMode0600(t *testing.T) {
 	old := filepath.Join(dir, "old")
 	os.WriteFile(old, []byte("old"), 0o644)
 	for _, dst := range []string{link, old} {
-		if err := s.Export("c", "m", media.Document, key, dst); err != nil {
+		if err := s.Export("c", "m", media.Document, dst); err != nil {
 			t.Fatal(err)
 		}
 		st, _ := os.Lstat(dst)
@@ -407,5 +412,60 @@ func TestExportReplacesASymlinkAndSetsMode0600(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(victim); string(got) != "keep" {
 		t.Errorf("Export followed the symlink: victim = %q", got)
+	}
+}
+
+func TestStoredFileIsNotTheCDNBlob(t *testing.T) {
+	s, enc, _ := newStore(t)
+	mediaKey := bytes.Repeat([]byte{9}, 32)
+	text := []byte("the same plain bytes")
+	if err := s.Put("c", "m", media.Image, bytes.NewReader(text)); err != nil {
+		t.Fatal(err)
+	}
+	x := hkdfutil.SHA256(mediaKey, nil, []byte(media.Image.Info()), 112) // the keys of the CDN blob
+	var blob bytes.Buffer
+	if _, _, _, _, err := cbcutil.EncryptStream(x[16:48], x[:16], x[48:80], bytes.NewReader(text), &blob); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(stored1(t, enc))
+	if bytes.Equal(got, blob.Bytes()) || sha256.Sum256(got) == sha256.Sum256(blob.Bytes()) {
+		t.Error("the stored file equals the CDN blob")
+	}
+}
+
+func TestOtherStoreKeysStoreOtherFiles(t *testing.T) {
+	var files [][]byte
+	for _, k := range [][]byte{key, bytes.Repeat([]byte{8}, 32)} {
+		enc := filepath.Join(t.TempDir(), "media")
+		s := media.New(enc, "")
+		s.SetNameKey(media.NameKey(key)) // same names, so only the file key differs
+		s.SetFileKey(media.FileKey(k))
+		if err := s.Put("c", "m", media.Image, strings.NewReader("x")); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(stored1(t, enc))
+		files = append(files, b)
+	}
+	if bytes.Equal(files[0], files[1]) {
+		t.Error("two store keys gave the same file")
+	}
+}
+
+func TestFileWithAnotherKeyFailsTheIntegrityCheck(t *testing.T) {
+	s, _, _ := newStore(t)
+	if err := s.Put("c", "m", media.Image, strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	s.SetFileKey(media.FileKey(bytes.Repeat([]byte{8}, 32))) // the key of the old format is another key
+	if err := s.Export("c", "m", media.Image, filepath.Join(t.TempDir(), "o")); !errors.Is(err, media.ErrIntegrity) {
+		t.Errorf("Export = %v, want ErrIntegrity", err)
+	}
+}
+
+func TestNoFileKeyRefusesWork(t *testing.T) {
+	s := media.New(filepath.Join(t.TempDir(), "m"), "")
+	s.SetNameKey(media.NameKey(key))
+	if err := s.Put("c", "m", media.Image, strings.NewReader("x")); err == nil {
+		t.Error("Put worked without a file key")
 	}
 }

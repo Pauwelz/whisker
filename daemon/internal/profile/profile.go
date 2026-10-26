@@ -63,13 +63,14 @@ func (p *Profile) Device() *sqlstore.Container { return p.device }
 // and when the key is in the keyring but is wrong. Open never deletes such a Profile: it renames the Profile directory
 // to <dir>.unreadable-<time> and starts a fresh Profile (see MovedAside).
 // A keyring error leaves the Profile alone and returns keystore.ErrUnavailable.
-// Then Open gives the Media store its name key and renames the Media files of the old layout.
+// Then Open gives the Media store its name key and file key, and renames the Media files of the old layout.
 func (p *Profile) Open() error {
 	key, err := p.openKeyed()
 	if err != nil {
 		return err
 	}
 	p.Media().SetNameKey(media.NameKey(key))
+	p.Media().SetFileKey(media.FileKey(key))
 	_ = p.Media().Rename() // a file that did not move stays, and the next Open tries again
 	return nil
 }
