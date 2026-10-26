@@ -31,6 +31,40 @@ GitHub can open a PR against `main`, the default branch.
 3. Select `dev` in the base branch list.
 4. Click **Save**.
 
+## Build and run the Daemon
+
+Work happens on `dev`. `main` only moves to release commits, so its HEAD is always installable.
+The architecture is in [docs/architecture.md](docs/architecture.md).
+
+```sh
+scripts/build-daemon.sh        # writes bin/whisker-daemon, with the version from manifest.json
+bin/whisker-daemon --version
+bin/whisker-daemon             # type JSON lines; press Ctrl+D to stop
+```
+
+The Plugin runs `bin/whisker-daemon`. Edited Plugin QML loads only after a shell restart, because the Service is `keepLoaded`.
+
+## Tests
+
+```sh
+cd daemon && go test ./...     # Go: the Daemon, driven by the golden fixtures
+node --test tests/*.test.js    # Plugin state logic, driven by the same fixtures
+```
+
+To add a golden fixture, follow [docs/contract.md](docs/contract.md), section "Golden fixtures".
+
+## Take screenshots
+
+The demo Daemon shows made-up Chats, so a screenshot shows no real data.
+It keeps its Profile in `$XDG_RUNTIME_DIR/whisker-demo` and does not touch your real Profile or keyring.
+
+1. Run `scripts/demo-daemon.sh`.
+2. Restart the shell.
+3. Take two screenshots of the pop-out: the Chat list and the "Weekend hike" Chat.
+4. Run `scripts/make-preview.sh <chat-list.png> <chat.png>`. It writes `preview.png`, which the README and the marketplace card use.
+5. Run `scripts/build-daemon.sh`.
+6. Restart the shell.
+
 ## Releases
 
 The maintainer releases with the steps in [docs/releasing.md](docs/releasing.md).

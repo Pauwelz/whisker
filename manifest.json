@@ -5,7 +5,8 @@
   "version": "1.0.1",
   "author": "Michel Pauwels",
   "license": "MIT",
-  "description": "A WhatsApp client for the Omarchy shell.",
+  "description": "Read and reply to your WhatsApp chats from the Omarchy bar. whisker links to your phone as a companion device, like WhatsApp Web, through the open-source whatsmeow library. It keeps your messages encrypted on disk. Unofficial: not affiliated with WhatsApp or Meta.",
+  "homepage": "https://github.com/Pauwelz/whisker",
   "kinds": ["service", "bar-widget"],
   "keepLoaded": true,
   "entryPoints": {
@@ -14,7 +15,7 @@
   },
   "barWidget": {
     "displayName": "whisker",
-    "description": "WhatsApp pop-out",
+    "description": "WhatsApp chats in a pop-out",
     "category": "Communication",
     "allowMultiple": false,
     "defaultSection": "right"
