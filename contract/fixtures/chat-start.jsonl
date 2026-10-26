@@ -13,3 +13,7 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","id":4,"result":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":5,"method":"chats.list","params":{}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":5,"result":{"chats":[{"jid":"1111@s.whatsapp.net","kind":"direct","name":"+1111","lastActive":40,"pinned":false,"muted":false,"unread":false},{"jid":"2222@s.whatsapp.net","kind":"direct","name":"+2222","lastActive":0,"pinned":false,"muted":false,"unread":false}],"more":false,"offset":0,"unreadChats":0}}}
+{"dir":"whatsapp","event":{"kind":"pushName","jid":"1111@s.whatsapp.net","name":"Mom"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.start","params":{"jid":"1111@s.whatsapp.net"}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":3,"result":{"chat":{"jid":"1111@s.whatsapp.net","kind":"direct","name":"Mom","pushNameOnly":true,"lastActive":40,"pinned":false,"muted":false,"unread":false}}}}

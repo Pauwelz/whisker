@@ -195,8 +195,8 @@ The Daemon sends the notification before the `chatsChanged` of that Message. It 
 | Part | Value |
 |---|---|
 | App name | `whisker` |
-| Summary | The Chat name. |
-| Body | A Group Chat: `<sender>: <text>`. A Direct Chat: the text. A Message with Media and no text: the Media label (`Photo`, `Sticker`, `Voice message`, `Audio`, `Video`, `Document`). With `notificationPreview` off: `New message`. The body is plain text. |
+| Summary | The Chat name. For a Chat with `pushNameOnly`: `~ name +number`. |
+| Body | A Group Chat: `<sender>: <text>`, where `<sender>` is `~ name +number` when the Message has `senderPush`. A Direct Chat: the text. A Message with Media and no text: the Media label (`Photo`, `Sticker`, `Voice message`, `Audio`, `Video`, `Document`). With `notificationPreview` off: `New message`. The body is plain text. |
 | Click hint | `omarchy-exec-argv`, a string with the JSON argv `["omarchy-shell","pauwelz.whisker","openChat","<chat>"]`. A click runs the Plugin IPC handler `openChat` and opens the pop-out on that Chat. |
 | Urgency hint | `urgency`, a byte, 0 (low), as in `omarchy-notification-send`. |
 
@@ -229,11 +229,11 @@ Params, all optional: `offset` (default 0), `limit` (default 50, at most 200), `
 - `mutedUntil` is the end of the mute in Unix seconds, `-1` for ever. It is present only when `muted` is true.
 - `unreadCount` counts the live Messages of other Participants in an unread Chat. Only Messages after the last clear of the Read Marker count. A Message that still waits for a Read Receipt does not count when it came before that clear (fixture `unread-count-after-open.jsonl`). It is absent (0) for a read Chat. A Chat that the phone marked unread has none, so the Plugin shows a dot. `mention` is true when one of those Messages mentions the user. It is absent otherwise.
 - `unreadChats` is the number of unread Chats that are not Muted or archived, and that the list shows (a Chat with no Message and no Draft is not listed), over the whole chat store. It does not depend on `query` or `offset`. The bar shows it.
-- `name` follows the name rule below. `more` is true when another page follows at `offset + limit`.
+- `name` follows the name rule below. `pushNameOnly` is true when the Chat is not a Group Chat and `name` is a Push Name: the phone holds no contact name. It is absent otherwise. The Plugin shows "~ name" and the phone number from `jid` in the Chat list and the Chat header. The notification of the Daemon uses the same form (see Notifications). `chat.start` returns it too. `more` is true when another page follows at `offset + limit`.
 - `query` keeps the Chats whose `name` contains the text, or in which a Participant with that name wrote a Message. Case does not matter. A blank `query` keeps all Chats. Paging works as without `query`.
 - Error -32003 means the chat store failed.
 
-Name rule, resolved by the Daemon at list time:
+Name rule, resolved by the Daemon at list time. A Push Name is marked as "~ name +number" on every surface (`pushNameOnly` on a Chat, `senderPush` on a Message):
 
 1. A Group Chat shows its subject.
 2. Any other Chat shows the name that the phone contacts hold for the Participant.
@@ -242,7 +242,7 @@ Name rule, resolved by the Daemon at list time:
 
 The names of the phone contacts come from App State. whatsmeow sends no event for a full App State sync, so on each connect and after each full sync the Daemon reads every named contact from the device store and stores the names under the phone JID. This read never removes a name; a live App State change does.
 
-Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chats-pages.jsonl`, `chats-search.jsonl`, `chats-contact-book.jsonl`.
+Fixtures: `chats-list.jsonl`, `chats-names.jsonl` (each step of the rule), `chat-start.jsonl` (`pushNameOnly` in `chat.start`), `notify-direct.jsonl`, `notify-new.jsonl` and `notify-contact.jsonl` (the marker in notifications), `chats-pages.jsonl`, `chats-search.jsonl`, `chats-contact-book.jsonl`.
 
 ### `contacts.search`
 

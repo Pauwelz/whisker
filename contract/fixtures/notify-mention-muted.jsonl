@@ -14,4 +14,4 @@
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","message":{"id":"a3","sender":"2@s.whatsapp.net","time":52,"text":"@4 and @3","pushName":"Ann","mentions":["4@s.whatsapp.net","3@s.whatsapp.net"]},"chatKind":"group"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"a3","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":52,"text":"@+4 and @Zed","state":"","edited":false,"revoked":false,"mentions":["@+4","@Zed"],"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
-{"dir":"notified","notified":[{"summary":"Crew","body":"Ann: @Zed look","chat":"g1@g.us"}]}
+{"dir":"notified","notified":[{"summary":"Crew","body":"~ Ann +2: @Zed look","chat":"g1@g.us"}]}

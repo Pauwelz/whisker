@@ -53,7 +53,7 @@ A Participant for whom the contacts on the user's primary phone hold a name. A P
 _Avoid_: Contact, address book entry, friend
 
 **Push Name**:
-The name that a Participant sets for themselves in WhatsApp. whisker shows it when your phone contacts have no name for that Participant.
+The name that a Participant sets for themselves in WhatsApp. whisker shows it when your phone contacts have no name for that Participant. Every surface marks it as "~ name +number", so a stranger cannot pass as a Phone Contact.
 _Avoid_: Nickname, display name, profile name
 
 **Pair Code**:

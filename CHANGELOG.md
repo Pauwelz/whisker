@@ -18,6 +18,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- A name that a stranger chose for themselves now shows as "~ name +number" in the Chat list, the Chat header and notifications, as it already did in the timeline. Before, anyone could appear as "Mom" there. Names with a phone contact and group names stay as they are.
 - Notifications no longer pass message text and names to a helper process, where other local users could read them.
 - A member of a group could write a line of JSON into the stream the Plugin reads. A short group Message made libsignal print its raw bytes to stdout. The Plugin then treated that line as a frame. Now only the frame encoder writes to the stdout of the Daemon. The Daemon discards all libsignal log lines.
 - A sender can no longer crash the Daemon with a large "separate thumbnail" link. The Daemon stops a thumbnail download at 256 KiB, times it out after 30 seconds, and runs at most three at once. It drops a larger thumbnail, also an inline one, and does not fetch an oversized link again. An update removes oversized thumbnails that chat.db already holds.

@@ -399,7 +399,7 @@ func (s *Store) queryRows(query string, args ...any) ([]Message, error) {
 		}
 		if !m.FromMe {
 			m.SenderName = participantName(contact, push, m.Sender)
-			m.SenderPush = contact == "" && push != ""
+			m.SenderPush = pushOnly(contact, push)
 		}
 		if q.ID != "" {
 			q.FromMe = q.Sender == ""

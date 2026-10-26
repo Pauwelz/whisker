@@ -13,4 +13,4 @@
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"m2","sender":"1@s.whatsapp.net","time":60,"text":"loud","pushName":"Ann"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m2","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":60,"text":"loud","state":"","edited":false,"revoked":false,"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
-{"dir":"notified","notified":[{"summary":"Ann","body":"loud","chat":"1@s.whatsapp.net"}]}
+{"dir":"notified","notified":[{"summary":"~ Ann +1","body":"loud","chat":"1@s.whatsapp.net"}]}

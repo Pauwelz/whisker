@@ -773,7 +773,17 @@ Panel {
                 Layout.maximumWidth: Math.min(implicitWidth, parent.width * 0.6)
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
-                text: root.openChat ? root.openChat.name : ""
+                text: root.openChat ? ChatList.chatName(root.openChat) : ""
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+              }
+              Text {
+                // The number of a Push Name stays whole: the name elides, never the number.
+                visible: text !== ""
+                textFormat: Text.PlainText
+                text: root.openChat ? ChatList.chatNumber(root.openChat) : ""
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body

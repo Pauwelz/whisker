@@ -95,6 +95,37 @@ func TestNameRule(t *testing.T) {
 	}
 }
 
+func TestPushNameOnlyChats(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{
+		{JID: "1111@s.whatsapp.net", Kind: whatsapp.KindDirect, LastActive: 10},
+		{JID: "2222@s.whatsapp.net", Kind: whatsapp.KindDirect, LastActive: 9},
+		{JID: "3333@s.whatsapp.net", Kind: whatsapp.KindDirect, LastActive: 8},
+		{JID: "4444-5@g.us", Kind: whatsapp.KindGroup, Subject: "Family", LastActive: 7},
+	}})
+	apply(t, s, whatsapp.PushName{JID: "1111@s.whatsapp.net", Name: "Ann (push)"})
+	apply(t, s, whatsapp.PushName{JID: "2222@s.whatsapp.net", Name: "Bob (push)"})
+	apply(t, s, whatsapp.ContactName{JID: "2222@s.whatsapp.net", Name: "Bob"})
+	apply(t, s, whatsapp.PushName{JID: "4444-5@g.us", Name: "Mom"})
+
+	want := map[string]bool{"1111@s.whatsapp.net": true, "2222@s.whatsapp.net": false, "3333@s.whatsapp.net": false, "4444-5@g.us": false}
+	for _, c := range list(t, s, 0, 10).Chats {
+		if c.PushNameOnly != want[c.JID] {
+			t.Errorf("%s PushNameOnly = %v, want %v", c.JID, c.PushNameOnly, want[c.JID])
+		}
+	}
+	one, err := s.Chat("1111@s.whatsapp.net")
+	if err != nil || !one.PushNameOnly {
+		t.Errorf("Chat PushNameOnly = %v, %v; want true", one.PushNameOnly, err)
+	}
+}
+
+func TestMarkedNameShowsTheNumberOfAPushName(t *testing.T) {
+	if got, want := chatstore.MarkedName("Mom", "1111:2@s.whatsapp.net"), "~ Mom +1111"; got != want {
+		t.Errorf("MarkedName = %q, want %q", got, want)
+	}
+}
+
 func TestHistoryPushNamesAndMessagePushNamesFeedTheRule(t *testing.T) {
 	s, _ := newStore(t)
 	apply(t, s, whatsapp.HistorySync{

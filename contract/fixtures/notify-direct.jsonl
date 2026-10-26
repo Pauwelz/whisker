@@ -6,4 +6,4 @@
 {"dir":"whatsapp","event":{"kind":"newMessage","chat":"1@s.whatsapp.net","message":{"id":"m1","sender":"1@s.whatsapp.net","time":50,"text":"hi there","pushName":"Ann"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"hi there","state":"","edited":false,"revoked":false,"senderPush":true}}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
-{"dir":"notified","notified":[{"summary":"Ann","body":"hi there","chat":"1@s.whatsapp.net"}]}
+{"dir":"notified","notified":[{"summary":"~ Ann +1","body":"hi there","chat":"1@s.whatsapp.net"}]}

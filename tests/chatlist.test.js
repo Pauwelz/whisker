@@ -4,6 +4,7 @@ const load = require("./load");
 
 const ChatList = load("state/ChatList.js");
 const Daemon = load("state/Daemon.js");
+const Timeline = load("state/Timeline.js");
 
 const ann = { jid: "1@s.whatsapp.net", kind: "direct", name: "Ann", unread: true, unreadCount: 2 };
 const fam = { jid: "g@g.us", kind: "group", name: "Family", unread: false };
@@ -51,4 +52,21 @@ test("emptyChatsText tells why no Chat shows", () => {
   assert.equal(ChatList.emptyChatsText("groups", ""), "No group chats.");
   assert.equal(ChatList.emptyChatsText("archived", ""), "No archived chats.");
   assert.equal(ChatList.emptyChatsText("all", "zed"), "No chat matches “zed”.");
+});
+
+test("a Chat with only a Push Name shows \"~ name\" and the phone number", () => {
+  const stranger = { jid: "7:3@s.whatsapp.net", kind: "direct", name: "Mom", pushNameOnly: true };
+  assert.equal(ChatList.chatName(stranger), "~ Mom");
+  assert.equal(ChatList.chatNumber(stranger), "+7");
+  assert.equal(ChatList.chatName(ann), "Ann");
+  assert.equal(ChatList.chatNumber(ann), "");
+  assert.equal(ChatList.chatName(fam), "Family");
+});
+
+test("the open Chat keeps the Push Name flag, so the header shows the marker", () => {
+  const stranger = { jid: "7@s.whatsapp.net", kind: "direct", name: "Mom", pushNameOnly: true };
+  const open = Timeline.openChat(Daemon.initialState(), stranger).openChat;
+  assert.equal(ChatList.chatName(open), "~ Mom");
+  assert.equal(ChatList.chatNumber(open), "+7");
+  assert.equal(Timeline.openChat(Daemon.initialState(), ann).openChat.pushNameOnly, undefined);
 });

@@ -7,4 +7,4 @@
 {"dir":"whatsapp","event":{"kind":"historySync","chats":[{"jid":"1@s.whatsapp.net","lastActive":10,"pinned":true,"mutedUntil":-1,"timer":60}]}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chats.list","params":{}}}
-{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"Ann","lastActive":50,"pinned":true,"muted":true,"mutedUntil":-1,"unread":true,"unreadCount":1,"timer":60}],"more":false,"offset":0,"unreadChats":0}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"1@s.whatsapp.net","kind":"direct","name":"Ann","pushNameOnly":true,"lastActive":50,"pinned":true,"muted":true,"mutedUntil":-1,"unread":true,"unreadCount":1,"timer":60}],"more":false,"offset":0,"unreadChats":0}}}
