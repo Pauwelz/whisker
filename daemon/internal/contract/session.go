@@ -20,6 +20,9 @@ import (
 // Tests replace it with a manual clock.
 var Clock clock.Clock = clock.Real
 
+// maxMuteWait is the longest wait of the Mute end timer, in seconds (24 h).
+const maxMuteWait = 24 * 60 * 60
+
 // keepGoing is what a step returns when the Daemon goes on. Any other value is an exit code.
 const keepGoing = -1
 
@@ -80,13 +83,10 @@ func (s *session) open() int {
 		s.chats = chatstore.New(s.profile.Chat(), Clock.Now)
 		s.read = &reader{chats: s.chats, port: s.port, prefs: s.prefs, attn: &s.attn, logOut: s.logOut, played: map[string]bool{}}
 		s.notices = &notifier{chats: s.chats, prefs: s.prefs, attn: &s.attn, desktop: s.desktop, logOut: s.logOut}
-		// A settings file that cannot be read gives the defaults.
+		// A settings file that cannot be read turns auto-download off.
 		autoDownloads := func(size int64) bool {
 			cur, err := s.prefs.Get()
-			if err != nil {
-				cur = settings.Defaults()
-			}
-			return cur.AutoDownloads(size)
+			return err == nil && cur.AutoDownloads(size)
 		}
 		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, s.notices.show, autoDownloads)
 		s.sent = s.box.results
@@ -311,7 +311,9 @@ func (s *session) scheduleMuteEnd() {
 	case !ok:
 		s.muteTick, s.muteAt = nil, 0
 	case until != s.muteAt:
-		s.muteTick, s.muteAt = Clock.After(time.Duration(until-Clock.Now().Unix())*time.Second), until
+		// The wait is capped: a far end must not overflow the Duration. The tick re-checks the end.
+		wait := time.Duration(min(until-Clock.Now().Unix(), maxMuteWait)) * time.Second
+		s.muteTick, s.muteAt = Clock.After(wait), until
 	}
 }
 
