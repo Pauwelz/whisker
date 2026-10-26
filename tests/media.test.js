@@ -83,3 +83,15 @@ test("Media is downloading only in that state", () => {
   assert.equal(Media.isDownloading(pdf), false);
   assert.equal(Media.isDownloading({ id: "t", chat: "c" }), false);
 });
+
+test("the default app opens only safe extensions without asking", () => {
+  const doc = { media: { kind: "document" } };
+  for (const f of ["a.pdf", "a.PDF", "a.jpg", "a.docx", "a.txt"]) assert.equal(Media.needsOpenConfirm(doc, "/p/" + f), false, f);
+  for (const f of ["a.html", "a.svg", "a.desktop", "a.sh", "a", "a.pdf.html"]) assert.equal(Media.needsOpenConfirm(doc, "/p/" + f), true, f);
+  assert.equal(Media.needsOpenConfirm({ media: { kind: "video" } }, "/p/a.html"), false); // mpv opens it, hardened
+});
+
+test("fileUrl encodes each path segment", () => {
+  assert.equal(Media.fileUrl("/run/m.jpg"), "file:///run/m.jpg");
+  assert.equal(Media.fileUrl("/run/a#b?c d/m.jpg"), "file:///run/a%23b%3Fc%20d/m.jpg");
+});

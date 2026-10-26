@@ -102,6 +102,17 @@ function openCommand(message, path) {
   return ["mpv"].concat(flag, MPV_LOCAL_ONLY, [path])
 }
 
+// The extensions that open without a question: documents, common images and plain text. Any other extension, such as
+// .html, .svg, .desktop or .sh, can run active content in the default app, so the user decides first.
+var SAFE_EXTENSIONS = ["pdf", "jpg", "jpeg", "png", "gif", "webp", "bmp", "txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "csv"]
+
+// True when the default app would open `path` and its extension is not on the safe list. mpv opens the rest.
+function needsOpenConfirm(message, path) {
+  if (openCommand(message, path)[0] !== "xdg-open") return false
+  var ext = /\.([^./]*)$/.exec(path)
+  return !ext || SAFE_EXTENSIONS.indexOf(ext[1].toLowerCase()) === -1
+}
+
 // Voice notes play in the pop-out. `playingKey` is the mediaKey of the note that plays now, or "".
 function isVoice(message) {
   return !!message.media && message.media.kind === "voice"
@@ -197,7 +208,12 @@ function chipShown(m) {
 function thumbnailSource(m, path) {
   if (!m.media) return ""
   if (m.media.thumbnail) return "data:image/jpeg;base64," + m.media.thumbnail
-  return previewsFile(m) && path ? "file://" + path : ""
+  return previewsFile(m) && path ? fileUrl(path) : ""
+}
+
+// The file: URL of an absolute path. Each segment is encoded, so a "#" or "?" in a name stays part of the path.
+function fileUrl(path) {
+  return "file://" + path.split("/").map(encodeURIComponent).join("/")
 }
 
 // A video that is not downloaded shows its thumbnail blurred.

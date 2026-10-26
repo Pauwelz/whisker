@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import "state/ChatList.js" as ChatList
 import "state/Daemon.js" as Daemon
 import "state/Draft.js" as Draft
@@ -181,6 +182,7 @@ Item {
   function setPopoutOpen(open) {
     popoutOpen = open
     if (!open) {
+      confirmOpen = null
       stopPlayer()
       stopTyping()
     }
@@ -189,7 +191,36 @@ Item {
 
   function syncAttention() {
     if (!daemon.running) return
-    send(Daemon.attentionRequest, popoutOpen, view.openChat ? view.openChat.jid : "")
+    send(Daemon.attentionRequest, Daemon.attentionOpen(popoutOpen, idleMonitor.isIdle, screenLocked), view.openChat ? view.openChat.jid : "")
+  }
+
+  // The user is away when the session is idle for a minute or the screen is locked. The Daemon then counts the pop-out as closed.
+  property bool screenLocked: false
+  onScreenLockedChanged: syncAttention()
+
+  IdleMonitor {
+    id: idleMonitor
+    timeout: 60
+    respectInhibitors: false
+    onIsIdleChanged: root.syncAttention()
+  }
+
+  // Omarchy keeps its lock state in its own service, which a plugin cannot read. The lock command answers "true" or "false".
+  Process {
+    id: lockProbe
+    command: ["omarchy-shell", "lock", "isLocked"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.screenLocked = text.trim() === "true"
+    }
+  }
+
+  Timer {
+    interval: 5000
+    repeat: true
+    running: root.popoutOpen && daemon.running
+    triggeredOnStart: true
+    onTriggered: lockProbe.running = true
   }
 
   // Media the user clicked to open, by key, until its path arrives.
@@ -240,8 +271,27 @@ Item {
       playVoice(message, path)
       return
     }
+    if (Media.needsOpenConfirm(message, path)) {
+      confirmOpen = { message: message, path: path }
+      return
+    }
     opener.command = Media.openCommand(message, path)
     opener.startDetached()
+  }
+
+  // The Open that waits for the user's answer ({ message, path }), or null.
+  property var confirmOpen: null
+
+  function confirmLaunch() {
+    var open = confirmOpen
+    confirmOpen = null
+    if (!open) return
+    opener.command = Media.openCommand(open.message, open.path)
+    opener.startDetached()
+  }
+
+  function cancelLaunch() {
+    confirmOpen = null
   }
 
   // Asks for the path of each image and sticker that is ready, and opens Media that the user clicked.

@@ -833,3 +833,16 @@ test("the keyring notice stays through later frames and ends with a new ready", 
   state = Daemon.applyFrame(state, { method: "ready", params: { keyringPlain: false } });
   assert.equal(Daemon.keyringNotice(state), "");
 });
+
+test("reactionChips keys have no prototype", () => {
+  const reactions = ["__proto__", "constructor", "toString"].map((emoji) => ({ emoji, senderName: "A" }));
+  const chips = JSON.parse(JSON.stringify(Message.reactionChips({ id: "m", reactions })));
+  assert.deepEqual(chips.map((c) => [c.emoji, c.count]), [["__proto__", 1], ["constructor", 1], ["toString", 1]]);
+});
+
+test("attention needs an open pop-out, no idle and no lock", () => {
+  assert.equal(Daemon.attentionOpen(true, false, false), true);
+  assert.equal(Daemon.attentionOpen(true, true, false), false);
+  assert.equal(Daemon.attentionOpen(true, false, true), false);
+  assert.equal(Daemon.attentionOpen(false, false, false), false);
+});
