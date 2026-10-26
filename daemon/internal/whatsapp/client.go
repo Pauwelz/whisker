@@ -342,7 +342,7 @@ func mediaOf(m *waE2E.Message) *Media {
 			ThumbDirectPath: vm.GetThumbnailDirectPath(), ThumbSHA256: vm.GetThumbnailSHA256(), ThumbEncSHA256: vm.GetThumbnailEncSHA256()}
 	case m.GetDocumentMessage() != nil:
 		dm := m.GetDocumentMessage()
-		return &Media{Kind: media.Document, Mime: dm.GetMimetype(), Name: dm.GetFileName(), Size: sizeOf(dm.GetFileLength()), Key: dm.GetMediaKey(), DirectPath: dm.GetDirectPath(), FileSHA256: dm.GetFileSHA256(), FileEncSHA256: dm.GetFileEncSHA256(), Thumbnail: dm.GetJPEGThumbnail(),
+		return &Media{Kind: media.Document, Mime: dm.GetMimetype(), Name: CleanName(dm.GetFileName(), 0), Size: sizeOf(dm.GetFileLength()), Key: dm.GetMediaKey(), DirectPath: dm.GetDirectPath(), FileSHA256: dm.GetFileSHA256(), FileEncSHA256: dm.GetFileEncSHA256(), Thumbnail: dm.GetJPEGThumbnail(),
 			ThumbDirectPath: dm.GetThumbnailDirectPath(), ThumbSHA256: dm.GetThumbnailSHA256(), ThumbEncSHA256: dm.GetThumbnailEncSHA256()}
 	}
 	return nil

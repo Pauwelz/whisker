@@ -769,3 +769,53 @@ func TestMigrationDropsAnOversizedStoredThumbnail(t *testing.T) {
 		t.Errorf("small thumbnail = %q, want kept", r.Thumbnail)
 	}
 }
+
+func TestNamesAreCleanedBeforeTheyAreStored(t *testing.T) {
+	s, _ := newStore(t)
+	const jid = "1111@s.whatsapp.net"
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{{JID: jid, Kind: whatsapp.KindDirect, LastActive: 10}}})
+	apply(t, s, whatsapp.PushName{JID: jid, Name: "Mom\n\u202e" + strings.Repeat("x", 40)})
+	if name := list(t, s, 0, 10).Chats[0].Name; name != "Mom"+strings.Repeat("x", 22) {
+		t.Errorf("Name = %q, want 25 clean runes", name)
+	}
+	apply(t, s, whatsapp.PushName{JID: jid, Name: "\n\u202e"})
+	if c := list(t, s, 0, 10).Chats[0]; c.Name != "+1111" || c.PushNameOnly {
+		t.Errorf("Name = %q, PushNameOnly = %v; want the phone number", c.Name, c.PushNameOnly)
+	}
+}
+
+func TestMigrationCleansStoredNamesOnce(t *testing.T) {
+	_, db := newStore(t)
+	dirty := "A\u202eB\n"
+	for _, q := range []string{
+		`INSERT INTO names (jid, push_name, contact_name) VALUES ('1@s.whatsapp.net', ?, ?)`,
+		`INSERT INTO chats (jid, kind, subject, last_active, pinned, archived, muted_until, unread, timer) VALUES ('2@g.us', 'group', ?, 0, 0, 0, 0, 0, 0)`,
+		`INSERT INTO media (chat_jid, id, kind, name, media_key) VALUES ('2@g.us', 'm', 'document', ?, x'00')`,
+		`INSERT INTO messages (id, chat_jid, sender_jid, from_me, time, text, system_kind, system_value) VALUES ('s', '2@g.us', 'x', 0, 1, '', 'subject', ?)`,
+	} {
+		args := []any{dirty}
+		if strings.Contains(q, "names") {
+			args = append(args, dirty)
+		}
+		if _, err := db.Exec(q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 { // the second run must change nothing
+		if _, err := db.Exec("PRAGMA user_version = 23"); err != nil {
+			t.Fatal(err)
+		}
+		if err := chatstore.Migrate(db); err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range []string{
+			`SELECT push_name FROM names`, `SELECT contact_name FROM names`, `SELECT subject FROM chats`,
+			`SELECT name FROM media`, `SELECT system_value FROM messages`,
+		} {
+			var got string
+			if err := db.QueryRow(q).Scan(&got); err != nil || got != "AB" {
+				t.Errorf("%s = %q, %v; want AB", q, got, err)
+			}
+		}
+	}
+}

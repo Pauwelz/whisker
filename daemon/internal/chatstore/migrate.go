@@ -10,6 +10,7 @@ import (
 // Schema migrations. How to add one:
 //  1. Add migrations/NNNN_name.sql with the next free number.
 //  2. Write plain SQL. Never edit a file that a release has shipped.
+//     If SQL cannot do the step, add a Go function to goSteps (cleannames.go); it runs after the file, in the same transaction.
 //
 // The schema version is PRAGMA user_version: the count of files applied, in file name order.
 // Migrate runs each missing file in its own transaction, so a failed step leaves the version unchanged.
@@ -42,14 +43,14 @@ func Migrate(db *sql.DB) error {
 		if err != nil {
 			return err
 		}
-		if err := applyStep(db, string(script), i+1); err != nil {
+		if err := applyStep(db, string(script), i+1, goSteps[names[i]]); err != nil {
 			return fmt.Errorf("migration %s: %w", names[i], err)
 		}
 	}
 	return nil
 }
 
-func applyStep(db *sql.DB, script string, version int) error {
+func applyStep(db *sql.DB, script string, version int, after func(*sql.Tx) error) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -57,6 +58,11 @@ func applyStep(db *sql.DB, script string, version int) error {
 	defer tx.Rollback()
 	if _, err := tx.Exec(script); err != nil {
 		return err
+	}
+	if after != nil {
+		if err := after(tx); err != nil {
+			return err
+		}
 	}
 	// PRAGMA takes no bound parameters; version is our own integer.
 	if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", version)); err != nil {

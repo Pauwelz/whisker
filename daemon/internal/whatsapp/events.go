@@ -367,7 +367,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 			Timer:      int64(conv.GetEphemeralExpiration()),
 		}
 		if chat.Kind == KindGroup {
-			chat.Subject = conv.GetName()
+			chat.Subject = CleanName(conv.GetName(), MaxGroupSubject)
 		}
 		if conv.GetMuteEndTime() != 0 {
 			chat.MutedUntil = muteUntil(int64(conv.GetMuteEndTime()))
