@@ -167,7 +167,7 @@ func (s *Store) AddPending(chat, id, text string, quote *whatsapp.Quote) (Messag
 }
 
 // AddPendingMedia is AddPending for a Message with Media (text is the caption). The file is in the Media store already,
-// encrypted with m.Key, so the Media is ready at once and a restart or a Retry sends it again.
+// encrypted under its own derived key, so the Media is ready at once and a restart or a Retry sends it again.
 func (s *Store) AddPendingMedia(chat, id, text string, m *whatsapp.Media) (Message, error) {
 	return s.addPending(chat, id, text, nil, m)
 }
