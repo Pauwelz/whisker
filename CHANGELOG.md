@@ -7,6 +7,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-26
+
 ### Added
 
 - Emoji Shortcodes in the composer. Type ":" and 2 or more letters, such as ":smi", to see the matching emoji in a row above the line. Left and Right select and scroll the row, Tab, Enter or a click inserts, and Escape closes the row. A full code with its closing colon, such as ":thumbsup:", becomes 👍 at once. A ":" inside a word, such as "10:30" or "https://", starts no row. The row shows the code of the selected emoji. The emoji, their codes and the match come from Omarchy's emoji picker (Super+Ctrl+E): ":art" also finds ❤️ "heart". Skin tones are not offered.
