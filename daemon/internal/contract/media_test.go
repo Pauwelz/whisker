@@ -371,3 +371,26 @@ func TestAReusedIDOfAnotherAuthorStartsNothing(t *testing.T) {
 		t.Errorf("downloads = %d, want 0", n)
 	}
 }
+
+// An unavailable keyring never opens the Profile, but the exit still wipes the plain copies.
+func TestPlainCopiesAreWipedAtExitWithoutAnOpenProfile(t *testing.T) {
+	r := newRunner(t)
+	stale := filepath.Join(r.runtime, "whisker", "media", "old", "x.jpg")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.setKeyring("missing")
+	r.start()
+	if f := r.nextFrame(); !strings.Contains(f, "keyringUnavailable") {
+		t.Fatalf("frame = %s, want keyringUnavailable", f)
+	}
+	if code, _, _ := r.finish(); code != contract.ExitOK {
+		t.Errorf("exit code = %d", code)
+	}
+	if _, err := os.Stat(stale); err == nil {
+		t.Error("the plain copy stayed after exit")
+	}
+}

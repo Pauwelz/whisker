@@ -387,6 +387,9 @@ Item {
     }
   }
 
+  // EOF on stdin lets the Daemon wipe the plain Media copies before Quickshell kills it. The start wipe covers a lost race.
+  Component.onDestruction: daemon.stdinEnabled = false
+
   Process {
     id: daemon
     command: [root.daemonPath]

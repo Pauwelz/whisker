@@ -78,12 +78,15 @@ func run(frames io.Writer) int {
 	prefs := settings.New(filepath.Join(configDir, "whisker", "settings.json"))
 	p := profile.New(filepath.Join(dataDir, "whisker"), keystore.New(keystore.SecretService{}, clock.Real))
 	defer p.Close()
+	// The lock is held, so no live Daemon owns these copies. No key is needed, so a locked keyring does not skip this.
+	p.Media().Wipe()
 	whatsapp.SetDeviceIdentity(version)
 	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
 	return contract.Run(stdinUntilSignal(), frames, os.Stderr, p, prefs, newPort, desktop.DBus{LogOut: os.Stderr})
 }
 
-// stdinUntilSignal reads stdin, and ends like EOF on SIGTERM or SIGINT.
+// stdinUntilSignal reads stdin, and ends like EOF on SIGTERM, SIGINT or SIGHUP.
+// It also ignores SIGPIPE, so a closed stdout gives a write error and Run returns.
 // Run then returns normally, so it wipes the plain copies of Media.
 func stdinUntilSignal() io.Reader {
 	pr, pw := io.Pipe()
@@ -92,7 +95,8 @@ func stdinUntilSignal() io.Reader {
 		pw.Close()
 	}()
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	signal.Ignore(syscall.SIGPIPE)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	go func() {
 		<-sig
 		pw.Close()
