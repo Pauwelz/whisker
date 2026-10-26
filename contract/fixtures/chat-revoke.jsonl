@@ -17,11 +17,13 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"sent","edited":false,"revoked":true}}}}
 {"dir":"revoked","ids":["fake-1"]}
 {"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"teh","state":"","edited":false,"revoked":false,"senderPush":true},{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"sent","edited":false,"revoked":true}],"moreMessages":false}}}
-{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"in1"}}
+{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"in1","sender":"2@s.whatsapp.net"}}
+{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"in1","fromMe":true}}
+{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"in1","sender":"1@s.whatsapp.net"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"","state":"","edited":false,"revoked":true,"senderPush":true}}}}
 {"dir":"view","expect":{"openChat":{"jid":"1@s.whatsapp.net","name":"Ann","kind":"direct","messages":[{"id":"in1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"","state":"","edited":false,"revoked":true,"senderPush":true},{"id":"fake-1","chat":"1@s.whatsapp.net","sender":"","senderName":"","fromMe":true,"time":1000,"text":"","state":"sent","edited":false,"revoked":true}],"moreMessages":false}}}
-{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"in1"}}
-{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"nope"}}
+{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"in1","sender":"1@s.whatsapp.net"}}
+{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"nope","sender":"1@s.whatsapp.net"}}
 {"dir":"whatsapp","event":{"kind":"messageEdited","chat":"1@s.whatsapp.net","id":"in1","sender":"1@s.whatsapp.net","text":"back"}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":3,"method":"chat.revoke","params":{"chat":"1@s.whatsapp.net","id":"fake-1"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":3,"error":{"code":-32006,"message":"invalid message"}}}

@@ -465,7 +465,7 @@ The Plugin turns a mute choice into an absolute `until`. Fixtures: `chat-pin.jso
 
 Params: `chat` and `id`. Same rules as `chat.edit`, without the 15 minute limit. The Daemon revokes the Message for everyone. It becomes a Tombstone: the store empties the text (and, with Media, the cached Media) and keeps the position. The Daemon answers `{"message": {...}}` and sends `messageChanged` with `revoked: true`.
 
-A revoke from the phone or from the other Participant arrives as `messageChanged` with `revoked: true`. A revoke of an unknown or revoked Message sends nothing. Errors as for `chat.edit`. Fixture: `chat-revoke.jsonl`.
+A revoke from the phone or from the other Participant arrives as `messageChanged` with `revoked: true`. The Daemon applies it only when the revoker is the author of the Message (the `sender` and `fromMe` of the `messageRevoked` event, checked as for an edit). A revoke by anyone else changes nothing and sends nothing. Revokes by a group admin are not applied. A revoke of an unknown or revoked Message sends nothing. Errors as for `chat.edit`. Fixture: `chat-revoke.jsonl`.
 
 ### `chat.deleteForMe`
 

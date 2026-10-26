@@ -230,7 +230,7 @@ func (b *outbox) edited(ev whatsapp.MessageEdited) bool {
 }
 
 func (b *outbox) revoked(ev whatsapp.MessageRevoked) bool {
-	return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Revoke(ev.Chat, ev.ID) })
+	return b.move(ev.Chat, ev.ID, func() (bool, error) { return b.chats.Revoke(ev.Chat, ev.ID, ev.Sender, ev.FromMe) })
 }
 
 func (b *outbox) reacted(ev whatsapp.Reaction) bool {

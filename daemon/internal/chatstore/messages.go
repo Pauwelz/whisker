@@ -219,17 +219,22 @@ func (s *Store) Requeue(chat, id string) (bool, error) {
 	return s.move(chat, id, whatsapp.StateFailed, whatsapp.StatePending)
 }
 
+// authorSQL is the author rule, for the arguments (fromMe, sender): the same fromMe and, for another Participant, the same sender.
+// Edit, Revoke and storedAuthor all use it.
+const authorSQL = `from_me = ? AND (from_me = 1 OR sender_jid = ?)`
+
 // Edit replaces the text of a Message that is not a Tombstone and marks it edited.
 // Only the author can edit: fromMe and sender must match the stored Message. It reports whether the Message changed.
 func (s *Store) Edit(chat, id, sender string, fromMe bool, text string) (bool, error) {
-	return s.change(`UPDATE messages SET text = ?, edited = 1 WHERE chat_jid = ? AND id = ? AND revoked = 0 AND from_me = ? AND (from_me = 1 OR sender_jid = ?)`,
+	return s.change(`UPDATE messages SET text = ?, edited = 1 WHERE chat_jid = ? AND id = ? AND revoked = 0 AND `+authorSQL,
 		text, chat, id, boolInt(fromMe), sender)
 }
 
 // Revoke turns a Message into a Tombstone: it empties the text and keeps the position. It reports whether the Message changed.
+// Only the author can revoke: fromMe and sender must match the stored Message, as for Edit.
 // A Tombstone keeps no Media: the Media row goes, and so does the stored file (through RemoveMedia).
-func (s *Store) Revoke(chat, id string) (bool, error) {
-	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1, mentions = '', mentions_me = 0 WHERE chat_jid = ? AND id = ? AND revoked = 0`, chat, id)
+func (s *Store) Revoke(chat, id, sender string, fromMe bool) (bool, error) {
+	changed, err := s.change(`UPDATE messages SET text = '', edited = 0, revoked = 1, mentions = '', mentions_me = 0 WHERE chat_jid = ? AND id = ? AND revoked = 0 AND `+authorSQL, chat, id, boolInt(fromMe), sender)
 	if err != nil || !changed {
 		return changed, err
 	}
@@ -574,15 +579,13 @@ func putMessage(tx *sql.Tx, chat string, m whatsapp.Message, mediaState string) 
 }
 
 // storedAuthor tells whether a Message with the ID of m is stored in the Chat, and if so, whether m has the same author.
-// The author is from_me and, for another Participant, the sender: the phone JID, as the Edit check reads it.
+// The author rule is authorSQL.
 func storedAuthor(tx *sql.Tx, chat string, m whatsapp.Message) (stored, sameAuthor bool, err error) {
-	var fromMe bool
-	var sender string
-	err = tx.QueryRow(`SELECT from_me, sender_jid FROM messages WHERE chat_jid = ? AND id = ?`, chat, m.ID).Scan(&fromMe, &sender)
+	err = tx.QueryRow(`SELECT `+authorSQL+` FROM messages WHERE chat_jid = ? AND id = ?`, boolInt(m.FromMe), m.Sender, chat, m.ID).Scan(&sameAuthor)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, false, nil
 	}
-	return err == nil, fromMe == m.FromMe && (m.FromMe || sender == m.Sender), err
+	return err == nil, sameAuthor, err
 }
 
 // MediaRef is the stored Media of a Message, with what a download or a decrypt needs.

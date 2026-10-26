@@ -164,7 +164,7 @@ func (c *Client) handleProtocol(evt *events.Message) bool {
 			c.events <- MessageEdited{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text}
 		}
 	case pm.GetType() == waE2E.ProtocolMessage_REVOKE:
-		c.events <- MessageRevoked{Chat: chat, ID: id}
+		c.events <- MessageRevoked{Chat: chat, ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe}
 	case pm.GetType() == waE2E.ProtocolMessage_EPHEMERAL_SETTING:
 		src := evt.Info.MessageSource
 		if src.IsGroup { // any member can send this; only GroupInfo carries the server's say on a group timer

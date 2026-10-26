@@ -374,9 +374,12 @@ type MessageEdited struct {
 }
 
 // MessageRevoked means a stored Message was revoked for everyone.
+// Sender and FromMe name the revoker: only the author can revoke a Message.
 type MessageRevoked struct {
-	Chat string `json:"chat"`
-	ID   string `json:"id"`
+	Chat   string `json:"chat"`
+	ID     string `json:"id"`
+	Sender string `json:"sender"`
+	FromMe bool   `json:"fromMe"`
 }
 
 // Reaction means a Participant, or another device of the user, set or removed a Reaction on a stored Message.

@@ -3,6 +3,7 @@ package whatsapp
 import (
 	"testing"
 
+	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -50,5 +51,23 @@ func TestDeleteForMePatchIndexEndsWithTheAuthor(t *testing.T) {
 		if idx[0] != "deleteMessageForMe" || idx[2] != "m1" || idx[3] != tc.wantOwn || idx[4] != tc.who {
 			t.Errorf("%s: index = %v", tc.name, idx)
 		}
+	}
+}
+
+// A revoke names its sender: the store applies it only when the sender is the author.
+func TestRevokeCarriesTheSender(t *testing.T) {
+	c := systemClient()
+	evt := &events.Message{
+		Info: types.MessageInfo{MessageSource: types.MessageSource{Chat: sysGroup, Sender: jef, IsGroup: true}, Timestamp: sysAt},
+		Message: &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+			Type: waE2E.ProtocolMessage_REVOKE.Enum(), Key: &waCommon.MessageKey{ID: proto.String("m1")},
+		}},
+	}
+	if !c.handleProtocol(evt) {
+		t.Fatal("handleProtocol = false; want the revoke consumed")
+	}
+	want := MessageRevoked{Chat: sysGroup.String(), ID: "m1", Sender: jef.String(), FromMe: false}
+	if got := <-c.events; got != want {
+		t.Errorf("emitted %+v, want %+v", got, want)
 	}
 }

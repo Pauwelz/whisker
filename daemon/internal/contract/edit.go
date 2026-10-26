@@ -45,7 +45,7 @@ func (s *session) chatRevoke(req *request) outcome {
 	if err := s.port.Revoke(p.Chat, p.ID); err != nil {
 		return outcome{reply: s.whatsappFailed(req.ID, err)}
 	}
-	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.Revoke(p.Chat, p.ID) }, nil)
+	return s.changed(req.ID, p.Chat, p.ID, func() (bool, error) { return s.chats.Revoke(p.Chat, p.ID, "", true) }, nil)
 }
 
 // inert tells that no action applies to a Message: a Tombstone or a System Message. It shows as not found.

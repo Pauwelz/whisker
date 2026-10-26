@@ -11,7 +11,7 @@
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"look","state":"","edited":false,"revoked":false,"media":{"kind":"image","mime":"image/jpeg","name":"","size":6,"state":"ready"},"senderPush":true}}}}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"m1"}}}
 {"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chat":"1@s.whatsapp.net","id":"m1","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg"}}}
-{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"m1"}}
+{"dir":"whatsapp","event":{"kind":"messageRevoked","chat":"1@s.whatsapp.net","id":"m1","sender":"1@s.whatsapp.net"}}
 {"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"1@s.whatsapp.net","sender":"1@s.whatsapp.net","senderName":"Ann","fromMe":false,"time":50,"text":"","state":"","edited":false,"revoked":true,"senderPush":true}}}}
 {"dir":"file","path":"$RUNTIME/whisker/media/1@s.whatsapp.net/m1.jpg","missing":true}
 {"dir":"in","frame":{"jsonrpc":"2.0","id":2,"method":"media.open","params":{"chat":"1@s.whatsapp.net","id":"m1"}}}

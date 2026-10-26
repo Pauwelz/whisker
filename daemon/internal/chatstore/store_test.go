@@ -348,7 +348,7 @@ func TestMentionsUseTheNameRuleAndRevokeClearsThem(t *testing.T) {
 	if m.Text != "@Zed and @+4" || !slices.Equal(m.Mentions, []string{"@Zed", "@+4"}) {
 		t.Fatalf("got %q %v", m.Text, m.Mentions)
 	}
-	if _, err := s.Revoke("g@g.us", "m1"); err != nil {
+	if _, err := s.Revoke("g@g.us", "m1", "2@s.whatsapp.net", false); err != nil {
 		t.Fatal(err)
 	}
 	if m, _ = s.Message("g@g.us", "m1"); m.Text != "" || len(m.Mentions) != 0 {

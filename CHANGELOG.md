@@ -18,6 +18,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Security
 
+- Only the author of a message can now delete it for everyone in whisker. Before, any member of a shared chat could make any message, including yours, show as deleted and remove its media.
 - A name that a stranger chose for themselves now shows as "~ name +number" in the Chat list, the Chat header and notifications, as it already did in the timeline. Before, anyone could appear as "Mom" there. Names with a phone contact and group names stay as they are.
 - Notifications no longer pass message text and names to a helper process, where other local users could read them.
 - A member of a group could write a line of JSON into the stream the Plugin reads. A short group Message made libsignal print its raw bytes to stdout. The Plugin then treated that line as a frame. Now only the frame encoder writes to the stdout of the Daemon. The Daemon discards all libsignal log lines.
