@@ -12,7 +12,7 @@ Read and send WhatsApp messages from the Omarchy bar.
 ## What it does
 
 - Links to your phone as a companion device, like WhatsApp Web. Your phone does not have to stay online.
-- Shows your chats in a pop-out under a bar icon, with the unread count on the icon. The icon turns the urgent colour while a chat is unread.
+- Shows your chats in a pop-out under a bar icon, with the unread count on the icon. The icon turns the urgent colour while a Chat is unread.
 - Sends and receives text, Quotes, Reactions, edits and deletes.
 - Shows images, video, voice notes, documents and stickers. Paste a file or a screenshot to send it.
 - Pins, mutes and marks chats unread, and syncs these changes with your phone. Archived chats sit under a filter.
@@ -95,5 +95,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [MIT](LICENSE)
+
+## Credits
 
 The cat in the logo and the bar icon is `mdi-cat` from [Material Design Icons](https://pictogrammers.com/library/mdi/) (Apache-2.0).

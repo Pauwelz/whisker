@@ -7,6 +7,7 @@ set -eu
 tag=${1:-v4.0.0}
 root=$(cd "$(dirname "$0")/.." && pwd)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/whisker/omarchy-$tag
+files="Panel.qml Service.qml"
 
 if [ ! -d "$cache/shell" ]; then
   mkdir -p "$cache"
@@ -22,7 +23,7 @@ import QtQuick
 import Quickshell
 ShellRoot {
   Component.onCompleted: {
-    for (const name of ["Panel.qml", "Service.qml"]) {
+    for (const name of "$files".split(" ")) {
       const c = Qt.createComponent("file://$root/" + name)
       console.log("WHISKER-CHECK", name, c.status === Component.Ready ? "OK" : "FAIL " + c.errorString())
     }
@@ -34,7 +35,7 @@ EOF
 qs -p "$work/shell" > "$work/log" 2>&1 &
 pid=$!
 i=0
-while [ "$(grep -ac WHISKER-CHECK "$work/log")" -lt 2 ] && [ $i -lt 60 ] && kill -0 $pid 2>/dev/null; do
+while [ "$(grep -ac WHISKER-CHECK "$work/log")" -lt "$(echo $files | wc -w)" ] && [ $i -lt 60 ] && kill -0 $pid 2>/dev/null; do
   sleep 0.5; i=$((i + 1))
 done
 kill $pid 2>/dev/null || true
@@ -42,4 +43,4 @@ out=$(grep -a "WHISKER-CHECK" "$work/log" | sed 's/.*WHISKER-CHECK //') || true
 [ -n "$out" ] || { echo "quickshell printed no result" >&2; exit 2; }
 echo "Omarchy $tag:"
 echo "$out"
-! echo "$out" | grep -q FAIL
+if echo "$out" | grep -q FAIL; then exit 1; fi

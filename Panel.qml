@@ -169,24 +169,24 @@ Panel {
 
   BarIconButton {
     id: button
-    readonly property string unread: Daemon.unreadLabel(root.view)
+    readonly property string unreadLabel: Daemon.unreadLabel(root.view)
     // Omarchy 4.0.x BarIconButton has no labelText, and a plain binding fails the load. There the corner badge shows the count.
     readonly property bool nativeLabel: "labelText" in button
-    Component.onCompleted: if (nativeLabel) button.labelText = Qt.binding(() => button.unread)
+    Component.onCompleted: if (nativeLabel) button.labelText = Qt.binding(() => button.unreadLabel)
     anchors.fill: parent
     bar: root.bar
     // nf-md-cat from the bar's Nerd Font, so Omarchy sizes it like its own icons. Urgent colour while a Chat is unread.
     text: "󰄛"
-    active: unread !== ""
+    active: Daemon.unreadCount(root.view) > 0
     Text {
       visible: !button.nativeLabel && text !== ""
-      text: button.unread
+      text: button.unreadLabel
       // Centred on the top-right corner of the icon.
       anchors.centerIn: parent
       anchors.horizontalCenterOffset: button.glyphPaintedWidth / 2
       anchors.verticalCenterOffset: -button.glyphPaintedWidth / 2 // the cat is about square
       font.family: button.fontFamily
-      font.pixelSize: Math.round(button.fontSize * 0.6)
+      font.pixelSize: Math.round(button.fontSize * 0.6) // small enough to fit above the icon slot
       font.bold: true
       color: button.foreground
       renderType: Text.NativeRendering

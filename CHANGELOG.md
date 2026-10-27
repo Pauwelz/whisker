@@ -14,11 +14,11 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 ### Changed
 
 - New logo: the `mdi-cat` cat inside an amber speech bubble.
-- The bar icon is the `nf-md-cat` glyph from the bar's Nerd Font. Omarchy sizes it like its other bar icons, so it is no longer smaller than them. `assets/whisker-bar.svg` is gone.
+- The bar icon is the `nf-md-cat` glyph from the bar's Nerd Font. Omarchy sizes it like its other bar icons. It is no longer smaller than them. `assets/whisker-bar.svg` is gone.
 
 ### Fixed
 
-- The bar widget loads again on Omarchy 4.0.x. 1.1.2 set `labelText` on `BarIconButton`, which Omarchy 4.0.x does not have. On 4.0.x the unread count now shows as a badge on the corner of the icon.
+- The bar widget loads again on Omarchy 4.0.x. Omarchy 4.0.x has no `labelText` on `BarIconButton`, and 1.1.2 set it. On 4.0.x the unread count now shows as a badge on the corner of the icon.
 
 ## [1.1.2] - 2026-10-26
 
