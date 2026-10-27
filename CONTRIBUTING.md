@@ -49,7 +49,11 @@ The Plugin runs `bin/whisker-daemon`. Edited Plugin QML loads only after a shell
 ```sh
 cd daemon && go test ./...     # Go: the Daemon, driven by the golden fixtures
 node --test tests/*.test.js    # Plugin state logic, driven by the same fixtures
+scripts/check-omarchy.sh       # Plugin QML compiles against the oldest Omarchy release (v4.0.0)
 ```
+
+`scripts/check-omarchy.sh` takes another release tag, such as `v4.0.6`. It needs quickshell and a Wayland session.
+Run it after you use an Omarchy API in the Plugin QML. Your installed Omarchy can be newer than what users run.
 
 To add a golden fixture, follow [docs/contract.md](docs/contract.md), section "Golden fixtures".
 
