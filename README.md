@@ -95,3 +95,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [MIT](LICENSE)
+
+The cat in the logo and the bar icon is `mdi-cat` from [Material Design Icons](https://pictogrammers.com/library/mdi/) (Apache-2.0).

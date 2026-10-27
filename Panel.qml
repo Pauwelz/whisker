@@ -175,26 +175,16 @@ Panel {
     Component.onCompleted: if (nativeLabel) button.labelText = Qt.binding(() => button.unread)
     anchors.fill: parent
     bar: root.bar
-    // One-colour cat. MultiEffect paints it in the bar foreground, or in the urgent colour while a Chat is unread.
-    iconComponent: Component {
-      Image {
-        source: Qt.resolvedUrl("assets/whisker-bar.svg")
-        sourceSize.height: button.opticalSize * Screen.devicePixelRatio
-        fillMode: Image.PreserveAspectFit
-        layer.enabled: true
-        layer.effect: MultiEffect {
-          colorization: 1.0
-          colorizationColor: button.unread !== "" ? button.activeColor : button.foreground
-        }
-      }
-    }
+    // nf-md-cat from the bar's Nerd Font, so Omarchy sizes it like its own icons. Urgent colour while a Chat is unread.
+    text: "󰄛"
+    active: unread !== ""
     Text {
       visible: !button.nativeLabel && text !== ""
       text: button.unread
       // Centred on the top-right corner of the icon.
       anchors.centerIn: parent
-      anchors.horizontalCenterOffset: button.opticalSize / 2
-      anchors.verticalCenterOffset: -button.opticalSize / 2
+      anchors.horizontalCenterOffset: button.glyphPaintedWidth / 2
+      anchors.verticalCenterOffset: -button.glyphPaintedWidth / 2 // the cat is about square
       font.family: button.fontFamily
       font.pixelSize: Math.round(button.fontSize * 0.6)
       font.bold: true
