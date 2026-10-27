@@ -169,10 +169,13 @@ Panel {
 
   BarIconButton {
     id: button
-    labelText: Daemon.unreadLabel(root.view)
+    readonly property string unread: Daemon.unreadLabel(root.view)
+    // Omarchy 4.0.x BarIconButton has no labelText, and a plain binding fails the load. There the corner badge shows the count.
+    readonly property bool nativeLabel: "labelText" in button
+    Component.onCompleted: if (nativeLabel) button.labelText = Qt.binding(() => button.unread)
     anchors.fill: parent
     bar: root.bar
-    // One-colour cat. MultiEffect paints it in the bar foreground, so it follows the theme.
+    // One-colour cat. MultiEffect paints it in the bar foreground, or in the urgent colour while a Chat is unread.
     iconComponent: Component {
       Image {
         source: Qt.resolvedUrl("assets/whisker-bar.svg")
@@ -181,9 +184,22 @@ Panel {
         layer.enabled: true
         layer.effect: MultiEffect {
           colorization: 1.0
-          colorizationColor: button.foreground
+          colorizationColor: button.unread !== "" ? button.activeColor : button.foreground
         }
       }
+    }
+    Text {
+      visible: !button.nativeLabel && text !== ""
+      text: button.unread
+      // Centred on the top-right corner of the icon.
+      anchors.centerIn: parent
+      anchors.horizontalCenterOffset: button.opticalSize / 2
+      anchors.verticalCenterOffset: -button.opticalSize / 2
+      font.family: button.fontFamily
+      font.pixelSize: Math.round(button.fontSize * 0.6)
+      font.bold: true
+      color: button.foreground
+      renderType: Text.NativeRendering
     }
     dimmed: Daemon.barDimmed(root.view)
     tooltipText: root.view.message

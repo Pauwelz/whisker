@@ -7,6 +7,14 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- The bar icon turns the urgent colour while a Chat is unread.
+
+### Fixed
+
+- The bar widget loads again on Omarchy 4.0.x. 1.1.2 set `labelText` on `BarIconButton`, which Omarchy 4.0.x does not have. On 4.0.x the unread count now shows as a badge on the corner of the icon.
+
 ## [1.1.2] - 2026-10-26
 
 ### Fixed
