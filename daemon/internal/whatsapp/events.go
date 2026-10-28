@@ -206,7 +206,7 @@ func (c *Client) emitOwnDevices() {
 }
 
 // emitGroupSubjects sends the name of each Group Chat of the user. It repairs a name that a join or a rename
-// while offline did not bring. The chat store ignores a name that did not change. A failed fetch costs only the repair.
+// while offline did not bring. The chat store ignores a name that did not change. A fetch that fails costs only the repair.
 func (c *Client) emitGroupSubjects() {
 	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
 	defer cancel()

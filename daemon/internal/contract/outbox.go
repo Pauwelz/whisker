@@ -124,9 +124,7 @@ func (b *outbox) sendMedia(m chatstore.Message, ref whatsapp.Media, timer int64)
 // flush starts the send of every pending Message, oldest first.
 func (b *outbox) flush() {
 	pending, err := b.chats.Pending()
-	if err != nil {
-		fmt.Fprintln(b.logOut, "chat store read failed")
-	}
+	storeFailed(b.logOut, storeRead, err)
 	for _, m := range pending {
 		b.submit(m)
 	}
@@ -164,8 +162,7 @@ func (b *outbox) done(r sendResult) bool {
 // move runs a state change and tells the Plugin when the Message changed.
 func (b *outbox) move(chat, id string, change func() (bool, error)) bool {
 	changed, err := change()
-	if err != nil {
-		fmt.Fprintln(b.logOut, "chat store write failed")
+	if storeFailed(b.logOut, storeWrite, err) {
 		return true
 	}
 	return !changed || b.notify(chat, id)
@@ -174,8 +171,7 @@ func (b *outbox) move(chat, id string, change func() (bool, error)) bool {
 // notify sends `messageChanged` for the stored Message.
 func (b *outbox) notify(chat, id string) bool {
 	m, err := b.chats.Message(chat, id)
-	if err != nil {
-		fmt.Fprintln(b.logOut, "chat store read failed")
+	if storeFailed(b.logOut, storeRead, err) {
 		return true
 	}
 	return b.send(notification("messageChanged", map[string]any{"message": m}))
@@ -210,8 +206,7 @@ func (b *outbox) incomingMessage(ev whatsapp.NewMessage) (ok, isNew bool) {
 		return b.systemMessage(ev), false
 	}
 	isNew, thumbFilled, err := b.chats.PutLive(ev, livePolicy(ev, b.autoDownloads))
-	if err != nil {
-		fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
+	if storeFailed(b.logOut, storeWrite, err) {
 		return true, false
 	}
 	if !isNew {
@@ -232,8 +227,7 @@ func (b *outbox) incomingMessage(ev whatsapp.NewMessage) (ok, isNew bool) {
 // The Chat list hears of it too: a new subject renames the Chat.
 func (b *outbox) systemMessage(ev whatsapp.NewMessage) bool {
 	stored, err := b.chats.PutSystem(ev)
-	if err != nil {
-		fmt.Fprintln(b.logOut, "chat store write failed")
+	if storeFailed(b.logOut, storeWrite, err) {
 		return true
 	}
 	if !stored {
@@ -313,8 +307,7 @@ func (b *outbox) groupReceipt(ev whatsapp.Receipt, id string) bool {
 			continue
 		}
 		t, err := b.chats.RecordReceipt(ev.Chat, id, sender, ev.State)
-		if err != nil {
-			fmt.Fprintln(b.logOut, "chat store write failed")
+		if storeFailed(b.logOut, storeWrite, err) {
 			return true
 		}
 		tracked = tracked || t
@@ -333,8 +326,7 @@ func (b *outbox) groupReceipt(ev whatsapp.Receipt, id string) bool {
 // known is false while the set is not frozen.
 func (b *outbox) advanceGroup(chat, id string) (ok, known bool) {
 	state, known, err := b.chats.Combined(chat, id)
-	if err != nil {
-		fmt.Fprintln(b.logOut, "chat store read failed")
+	if storeFailed(b.logOut, storeRead, err) {
 		return true, true
 	}
 	if !known || state == "" {
@@ -368,8 +360,7 @@ func (b *outbox) participantsDone(r participantsResult) bool {
 			r.participants[i].Phone = b.port.PhoneOf(p.LID)
 		}
 	}
-	if err := b.chats.SetRecipients(r.chat, r.id, r.participants); err != nil {
-		fmt.Fprintln(b.logOut, "chat store write failed")
+	if err := b.chats.SetRecipients(r.chat, r.id, r.participants); storeFailed(b.logOut, storeWrite, err) {
 		return true
 	}
 	ok, _ := b.advanceGroup(r.chat, r.id)

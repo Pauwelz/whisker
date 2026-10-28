@@ -1,9 +1,6 @@
 package contract
 
-import (
-	"fmt"
-	"time"
-)
+import "time"
 
 // maxMuteWait is the longest wait of the Mute end timer, in seconds (24 h).
 const maxMuteWait = 24 * 60 * 60
@@ -13,8 +10,7 @@ const maxMuteWait = 24 * 60 * 60
 func (s *session) scheduleMuteEnd() {
 	until, ok, err := s.chats.NextMuteEnd()
 	switch {
-	case err != nil:
-		fmt.Fprintln(s.logOut, "chat store read failed")
+	case storeFailed(s.logOut, storeRead, err):
 	case !ok:
 		s.muteTick, s.muteAt = nil, 0
 	case until != s.muteAt:

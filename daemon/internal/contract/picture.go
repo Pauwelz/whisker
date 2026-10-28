@@ -50,8 +50,7 @@ func (s *session) refreshPicture(chat string, cached chatstore.Picture) (chatsto
 
 // pictureChanged drops the cached picture of a Chat and tells the Plugin to ask again.
 func (s *session) pictureChanged(chat string) bool {
-	if err := s.chats.DeletePicture(chat); err != nil {
-		fmt.Fprintln(s.logOut, "chat store write failed")
+	if err := s.chats.DeletePicture(chat); storeFailed(s.logOut, storeWrite, err) {
 		return true
 	}
 	return s.send(notification("pictureChanged", map[string]any{"chat": chat}))

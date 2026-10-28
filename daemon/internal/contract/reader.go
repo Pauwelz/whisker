@@ -57,9 +57,7 @@ func (r *reader) attend(t receiptpolicy.Trigger) bool {
 	}
 	seen, silent := r.counted(chat) // before ClearUnread, which empties the list
 	cleared, err := r.chats.ClearUnread(chat)
-	if err != nil {
-		fmt.Fprintln(r.logOut, "chat store write failed")
-	} else if cleared {
+	if !storeFailed(r.logOut, storeWrite, err) && cleared {
 		if err := r.port.MarkChatRead(chat); err != nil {
 			fmt.Fprintln(r.logOut, "read marker failed")
 		}
@@ -82,9 +80,7 @@ func (r *reader) counted(chat string) (list []chatstore.Unreceipted, silent bool
 		return nil, false
 	}
 	list, err = r.chats.Counted(chat)
-	if err != nil {
-		fmt.Fprintln(r.logOut, "chat store read failed")
-	}
+	storeFailed(r.logOut, storeRead, err)
 	return list, silent
 }
 
@@ -95,9 +91,7 @@ func (r *reader) dropPending(chat string, list []chatstore.Unreceipted) {
 	for i, u := range list {
 		ids[i] = u.ID
 	}
-	if err := r.chats.Receipted(chat, ids); err != nil {
-		fmt.Fprintln(r.logOut, "chat store write failed")
-	}
+	storeFailed(r.logOut, storeWrite, r.chats.Receipted(chat, ids))
 }
 
 // readSelf sends a read-self receipt for these Messages, one call per sender.
@@ -133,8 +127,7 @@ func (r *reader) receipts(chat string, t receiptpolicy.Trigger) {
 		return
 	}
 	unread, err := r.chats.Unreceipted(chat)
-	if err != nil {
-		fmt.Fprintln(r.logOut, "chat store read failed")
+	if storeFailed(r.logOut, storeRead, err) {
 		return
 	}
 	senders, ids := bySender(unread)
@@ -143,9 +136,7 @@ func (r *reader) receipts(chat string, t receiptpolicy.Trigger) {
 			fmt.Fprintln(r.logOut, "read receipt failed")
 			continue
 		}
-		if err := r.chats.Receipted(chat, ids[sender]); err != nil {
-			fmt.Fprintln(r.logOut, "chat store write failed")
-		}
+		storeFailed(r.logOut, storeWrite, r.chats.Receipted(chat, ids[sender]))
 	}
 }
 
@@ -170,9 +161,7 @@ func (r *reader) playedNote(chat, sender, id string) {
 			fmt.Fprintln(r.logOut, "read receipt failed")
 			return
 		}
-		if err := r.chats.Receipted(chat, []string{id}); err != nil {
-			fmt.Fprintln(r.logOut, "chat store write failed")
-		}
+		storeFailed(r.logOut, storeWrite, r.chats.Receipted(chat, []string{id}))
 	}
 	if err := r.port.MarkPlayed(chat, sender, id); err != nil {
 		fmt.Fprintln(r.logOut, "played receipt failed")

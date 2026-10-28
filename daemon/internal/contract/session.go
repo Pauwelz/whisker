@@ -106,9 +106,8 @@ func (s *session) open() int {
 		s.hist = newHistory(s.port, s.send, s.logOut)
 		s.historyEnded = s.hist.ended
 		// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
-		if _, err := s.chats.Expire(Clock.Now().Unix()); err != nil {
-			fmt.Fprintln(s.logOut, "chat store write failed")
-		}
+		_, err := s.chats.Expire(Clock.Now().Unix())
+		storeFailed(s.logOut, storeWrite, err)
 		s.expiryTick = Clock.After(ExpiryInterval)
 		s.scheduleMuteEnd()
 		s.pres = newPresenter(s.port, s.prefs, &s.attn, s.logOut)
@@ -191,9 +190,7 @@ func (s *session) unlink(by string) int {
 // sweepExpired deletes the Disappearing Messages whose timer ended and tells the Plugin. It returns false when a frame could not be written.
 func (s *session) sweepExpired() bool {
 	expired, err := s.chats.Expire(Clock.Now().Unix())
-	if err != nil {
-		fmt.Fprintln(s.logOut, "chat store write failed")
-	}
+	storeFailed(s.logOut, storeWrite, err)
 	s.expiryTick = Clock.After(ExpiryInterval)
 	for _, e := range expired {
 		if !s.send(notification("messageExpired", map[string]any{"chat": e.Chat, "id": e.ID})) {
@@ -257,15 +254,13 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		ok = s.send(notification("presenceChanged", map[string]any{"chat": ev.JID, "online": ev.Online, "lastSeen": ev.LastSeen}))
 	case whatsapp.ChatPresence:
 		name, err := s.chats.ParticipantName(ev.Sender)
-		if err != nil {
-			fmt.Fprintln(s.logOut, "chat store read failed")
+		if storeFailed(s.logOut, storeRead, err) {
 			break
 		}
 		ok = s.send(notification("activityChanged", map[string]any{"chat": ev.Chat, "participant": ev.Sender, "name": name, "state": ev.State}))
 	case whatsapp.HistorySync:
 		added, err := s.chats.ApplyHistory(ev)
-		if err != nil {
-			fmt.Fprintln(s.logOut, "chat store write failed") // the error text could hold names
+		if storeFailed(s.logOut, storeWrite, err) {
 			break
 		}
 		ok = s.send(notification("chatsChanged", nil))
@@ -275,9 +270,7 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		}
 	default: // App State: the chat store knows its kinds
 		stored, err := s.chats.Apply(ev)
-		if err != nil {
-			fmt.Fprintln(s.logOut, "chat store write failed") // the error text could hold names
-		} else if stored {
+		if !storeFailed(s.logOut, storeWrite, err) && stored {
 			ok = s.send(notification("chatsChanged", nil))
 			s.scheduleMuteEnd()
 		}
@@ -289,8 +282,7 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 // whose Messages arrived before the mapping. It runs on each connect.
 func (s *session) mergeKnownLIDs() bool {
 	lids, err := s.chats.LIDs()
-	if err != nil {
-		fmt.Fprintln(s.logOut, "chat store read failed")
+	if storeFailed(s.logOut, storeRead, err) {
 		return true
 	}
 	for _, lid := range lids {
@@ -305,8 +297,7 @@ func (s *session) mergeKnownLIDs() bool {
 func (s *session) merge(a whatsapp.ChatAlias) bool {
 	ids, idsErr := s.chats.MediaIDs(a.LID) // before the merge moves the rows
 	changed, err := s.chats.MergeChat(a.LID, a.Phone)
-	if err != nil {
-		fmt.Fprintln(s.logOut, "chat store write failed")
+	if storeFailed(s.logOut, storeWrite, err) {
 		return true
 	}
 	if !changed {

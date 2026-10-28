@@ -3,7 +3,6 @@ package contract
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/Pauwelz/whisker/daemon/internal/whatsapp"
 )
@@ -13,12 +12,10 @@ import (
 func (s *session) deletedForMe(ev whatsapp.DeletedForMe) bool {
 	if _, err := s.chats.Message(ev.Chat, ev.ID); errors.Is(err, sql.ErrNoRows) {
 		return true
-	} else if err != nil {
-		fmt.Fprintln(s.logOut, "chat store read failed")
+	} else if storeFailed(s.logOut, storeRead, err) {
 		return true
 	}
-	if err := s.chats.DeleteMessage(ev.Chat, ev.ID); err != nil {
-		fmt.Fprintln(s.logOut, "chat store write failed")
+	if err := s.chats.DeleteMessage(ev.Chat, ev.ID); storeFailed(s.logOut, storeWrite, err) {
 		return true
 	}
 	return s.send(notification("messageExpired", map[string]any{"chat": ev.Chat, "id": ev.ID}))
@@ -27,8 +24,7 @@ func (s *session) deletedForMe(ev whatsapp.DeletedForMe) bool {
 // chatCleared applies a Clear chat from another device. The Plugin hears of it only when a Message went.
 func (s *session) chatCleared(ev whatsapp.ChatCleared) bool {
 	changed, err := s.chats.ClearChat(ev.Chat, ev.Until)
-	if err != nil {
-		fmt.Fprintln(s.logOut, "chat store write failed")
+	if storeFailed(s.logOut, storeWrite, err) {
 		return true
 	}
 	return !changed || s.send(notification("chatCleared", map[string]any{"chat": ev.Chat, "until": ev.Until}))
@@ -40,8 +36,7 @@ func (s *session) chatCleared(ev whatsapp.ChatCleared) bool {
 func (s *session) chatDeleted(ev whatsapp.ChatDeleted) bool {
 	if ev.Until > 0 {
 		newer, err := s.chats.HasMessageAfter(ev.Chat, ev.Until)
-		if err != nil {
-			fmt.Fprintln(s.logOut, "chat store read failed")
+		if storeFailed(s.logOut, storeRead, err) {
 			return true
 		}
 		if newer {
@@ -49,8 +44,7 @@ func (s *session) chatDeleted(ev whatsapp.ChatDeleted) bool {
 		}
 	}
 	attachments, gone, err := s.chats.DeleteChat(ev.Chat)
-	if err != nil {
-		fmt.Fprintln(s.logOut, "chat store write failed")
+	if storeFailed(s.logOut, storeWrite, err) {
 		return true
 	}
 	for _, path := range attachments {

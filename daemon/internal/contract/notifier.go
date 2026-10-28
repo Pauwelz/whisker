@@ -39,8 +39,7 @@ func (n *notifier) show(ev whatsapp.NewMessage) {
 		return
 	}
 	chat, err := n.chats.Chat(ev.Chat)
-	if err != nil {
-		fmt.Fprintln(n.logOut, "chat store read failed")
+	if storeFailed(n.logOut, storeRead, err) {
 		return
 	}
 	if !notifypolicy.Notifies(notifypolicy.Input{
@@ -56,8 +55,7 @@ func (n *notifier) show(ev whatsapp.NewMessage) {
 	body := previewHidden
 	if prefs.NotificationPreview {
 		m, err := n.chats.Message(ev.Chat, ev.Message.ID)
-		if err != nil {
-			fmt.Fprintln(n.logOut, "chat store read failed")
+		if storeFailed(n.logOut, storeRead, err) {
 			return
 		}
 		body = m.Text

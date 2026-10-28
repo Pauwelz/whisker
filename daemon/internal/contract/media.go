@@ -54,9 +54,7 @@ type mediaResult struct {
 // newMediaLoader wipes the plain copies of an earlier run and makes interrupted downloads startable again.
 func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Store, notify func(chat, id string) bool, logOut io.Writer, autoDownloads func(size int64) bool) *mediaLoader {
 	store.Wipe()
-	if err := chats.ResetDownloads(); err != nil {
-		fmt.Fprintln(logOut, "chat store write failed")
-	}
+	storeFailed(logOut, storeWrite, chats.ResetDownloads())
 	chats.RemoveMedia = store.Remove
 	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}, thumbSlots: make(chan struct{}, maxParallelDownloads), fileSlots: make(chan struct{}, maxParallelDownloads), autoDownloads: autoDownloads}
 }
@@ -119,9 +117,7 @@ func (l *mediaLoader) autoImage(chat, id string, ref chatstore.MediaRef) {
 	if ref.Kind != media.Image || ref.State != chatstore.MediaNone || !l.autoDownloads(ref.Size) {
 		return
 	}
-	if changed, err := l.chats.BeginDownload(chat, id); err != nil {
-		fmt.Fprintln(l.logOut, "chat store write failed")
-	} else if changed {
+	if changed, err := l.chats.BeginDownload(chat, id); !storeFailed(l.logOut, storeWrite, err) && changed {
 		l.start(chat, id)
 	}
 }
@@ -132,16 +128,13 @@ func (l *mediaLoader) thumbnailDone(r mediaResult) bool {
 	if r.err != nil || len(r.data) == 0 || tooLarge {
 		// An oversized link is hostile: a later run does not fetch it again. Another failure is tried in the next run.
 		if tooLarge {
-			if err := l.chats.ClearThumbLink(r.chat, r.id); err != nil {
-				fmt.Fprintln(l.logOut, "chat store write failed")
-			}
+			storeFailed(l.logOut, storeWrite, l.chats.ClearThumbLink(r.chat, r.id))
 		}
 		fmt.Fprintln(l.logOut, "thumbnail download failed") // the error text could hold hosts
 		return true
 	}
 	changed, err := l.chats.SetThumbnail(r.chat, r.id, r.data)
-	if err != nil {
-		fmt.Fprintln(l.logOut, "chat store write failed")
+	if storeFailed(l.logOut, storeWrite, err) {
 		return true
 	}
 	return !changed || l.notify(r.chat, r.id)
@@ -159,8 +152,7 @@ func (l *mediaLoader) done(r mediaResult) bool {
 		state = chatstore.MediaFailed
 	}
 	changed, err := l.chats.EndDownload(r.chat, r.id, state)
-	if err != nil {
-		fmt.Fprintln(l.logOut, "chat store write failed")
+	if storeFailed(l.logOut, storeWrite, err) {
 		return true
 	}
 	if !changed {
@@ -174,15 +166,13 @@ func (l *mediaLoader) done(r mediaResult) bool {
 func (l *mediaLoader) downloadReply(id json.RawMessage, chat, msgID string) (map[string]any, bool) {
 	changed, err := l.chats.BeginDownload(chat, msgID)
 	switch {
-	case err != nil:
-		fmt.Fprintln(l.logOut, "chat store write failed")
+	case storeFailed(l.logOut, storeWrite, err):
 		return errorReply(id, errChatStore, msgChatStore), false
 	case !changed:
 		return errorReply(id, errMedia, msgInvalidMedia), false
 	}
 	m, err := l.chats.Message(chat, msgID)
-	if err != nil {
-		fmt.Fprintln(l.logOut, "chat store read failed")
+	if storeFailed(l.logOut, storeRead, err) {
 		return errorReply(id, errChatStore, msgChatStore), false
 	}
 	return resultReply(id, map[string]any{"message": m}), true

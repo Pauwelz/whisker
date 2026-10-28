@@ -14,8 +14,7 @@ func (s *session) ownDevices(ev whatsapp.OwnDevices) bool {
 		return true
 	}
 	added, err := s.chats.NoteOwnDevices(ev.IDs)
-	if err != nil {
-		fmt.Fprintln(s.logOut, "chat store write failed")
+	if storeFailed(s.logOut, storeWrite, err) {
 		return true
 	}
 	return !added || s.box.systemMessage(whatsapp.NewMessage{Chat: ev.Chat, Kind: whatsapp.KindSelf, Message: ev.Notice})
