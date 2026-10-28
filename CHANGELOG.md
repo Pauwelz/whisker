@@ -9,7 +9,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
-- The Message menu is now a row of links below the Message. ⋯ or a right click shows or hides it. Escape closes it before the Chat.
+- The actions of a Message are now Message links, a row of links below the Message. A click on ⋯ or a right click shows or hides the Message links. Escape closes them before the Chat.
 - The Media links (download, open, save as…) show only while the pointer is over the Message.
 - Links inside the pop-out are grey and underlined on hover. The links in the Chat header keep the text colour.
 - A question, about pasted files or about opening a file, closes only on Escape or Cancel. Opening the Message links, a click elsewhere or closing the pop-out no longer closes it. Leaving the Chat still drops it.

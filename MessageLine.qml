@@ -361,7 +361,7 @@ Item {
           width: parent.width
           spacing: Style.space(8)
           Repeater {
-            model: line.linksOpen ? Message.menuActions(line.message, Math.floor(Date.now() / 1000)) : []
+            model: line.linksOpen ? Message.linkActions(line.message, Math.floor(Date.now() / 1000)) : []
             Link {
               required property string modelData
               text: Message.ACTION_LABELS[modelData].toLowerCase()
@@ -410,7 +410,7 @@ Item {
         model: line.pickerOpen ? [] : [{ name: "react", icon: "☺" }, { name: "reply", icon: "↩" }, { name: "more", icon: "⋯" }]
         Button {
           required property var modelData
-          visible: line.isMessage && (modelData.name === "more" || Message.menuActions(line.message, Math.floor(Date.now() / 1000)).indexOf(modelData.name) >= 0)
+          visible: line.isMessage && (modelData.name === "more" || Message.linkActions(line.message, Math.floor(Date.now() / 1000)).indexOf(modelData.name) >= 0)
           text: modelData.icon
           height: toolRow.height
           horizontalPadding: Style.space(4)

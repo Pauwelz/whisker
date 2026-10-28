@@ -1,7 +1,7 @@
 import QtQuick
 import qs.Commons
 
-// One link of a link row (Chat links, Message links, Media links, Question answers): grey, underlined on hover.
+// One link of a link row (Chat links, Message links, Media links, Question answers): grey by default, underlined on hover.
 Text {
   id: link
   signal clicked()

@@ -3,7 +3,7 @@
 .import "Common.js" as Common
 .import "Timeline.js" as Timeline
 
-// One Message: body, links, Edit, Revoke, Delete, Reactions, Quotes and the actions of its menu.
+// One Message: body, links, Edit, Revoke, Delete, Reactions, Quotes and its actions.
 
 // The text of a Tombstone, shown at the position of the revoked Message.
 var TOMBSTONE_TEXT = "This message was deleted"
@@ -150,7 +150,7 @@ function canReactToMessage(message) {
   return !message.revoked && (!message.fromMe || ["sent", "delivered", "read", "played"].indexOf(message.state) >= 0)
 }
 
-// The one rule for "which actions does this Message allow". The toolbar, the menu and the Media links read it.
+// The one rule for "which actions does this Message allow". The toolbar, the Message links and the Media links read it.
 // `m` is a Message as in docs/contract.md.
 function actionsFor(m) {
   if (m.revoked) return ["deleteForMe"]
@@ -171,8 +171,8 @@ function actionsFor(m) {
   return a
 }
 
-// The actions for the menu: the rule, minus react and edit when the Message cannot take them now.
-function menuActions(m, nowSeconds) {
+// The actions for the Message links: the rule, minus react and edit when the Message cannot take them now.
+function linkActions(m, nowSeconds) {
   return actionsFor(m).filter(function (name) {
     if (name === "react") return canReactToMessage(m)
     if (name === "edit") return canEditMessage(m, nowSeconds)

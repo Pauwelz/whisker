@@ -42,14 +42,14 @@ test("a sticker has no Media actions", () => {
 });
 
 test("the menu drops react and edit when the Message cannot take them", () => {
-  assert.deepEqual(plain(Message.menuActions(mine({ state: "failed" }), 1001)), ["reply", "copy", "retry", "deleteForEveryone"]);
-  assert.deepEqual(plain(Message.menuActions(mine(), 1001)), ["reply", "react", "copy", "edit", "deleteForEveryone"]);
-  assert.deepEqual(plain(Message.menuActions(mine(), 1000 + Message.EDIT_WINDOW_SECONDS + 1)), ["reply", "react", "copy", "deleteForEveryone"]);
+  assert.deepEqual(plain(Message.linkActions(mine({ state: "failed" }), 1001)), ["reply", "copy", "retry", "deleteForEveryone"]);
+  assert.deepEqual(plain(Message.linkActions(mine(), 1001)), ["reply", "react", "copy", "edit", "deleteForEveryone"]);
+  assert.deepEqual(plain(Message.linkActions(mine(), 1000 + Message.EDIT_WINDOW_SECONDS + 1)), ["reply", "react", "copy", "deleteForEveryone"]);
 });
 
 test("the menu offers delete for me, also for a Tombstone", () => {
-  assert.deepEqual(plain(Message.menuActions(theirs(), 1)), ["reply", "react", "copy", "deleteForMe"]);
-  assert.deepEqual(plain(Message.menuActions(mine({ revoked: true }), 1)), ["deleteForMe"]);
+  assert.deepEqual(plain(Message.linkActions(theirs(), 1)), ["reply", "react", "copy", "deleteForMe"]);
+  assert.deepEqual(plain(Message.linkActions(mine({ revoked: true }), 1)), ["deleteForMe"]);
 });
 
 test("every action has a label", () => {
