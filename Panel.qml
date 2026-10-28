@@ -108,11 +108,15 @@ Panel {
   // Runs a fixed shortcut. The decision is Daemon.shortcutAction.
   function runShortcut(shortcut) {
     var asking = !!root.whiskerService && root.whiskerService.asking
-    var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat, asking: asking, messageLinks: root.linksId !== "" })
+    var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat, asking: asking, picker: root.reactingId !== "", messageLinks: root.linksId !== "", quoting: root.quoting !== null })
     if (action === "closeQuestion") {
       root.whiskerService.cancelQuestion()
+    } else if (action === "closePicker") {
+      root.reactingId = ""
     } else if (action === "closeMessageLinks") {
       root.linksId = ""
+    } else if (action === "cancelQuote") {
+      root.whiskerService.changeDraft({ quote: "" })
     } else if (action === "closeChat") {
       root.whiskerService.closeChat()
     } else if (action === "closeSettings") {

@@ -591,6 +591,9 @@ test("fixed shortcuts: Escape goes back one level, Ctrl+F searches the Chat list
   assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, { asking: true }), "closeQuestion");
   assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, { asking: true, messageLinks: true }), "closeQuestion");
   assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, { messageLinks: true }), "closeMessageLinks");
+  assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, { picker: true }), "closePicker");
+  assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, { quoting: true }), "cancelQuote");
+  assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, { picker: true, quoting: true }), "closePicker");
   assert.equal(Daemon.shortcutAction("Escape", { ...list, openChat: { jid: "1" } }, none), "closeChat");
   assert.equal(Daemon.shortcutAction("Escape", list, { showSettings: true }), "closeSettings");
   assert.equal(Daemon.shortcutAction("Escape", list, none), "closePopout");
