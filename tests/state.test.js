@@ -495,16 +495,24 @@ test("Reactions: the user picks, replaces or removes one; chips count the emoji"
 
 test("Quotes: only a verified Quote shows \"You\"; an unverified one is marked and names no user", () => {
   const view = (quote) => JSON.parse(JSON.stringify(Message.quoteView({ quote })));
-  assert.deepEqual(view({ verified: true, fromMe: true, senderName: "", text: "hi" }), { sender: "You", text: "hi" });
-  assert.deepEqual(view({ verified: true, fromMe: false, sender: "1@s.whatsapp.net", senderName: "Ann", senderPush: true, text: "hi" }), { sender: "~ Ann +1", text: "hi" });
-  assert.deepEqual(view({ verified: true, fromMe: false, senderName: "Ann", revoked: true, text: "" }), { sender: "Ann", text: "This message was deleted" });
-  assert.deepEqual(view({ verified: false, fromMe: true, senderName: "", text: "forged" }), { sender: "Unknown", text: "forged", unverified: true });
-  assert.deepEqual(view({ verified: false, fromMe: false, sender: "1@s.whatsapp.net", senderName: "Ann", text: "forged" }), { sender: "Ann", text: "forged", unverified: true });
+  assert.deepEqual(view({ verified: true, fromMe: true, senderName: "", text: "hi" }), { sender: "You", text: "hi", label: "You: hi", italic: false });
+  assert.deepEqual(view({ verified: true, fromMe: false, sender: "1@s.whatsapp.net", senderName: "Ann", senderPush: true, text: "hi" }), { sender: "~ Ann +1", text: "hi", label: "~ Ann +1: hi", italic: false });
+  assert.deepEqual(view({ verified: true, fromMe: false, senderName: "Ann", revoked: true, text: "" }), { sender: "Ann", text: "This message was deleted", label: "Ann: This message was deleted", italic: false });
+  assert.deepEqual(view({ verified: false, fromMe: true, senderName: "", text: "forged" }), { sender: "Unknown", text: "forged", label: "Unknown (unverified): forged", italic: true });
+  assert.deepEqual(view({ verified: false, fromMe: false, sender: "1@s.whatsapp.net", senderName: "Ann", text: "forged" }), { sender: "Ann", text: "forged", label: "Ann (unverified): forged", italic: true });
+});
+
+test("Quotes: the view has the finished label and the italic flag", () => {
+  const view = (quote) => Message.quoteView({ quote });
+  assert.equal(view({ verified: true, fromMe: true, senderName: "", text: "hi" }).label, "You: hi");
+  assert.equal(view({ verified: true, fromMe: true, senderName: "", text: "hi" }).italic, false);
+  assert.equal(view({ verified: false, fromMe: false, sender: "1@s.whatsapp.net", senderName: "Ann", text: "x" }).label, "Ann (unverified): x");
+  assert.equal(view({ verified: false, fromMe: false, sender: "1@s.whatsapp.net", senderName: "Ann", text: "x" }).italic, true);
 });
 
 test("Quotes: the preview names the author and is cut to one line; the composer sends the Quote", () => {
   assert.equal(Message.quoteView({ text: "no quote" }), null);
-  assert.deepEqual(JSON.parse(JSON.stringify(Message.quoteView({ quote: { fromMe: true, senderName: "", text: "a\nb" } }))), { sender: "You", text: "a b" });
+  assert.deepEqual(JSON.parse(JSON.stringify(Message.quoteView({ quote: { fromMe: true, senderName: "", text: "a\nb" } }))), { sender: "You", text: "a b", label: "You: a b", italic: false });
   const long = Message.quoteView({ quote: { fromMe: false, senderName: "Ann", text: "x".repeat(200) } });
   assert.equal(long.sender, "Ann");
   assert.equal(long.text.length, 80);
@@ -663,8 +671,8 @@ test("a failed Media download shows Retry download", () => {
 
 test("composerQuoteView previews the Message that the next send quotes", () => {
   assert.equal(Message.composerQuoteView(null), null);
-  assert.deepEqual(plain(Message.composerQuoteView({ fromMe: true, senderName: "", text: "hello", revoked: false })), { sender: "You", text: "hello" });
-  assert.deepEqual(plain(Message.composerQuoteView({ fromMe: false, senderName: "Ann", text: "hi" })), { sender: "Ann", text: "hi" });
+  assert.deepEqual(plain(Message.composerQuoteView({ fromMe: true, senderName: "", text: "hello", revoked: false })), { sender: "You", text: "hello", label: "You: hello", italic: false });
+  assert.deepEqual(plain(Message.composerQuoteView({ fromMe: false, senderName: "Ann", text: "hi" })), { sender: "Ann", text: "hi", label: "Ann: hi", italic: false });
 });
 
 test("openMediaStep: stop the playing note, launch a known path, or ask for the path", () => {

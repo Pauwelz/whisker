@@ -123,7 +123,8 @@ function reactionChips(message) {
 }
 
 // The Quote above a reply: who wrote the quoted Message and a one-line preview. Null when the Message has no Quote.
-// An unverified Quote (`verified` false) is a snapshot that the sender wrote. It is never "You" and carries `unverified`.
+// An unverified Quote (`verified` false) is a snapshot that the sender wrote. It is never "You", and its label says so.
+// `label` is the finished line and `italic` tells the view to set it in italics.
 var QUOTE_PREVIEW_LENGTH = 80
 
 function quoteView(message) {
@@ -133,10 +134,9 @@ function quoteView(message) {
   var text = String(quote.revoked ? tombstoneText(quote) : quote.text).replace(/\s+/g, " ").trim()
   if (text.length > QUOTE_PREVIEW_LENGTH) text = text.slice(0, QUOTE_PREVIEW_LENGTH - 1) + "…"
   var view = { id: quote.id, sender: quote.fromMe && !unverified ? "You" : Timeline.senderLabel(Object.assign({}, quote, { fromMe: false })), text: text }
-  if (unverified) {
-    view.unverified = true
-    if (!view.sender) view.sender = "Unknown"
-  }
+  if (unverified && !view.sender) view.sender = "Unknown"
+  view.label = view.sender + (unverified ? " (unverified)" : "") + ": " + text
+  view.italic = unverified
   return view
 }
 

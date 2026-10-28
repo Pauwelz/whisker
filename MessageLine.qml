@@ -166,8 +166,8 @@ Item {
           width: parent.width
           elide: Text.ElideRight
           textFormat: Text.PlainText
-          text: quote ? quote.sender + (quote.unverified ? " (unverified)" : "") + ": " + quote.text : ""
-          font.italic: quote !== null && quote.unverified === true
+          text: quote ? quote.label : ""
+          font.italic: quote !== null && quote.italic
           opacity: 0.6
           color: line.panel.contentForeground
           font.family: line.panel.contentFontFamily
