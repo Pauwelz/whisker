@@ -457,6 +457,13 @@ type ChatTimer struct {
 	Seconds int64  `json:"seconds"`
 }
 
+// GroupSubject is the name that WhatsApp holds for a Group Chat now: when the user joins it, or on connect.
+// It renames only a stored Chat, and it adds no System Message.
+type GroupSubject struct {
+	Chat    string `json:"chat"`
+	Subject string `json:"subject"`
+}
+
 // ChatAlias says that a LID and a phone JID are the same Participant. LID is a "@lid" JID, Phone a "@s.whatsapp.net" JID.
 // WhatsApp can send the mapping after the Chat that it concerns. The chat store then merges the LID Chat into the phone Chat.
 // The same alias can come more than once.
@@ -485,6 +492,7 @@ func (OwnDevices) isEvent()     {}
 func (NewMessage) isEvent()     {}
 func (Receipt) isEvent()        {}
 func (ChatTimer) isEvent()      {}
+func (GroupSubject) isEvent()   {}
 func (ChatAlias) isEvent()      {}
 func (Presence) isEvent()       {}
 func (ChatPresence) isEvent()   {}

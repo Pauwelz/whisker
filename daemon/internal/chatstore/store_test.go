@@ -851,3 +851,44 @@ func TestPutLiveGivesAnEphemeralMessageWithoutTimerTheChatTimer(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupSubjectRenamesOnlyAStoredChat(t *testing.T) {
+	s, _ := newStore(t)
+	apply(t, s, whatsapp.HistorySync{Chats: []whatsapp.HistoryChat{
+		{JID: "g1@g.us", Kind: whatsapp.KindGroup, LastActive: 30, Messages: []whatsapp.Message{{ID: "m1", Sender: "2@s.whatsapp.net", Time: 30}}},
+	}})
+	for _, tc := range []struct {
+		ev   whatsapp.GroupSubject
+		want bool
+	}{
+		{whatsapp.GroupSubject{Chat: "g1@g.us", Subject: "Hike"}, true},
+		{whatsapp.GroupSubject{Chat: "g1@g.us", Subject: "Hike"}, false}, // no change, no refresh
+		{whatsapp.GroupSubject{Chat: "g9@g.us", Subject: "Other"}, false},
+	} {
+		stored, err := s.Apply(tc.ev)
+		if err != nil || stored != tc.want {
+			t.Errorf("Apply(%+v) = %v, %v, want %v", tc.ev, stored, err, tc.want)
+		}
+	}
+	page := list(t, s, 0, 50)
+	if len(page.Chats) != 1 || page.Chats[0].Name != "Hike" {
+		t.Errorf("chats = %+v, want only Hike", page.Chats)
+	}
+}
+
+func TestAMentionOfTheUserIsYou(t *testing.T) {
+	s, _ := newStore(t)
+	s.OwnUsers = func() []string { return []string{"7", "77"} }
+	apply(t, s, whatsapp.PushName{JID: "7@s.whatsapp.net", Name: "Me Push"})
+	if _, err := s.PutLive(whatsapp.NewMessage{Chat: "g@g.us", Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: "m1", Sender: "3@s.whatsapp.net", Time: 1,
+		Text: "@7 and @3", Mentions: []string{"7@s.whatsapp.net", "3@s.whatsapp.net"}}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+		t.Fatal(err)
+	}
+	m, err := s.Message("g@g.us", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Text != "@You and @+3" || !slices.Equal(m.Mentions, []string{"@You", "@+3"}) {
+		t.Fatalf("got %q %v", m.Text, m.Mentions)
+	}
+}

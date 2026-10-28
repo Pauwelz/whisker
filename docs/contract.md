@@ -219,8 +219,9 @@ A System Message records a change to a Chat. The Daemon stores each one as a Mes
 - `chat.react`, `chat.edit`, `chat.revoke` and a `quote` of `chat.send` or `draft.set` refuse a System Message with -32006, as for an unknown Message.
 - A security code change adds no Chat and no notice when the Direct Chat is not stored. It adds no second notice while the last Message of the Chat is already one. The Daemon lists the own devices at each connection and keeps their ids. The first list after a new link or an update shows nothing. A new device id shows the notice once, in the own Direct Chat, which the Daemon creates if it is missing. A removed device id shows nothing. A failed call is logged without ids.
 - A live subject change also renames the Group Chat. `messageChanged` and `chatsChanged` follow each live System Message.
+- A Group Chat that the user joins live gets its subject from the join. At each connection the Daemon also asks WhatsApp for the subject of every Group Chat of the user. This repairs a subject that a join or a rename while offline did not bring. Neither adds a System Message. Only a stored Chat whose subject changes gets `chatsChanged`. Fixture: `group-joined.jsonl`.
 
-Fixtures: `chat-system-messages.jsonl`, `chat-security-code.jsonl`, `own-devices.jsonl`.
+Fixtures: `chat-system-messages.jsonl`, `chat-security-code.jsonl`, `own-devices.jsonl`, `group-joined.jsonl`.
 
 ### Desktop notification
 
@@ -402,7 +403,7 @@ Opens a Chat: it returns one page of its timeline. Params: `chat` (JID), and opt
 - `senderName` follows the name rule for Participants. `media` is the Media kind, and only a Message with Media has it. It is empty for the Messages of the user.
 - `state` is the Delivery State of a Message of the user, see below. It is empty for the Messages of others.
 - Text that WhatsApp cannot show gets a one-line text, so no Message is blank: `Poll: <name>. Open it on your phone.`, `Event: ...`, `View-once media. ...`, `Contact: <name>, <number>` (one line per card), `Location: <place>` with a map link on the next line, and `Unsupported message. ...`. The port adapter makes these lines. Reactions, poll votes and protocol Messages show nothing. Fixture: `message-types.jsonl`.
-- `mentions` lists the mentioned names, each as `@name` (name rule). `text` already holds them: the Daemon replaces `@<number>`. Only Messages with a mention have the key.
+- `mentions` lists the mentioned names, each as `@name` (name rule). A mention of the user is `@You`. `text` already holds them: the Daemon replaces `@<number>`. A mention by LID gets the same name as a mention by phone number. Only Messages with a mention have the key. Fixture: `group-joined.jsonl`.
 - `mentionsMe` is true when the Message mentions the user. The sender's mention list decides this, as in WhatsApp, also when `text` has no "@". Such a Message breaks through a mute or an archive. Only such Messages have the key. Fixture: `notify-mention-muted.jsonl`.
 - `senderPush` is true when `senderName` is a Push Name: the user has no phone contact for the sender. Only such Messages have the key. The Plugin shows "~" and the phone number from `sender`.
 - `edited` is true when the text changed after it was sent. `revoked` is true for a Tombstone: its `text` is empty and it keeps its place in the timeline. `revokedByAdmin` is true when a group admin made the Tombstone (also in a `quote`). Only such Messages have the key. The Plugin then shows "This message was deleted by admin".
@@ -722,6 +723,8 @@ The `event` kinds `newMessage`, `receipt`, `readElsewhere`, `messageEdited`, `me
 The `event` kinds `deletedForMe` (`chat`, `id`), `chatCleared` (`chat`, `until`) and `chatDeleted` (`chat`, `until`) play a delete from another device of the user.
 
 The `event` kind `chatAlias` (`lid`, `phone`) tells the Daemon that a LID and a phone JID are one contact.
+
+The `event` kind `groupSubject` (`chat`, `subject`) is the subject that WhatsApp holds for a Group Chat, from a join or a connection.
 
 The `event` kind `chatTimer` (`chat`, `seconds`) sets the Disappearing timer of a Chat. A `newMessage` takes `timer` (seconds), and a `historySync` Chat takes `timer`.
 

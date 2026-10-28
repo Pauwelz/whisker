@@ -1,0 +1,16 @@
+{"dir":"whatsapp","linked":true}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"ready","params":{"keyringPlain":false}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"linked","params":{}}}
+{"dir":"whatsapp","own":["9","99"]}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","chatKind":"group","message":{"id":"sys-j1","sender":"2@s.whatsapp.net","time":30,"system":{"kind":"add","targets":[""]}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"sys-j1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"+2","fromMe":false,"time":30,"text":"+2 added you","state":"","edited":false,"revoked":false,"system":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"groupSubject","chat":"g1@g.us","subject":"Hike"}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"whatsapp","event":{"kind":"groupSubject","chat":"g1@g.us","subject":"Hike"}}
+{"dir":"whatsapp","event":{"kind":"groupSubject","chat":"g2@g.us","subject":"Not stored"}}
+{"dir":"whatsapp","event":{"kind":"newMessage","chat":"g1@g.us","chatKind":"group","message":{"id":"m1","sender":"2@s.whatsapp.net","time":40,"text":"@9 sup","mentions":["9@s.whatsapp.net"],"mentionsMe":true}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"messageChanged","params":{"message":{"id":"m1","chat":"g1@g.us","sender":"2@s.whatsapp.net","senderName":"+2","fromMe":false,"time":40,"text":"@You sup","state":"","edited":false,"revoked":false,"mentions":["@You"],"mentionsMe":true}}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","method":"chatsChanged","params":{}}}
+{"dir":"in","frame":{"jsonrpc":"2.0","id":1,"method":"chats.list","params":{}}}
+{"dir":"out","frame":{"jsonrpc":"2.0","id":1,"result":{"chats":[{"jid":"g1@g.us","kind":"group","name":"Hike","lastActive":40,"pinned":false,"muted":false,"unread":true,"unreadCount":1,"mention":true}],"more":false,"offset":0,"unreadChats":1}}}

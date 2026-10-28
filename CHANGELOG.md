@@ -7,6 +7,11 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- A Group Chat that you join shows its name, not its number. At each connection whisker also repairs Group Chats that show a number.
+- A mention of you shows as `@You`. A mention in a group that hides phone numbers shows the name, not a long number.
+
 ## [1.2.0] - 2026-10-27
 
 ### Added

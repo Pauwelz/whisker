@@ -81,3 +81,29 @@ func TestAnEditCarriesItsTimeAndMentions(t *testing.T) {
 		t.Errorf("got %+v, want Time %d, MentionsMe and only the mention that the text holds", got, sysAt.Unix())
 	}
 }
+
+// A LID group mentions by LID. The text then names the phone JID, as the mention list does, so the store can label it.
+func TestALIDMentionNamesThePhoneJIDInTheText(t *testing.T) {
+	text := func(s string) *waE2E.Message {
+		return &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text: proto.String(s), ContextInfo: &waE2E.ContextInfo{MentionedJID: []string{sysOwnL.String(), "9@s.whatsapp.net"}},
+		}}
+	}
+	want := []string{sysOwn.String(), "9@s.whatsapp.net"}
+
+	c := systemClient()
+	c.handle(groupMessage("m1", text("@77 Sup @9")))
+	got := (<-c.events).(NewMessage).Message
+	if got.Text != "@3160 Sup @9" || !reflect.DeepEqual(got.Mentions, want) || !got.MentionsMe {
+		t.Errorf("live: got text %q, mentions %v, mentionsMe %v", got.Text, got.Mentions, got.MentionsMe)
+	}
+
+	evt := groupMessage("e1", &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+		Type: waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(), Key: &waCommon.MessageKey{ID: proto.String("m1")}, EditedMessage: text("@77 again @9"),
+	}})
+	c.handleProtocol(evt)
+	edit := (<-c.events).(MessageEdited)
+	if edit.Text != "@3160 again @9" || !reflect.DeepEqual(edit.Mentions, want) {
+		t.Errorf("edit: got text %q, mentions %v", edit.Text, edit.Mentions)
+	}
+}

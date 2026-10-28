@@ -19,6 +19,8 @@ type Store struct {
 	now func() time.Time
 	// RemoveMedia deletes the stored file of a Message whose Media row was deleted. The Daemon sets it once the Media store exists.
 	RemoveMedia func(chat, id string)
+	// OwnUsers lists the user parts of the user's own IDs, so a mention of the user reads "@You". The Daemon sets it.
+	OwnUsers func() []string
 }
 
 func New(db *sql.DB, now func() time.Time) *Store { return &Store{db: db, now: now} }
@@ -93,6 +95,13 @@ func (s *Store) Apply(ev whatsapp.Event) (stored bool, err error) {
 		return stored, err
 	case whatsapp.ChatTimer:
 		err = setFlag(s.db, "timer", flagTimer, ev.Chat, ev.Seconds)
+	case whatsapp.GroupSubject: // an empty subject never clears a stored one
+		res, err := s.db.Exec(`UPDATE chats SET subject = ?1 WHERE jid = ?2 AND ?1 <> '' AND subject IS NOT ?1`, ev.Subject, ev.Chat)
+		if err != nil {
+			return false, err
+		}
+		n, err := res.RowsAffected()
+		return n > 0, err
 	default:
 		return false, nil
 	}

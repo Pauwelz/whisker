@@ -318,10 +318,11 @@ func (c *Client) ProfilePicture(chat, knownID string) (string, []byte, error) {
 }
 
 func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {
+	text, mentions := c.phoneMentions(body.Text, body.Mentions)
 	return Message{
 		ID: info.ID, Sender: c.senderOf(info.MessageSource).String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
-		Text: body.Text, PushName: info.PushName, Quote: c.quoteOf(m), Media: body.Media, Timer: timerOf(m),
-		Mentions: c.phoneStrings(MentionsIn(body.Text, body.Mentions)), MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+		Text: text, PushName: info.PushName, Quote: c.quoteOf(m), Media: body.Media, Timer: timerOf(m),
+		Mentions: mentions, MentionsMe: mentionsUser(body.Mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
 	}
 }
 
@@ -473,13 +474,22 @@ func (c *Client) phoneString(s string) string {
 	return c.phone(jid).String()
 }
 
-func (c *Client) phoneStrings(in []string) []string {
+// phoneMentions keeps the mentions that the text holds, as phone JIDs. A LID token in the text becomes the phone token too,
+// so the text and the list name the same JID.
+func (c *Client) phoneMentions(text string, jids []string) (string, []string) {
 	var out []string
-	for _, s := range in {
-		out = append(out, c.phoneString(s))
+	labels := map[string]string{}
+	for _, s := range MentionsIn(text, jids) {
+		phone := c.phoneString(s)
+		out = append(out, phone)
+		if from, to := userOf(s), userOf(phone); from != to {
+			labels[from] = "@" + to
+		}
 	}
-	return out
+	return ReplaceMentions(text, labels), out
 }
+
+func userOf(jid string) string { user, _, _ := strings.Cut(jid, "@"); return user }
 
 // chatOf is the phone JID of the Chat of an event. In a Direct Chat the alt of the other user is the sender alt, or the recipient alt for the user's own Messages.
 func (c *Client) chatOf(src types.MessageSource) types.JID {

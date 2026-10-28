@@ -534,6 +534,10 @@ func (s *Store) nameMentions(m *Message, jids string) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	var own []string
+	if s.OwnUsers != nil {
+		own = s.OwnUsers()
+	}
 	labels := map[string]string{}
 	for _, jid := range unique {
 		name, ok := names[jid]
@@ -541,6 +545,9 @@ func (s *Store) nameMentions(m *Message, jids string) error {
 			name = phoneNumber(jid)
 		}
 		user, _, _ := strings.Cut(jid, "@")
+		if slices.Contains(own, user) {
+			name = "You"
+		}
 		label := "@" + name
 		if _, ok := labels[user]; !ok {
 			labels[user] = label

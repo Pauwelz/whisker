@@ -283,3 +283,25 @@ func TestLiveSubjectChangeIsCleaned(t *testing.T) {
 		t.Errorf("got %+v, want one subject System Message with value Family", msgs)
 	}
 }
+
+func TestJoinedGroupGivesTheChatItsSubject(t *testing.T) {
+	for _, evt := range []*events.JoinedGroup{
+		{Type: "new", Sender: &jef, GroupInfo: types.GroupInfo{JID: sysGroup, GroupName: types.GroupName{Name: "Hike"}}},
+		{Sender: &jef, GroupInfo: types.GroupInfo{JID: sysGroup, GroupName: types.GroupName{Name: "Hike"}}},
+		{Reason: "invite", GroupInfo: types.GroupInfo{JID: sysGroup, GroupName: types.GroupName{Name: "Hike"}}},
+	} {
+		c := systemClient()
+		c.handle(evt)
+		close(c.events)
+		var got []GroupSubject
+		for ev := range c.events {
+			if s, ok := ev.(GroupSubject); ok {
+				got = append(got, s)
+			}
+		}
+		want := []GroupSubject{{Chat: sysGroup.String(), Subject: "Hike"}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%+v: got %+v, want %+v", evt, got, want)
+		}
+	}
+}

@@ -37,6 +37,7 @@ func (c *Client) handle(evt any) {
 		c.events <- Connected{}
 		c.emitContactBook()
 		go c.emitOwnDevices()
+		go c.emitGroupSubjects()
 	case *events.IdentityChange: // implicit or announced: the user sees the change either way
 		chat := c.phone(evt.JID)
 		c.emitSystem(chat, c.systemMessage(chat, types.EmptyJID, types.EmptyJID, SystemIdentity, nil, "", evt.Timestamp))
@@ -126,6 +127,7 @@ func (c *Client) handle(evt any) {
 	case *events.JoinedGroup:
 		c.noteAddressing(evt.JID, evt.AddressingMode)
 		c.emitSystem(evt.JID, c.joinedGroupMessage(evt))
+		c.events <- GroupSubject{Chat: evt.JID.String(), Subject: CleanName(evt.GroupName.Name, MaxGroupSubject)} // after the System Message, which stores the Chat
 	case *events.Pin:
 		c.emitFlag(Pin{JID: c.phone(evt.JID).String(), Pinned: evt.Action.GetPinned()}, evt.FromFullSync)
 	case *events.Archive:
@@ -201,6 +203,20 @@ func (c *Client) emitOwnDevices() {
 		return
 	}
 	c.events <- OwnDevices{Chat: own.String(), IDs: ids, Notice: c.systemMessage(own, types.EmptyJID, types.EmptyJID, SystemDevice, nil, "", time.Now())}
+}
+
+// emitGroupSubjects sends the name of each Group Chat of the user. It repairs a name that a join or a rename
+// while offline did not bring. The chat store ignores a name that did not change. A failed fetch costs only the repair.
+func (c *Client) emitGroupSubjects() {
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	groups, err := c.cli.GetJoinedGroups(ctx)
+	if err != nil {
+		return
+	}
+	for _, g := range groups {
+		c.events <- GroupSubject{Chat: g.JID.String(), Subject: CleanName(g.GroupName.Name, MaxGroupSubject)}
+	}
 }
 
 // deviceIDs is the device ids of a list. An empty list counts as a failure: the user always has this device,
@@ -318,10 +334,11 @@ func (c *Client) editOf(evt *events.Message, id string, m *waE2E.Message) (Messa
 		return MessageEdited{}, false
 	}
 	mentions := mentionsOf(m)
+	text, phones := c.phoneMentions(text, mentions)
 	return MessageEdited{
 		Chat: c.chatOf(evt.Info.MessageSource).String(), ID: id, Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Text: text,
 		Time:     evt.Info.Timestamp.Unix(), // the edit's own time, so an edit that arrives late still applies
-		Mentions: c.phoneStrings(MentionsIn(text, mentions)), MentionsMe: mentionsUser(mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
+		Mentions: phones, MentionsMe: mentionsUser(mentions, c.cli.Store.GetJID().User, c.cli.Store.GetLID().User),
 	}, true
 }
 

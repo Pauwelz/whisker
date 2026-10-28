@@ -86,6 +86,7 @@ func (s *session) open() int {
 		s.events = s.port.Events()
 		s.media = s.profile.Media()
 		s.chats = chatstore.New(s.profile.Chat(), Clock.Now)
+		s.chats.OwnUsers = s.port.OwnUsers
 		s.read = &reader{chats: s.chats, port: s.port, prefs: s.prefs, attn: &s.attn, logOut: s.logOut, played: map[string]bool{}}
 		s.notices = &notifier{chats: s.chats, prefs: s.prefs, attn: &s.attn, desktop: s.desktop, logOut: s.logOut}
 		// A settings file that cannot be read turns auto-download off.
