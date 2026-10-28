@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- A question, about pasted files or about opening a file, closes only on Escape or Cancel. A menu, a click elsewhere or closing the pop-out no longer closes it. Leaving the Chat still drops it.
+
 ### Fixed
 
 - A Group Chat that you join shows its name, not its number. At each connection whisker also repairs Group Chats that show a number.

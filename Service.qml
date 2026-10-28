@@ -184,8 +184,7 @@ Item {
   function setPopoutOpen(open) {
     popoutOpen = open
     if (!open) {
-      cancelOpenQuestion()
-      openToken++
+      openToken++ // the question stays for the next open; only a probe that still runs is dropped
       stopPlayer()
       stopTyping()
     }
@@ -353,15 +352,10 @@ Item {
   // The one question that waits: the Open question or the paste question (Draft.questionOpen).
   readonly property bool asking: Draft.questionOpen(view, confirmOpen)
 
-  // The one way to cancel the question that is open.
+  // The one way to cancel the question that is open. Only Escape, Cancel and leaving the Chat call it.
   function cancelQuestion() {
-    cancelOpenQuestion()
-    view = Draft.pasteAnswered(view)
-  }
-
-  // Overlays and the pop-out close only the Open question: the paste question belongs to the Composer and stays.
-  function cancelOpenQuestion() {
     confirmOpen = null
+    view = Draft.pasteAnswered(view)
   }
 
   // Asks for the path of each image and sticker that is ready, and opens Media that the user clicked.
