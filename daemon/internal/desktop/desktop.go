@@ -5,9 +5,11 @@ package desktop
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -28,11 +30,13 @@ type Notifier interface {
 
 const (
 	appName   = "whisker"
-	callLimit = 3 * time.Second // a slow notification server cannot hold a goroutine for long
+	callLimit = 3 * time.Second // a slow notification server or session bus cannot hold a goroutine for long
 	// The hint names and types are the ones of Omarchy's omarchy-notification-send.
 	hintClick   = "omarchy-exec-argv" // string: the JSON argv that a click runs
 	hintUrgency = "urgency"           // byte: 0 is low, as in omarchy-notification-send
 )
+
+var errBusTimeout = errors.New("session bus connect timed out")
 
 // DBus shows notifications over the session bus.
 type DBus struct{ LogOut io.Writer }
@@ -46,8 +50,51 @@ func (d DBus) Notify(n Notification) {
 	}()
 }
 
+// connection is one attempt to connect. conn and err are valid once done is closed.
+type connection struct {
+	done chan struct{}
+	conn *dbus.Conn
+	err  error
+}
+
+// sessionBus connects to the session bus with a time limit. A call that finds an attempt still waiting joins it, so a hung bus
+// costs one connect, not one for each notification.
+type sessionBus struct {
+	connect func() (*dbus.Conn, error)
+	limit   time.Duration
+	mu      sync.Mutex
+	current *connection
+}
+
+var bus = &sessionBus{connect: dbus.SessionBus, limit: callLimit}
+
+func (b *sessionBus) get() (*dbus.Conn, error) {
+	b.mu.Lock()
+	c := b.current
+	if c == nil {
+		c = &connection{done: make(chan struct{})}
+		b.current = c
+		go func() {
+			c.conn, c.err = b.connect()
+			b.mu.Lock()
+			b.current = nil
+			b.mu.Unlock()
+			close(c.done)
+		}()
+	}
+	b.mu.Unlock()
+	timer := time.NewTimer(b.limit)
+	defer timer.Stop()
+	select {
+	case <-c.done:
+		return c.conn, c.err
+	case <-timer.C:
+		return nil, errBusTimeout
+	}
+}
+
 func call(n Notification) error {
-	conn, err := dbus.SessionBus() // shared by the process: do not close it
+	conn, err := bus.get() // shared by the process: do not close it
 	if err != nil {
 		return err
 	}

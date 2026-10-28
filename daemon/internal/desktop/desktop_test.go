@@ -2,7 +2,12 @@ package desktop
 
 import (
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/godbus/dbus/v5"
 )
 
 func TestHintsRunOpenChatWithTheTokenAsOneWord(t *testing.T) {
@@ -47,5 +52,34 @@ func TestNeutraliseBreaksEveryMarkupTrigger(t *testing.T) {
 	}
 	if got := neutralise("see you at 5"); got != "see you at 5" {
 		t.Errorf("plain text changed: %q", got)
+	}
+}
+
+// A hung bus fails each call at the limit and starts one connect only. A later call connects again once the hung one ended.
+func TestAHungSessionBusFailsAtTheLimitWithOneConnect(t *testing.T) {
+	release := make(chan struct{})
+	var connects atomic.Int32
+	b := &sessionBus{limit: 20 * time.Millisecond, connect: func() (*dbus.Conn, error) {
+		connects.Add(1)
+		<-release
+		return &dbus.Conn{}, nil
+	}}
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := b.get(); err != errBusTimeout {
+				t.Errorf("err = %v, want the timeout", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := connects.Load(); n != 1 {
+		t.Errorf("connects = %d, want 1", n)
+	}
+	close(release)
+	if conn, err := b.get(); err != nil || conn == nil {
+		t.Errorf("get after the bus answered = %v, %v", conn, err)
 	}
 }

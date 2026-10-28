@@ -12,6 +12,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - A Group Chat that you join shows its name, not its number. At each connection whisker also repairs Group Chats that show a number.
 - A mention of you shows as `@You`. A mention in a group that hides phone numbers shows the name, not a long number.
 - A file preview now appears in the open Chat when WhatsApp sends the same Message again with its thumbnail.
+- A desktop notification gives up after 3 seconds when the session bus does not answer. A hung bus no longer piles up work.
 
 ### Security
 
