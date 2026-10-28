@@ -25,7 +25,7 @@ func TestEditAppliesInsideTheWindowAndUpdatesTheMentions(t *testing.T) {
 	} {
 		s, _ := newStore(t)
 		m := whatsapp.Message{ID: "m1", Sender: editChat, Time: 1000, Text: "old @9", Mentions: []string{"9@s.whatsapp.net"}, MentionsMe: true}
-		if _, err := s.PutLive(whatsapp.NewMessage{Chat: editChat, Message: m}, chatstore.LivePolicy{}); err != nil {
+		if _, _, err := s.PutLive(whatsapp.NewMessage{Chat: editChat, Message: m}, chatstore.LivePolicy{}); err != nil {
 			t.Fatal(err)
 		}
 		ev := whatsapp.MessageEdited{Chat: editChat, ID: "m1", Sender: editChat, Text: "new", Time: tc.time}

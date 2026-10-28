@@ -204,17 +204,18 @@ func (b *outbox) disconnected(reason string) bool {
 
 // incomingMessage stores a new Message and tells the Plugin: the Message, the Chat list, and the desktop notification if the policy says so.
 // It reports whether the Message is new: a stored Message, or one with the ID of another author's Message, tells nobody.
+// A copy that fills an empty thumbnail sends `messageChanged` only.
 func (b *outbox) incomingMessage(ev whatsapp.NewMessage) (ok, isNew bool) {
 	if ev.Message.System != nil {
 		return b.systemMessage(ev), false
 	}
-	isNew, err := b.chats.PutLive(ev, livePolicy(ev, b.autoDownloads))
+	isNew, thumbFilled, err := b.chats.PutLive(ev, livePolicy(ev, b.autoDownloads))
 	if err != nil {
 		fmt.Fprintln(b.logOut, "chat store write failed") // the error text could hold names
 		return true, false
 	}
 	if !isNew {
-		return true, false
+		return !thumbFilled || b.notify(ev.Chat, ev.Message.ID), false // the open Chat shows the thumbnail; no notice, no Chat list change
 	}
 	b.incoming(ev)
 	if ev.Message.FromMe && ev.Kind == whatsapp.KindGroup { // sent from another device of the user

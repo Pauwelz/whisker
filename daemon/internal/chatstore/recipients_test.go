@@ -150,7 +150,7 @@ func TestAHistorySyncMessageIsNotTracked(t *testing.T) {
 func TestALiveMessageFromAnotherDeviceIsTracked(t *testing.T) {
 	s, _ := newStore(t)
 	live := whatsapp.NewMessage{Chat: group, Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: "m1", FromMe: true, Time: 1}}
-	if _, err := s.PutLive(live, chatstore.LivePolicy{}); err != nil {
+	if _, _, err := s.PutLive(live, chatstore.LivePolicy{}); err != nil {
 		t.Fatal(err)
 	}
 	if tracked, err := s.RecordReceipt(group, "m1", ann.Phone, whatsapp.StateRead); err != nil || !tracked {

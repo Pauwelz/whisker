@@ -53,7 +53,7 @@ func TestSecurityCodeChangeLandsInTheDirectChatOnceAndStaysQuiet(t *testing.T) {
 		t.Errorf("Chat list = %+v, %v; want a quiet Chat that keeps its place", page, err)
 	}
 	// A Message in between lets the next change show again.
-	if _, err := s.PutLive(whatsapp.NewMessage{Chat: jef, Message: whatsapp.Message{ID: "m2", Sender: jef, Time: 12, Text: "yo"}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+	if _, _, err := s.PutLive(whatsapp.NewMessage{Chat: jef, Message: whatsapp.Message{ID: "m2", Sender: jef, Time: 12, Text: "yo"}}, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 		t.Fatal(err)
 	}
 	if !putSystem(t, s, identity("s3", 13)) {

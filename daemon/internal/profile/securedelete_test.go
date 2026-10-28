@@ -57,7 +57,7 @@ func putMessage(t *testing.T, db *sql.DB, id, text string, timer int64) *chatsto
 	t.Helper()
 	s := chatstore.New(db, time.Now)
 	ev := whatsapp.NewMessage{Chat: chatJID, Message: whatsapp.Message{ID: id, Sender: chatJID, Time: 1000, Text: text, Timer: timer}}
-	if _, err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
+	if _, _, err := s.PutLive(ev, chatstore.LivePolicy{MediaState: chatstore.MediaNone}); err != nil {
 		t.Fatal(err)
 	}
 	return s

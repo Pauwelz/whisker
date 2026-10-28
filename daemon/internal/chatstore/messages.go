@@ -705,13 +705,33 @@ type LivePolicy struct {
 // PutLive stores a Message that arrived live.
 // A Message that reuses the ID of a stored Message of another author is dropped. It creates the Chat if History Sync has not.
 // A Message that is stored already changes nothing, also not the Read Marker. It reports whether the Message is new.
-func (s *Store) PutLive(ev whatsapp.NewMessage, p LivePolicy) (isNew bool, err error) {
+// For a stored Message of the same author, it also reports whether the copy filled an empty thumbnail.
+func (s *Store) PutLive(ev whatsapp.NewMessage, p LivePolicy) (isNew, thumbFilled bool, err error) {
 	err = s.inTx(func(tx *sql.Tx) error {
 		var err error
+		thumbFilled, err = fillsThumbnail(tx, ev)
+		if err != nil {
+			return err
+		}
 		isNew, err = putLiveMessage(tx, ev, p)
 		return err
 	})
-	return isNew, err
+	return isNew, thumbFilled && !isNew, err
+}
+
+// fillsThumbnail tells whether ev is a copy of a stored Message of the same author, with a thumbnail that the stored Media lacks.
+func fillsThumbnail(tx *sql.Tx, ev whatsapp.NewMessage) (bool, error) {
+	m := ev.Message
+	if m.Media == nil || len(m.Media.Thumbnail) == 0 || len(m.Media.Thumbnail) > whatsapp.MaxThumbnailBytes {
+		return false, nil
+	}
+	stored, mine, err := storedAuthor(tx, ev.Chat, m)
+	if err != nil || !stored || !mine {
+		return false, err
+	}
+	var lacks bool
+	err = tx.QueryRow(`SELECT COUNT(*) > 0 FROM media WHERE chat_jid = ? AND id = ? AND length(COALESCE(thumbnail, x'')) = 0`, ev.Chat, m.ID).Scan(&lacks)
+	return lacks, err
 }
 
 func putLiveMessage(tx *sql.Tx, ev whatsapp.NewMessage, p LivePolicy) (bool, error) {

@@ -18,7 +18,7 @@ const (
 
 func live(t *testing.T, s *chatstore.Store, m whatsapp.Message) bool {
 	t.Helper()
-	isNew, err := s.PutLive(whatsapp.NewMessage{Chat: colGroup, Kind: whatsapp.KindGroup, Message: m}, chatstore.LivePolicy{MediaState: chatstore.MediaDownloading, MarkUnread: true})
+	isNew, _, err := s.PutLive(whatsapp.NewMessage{Chat: colGroup, Kind: whatsapp.KindGroup, Message: m}, chatstore.LivePolicy{MediaState: chatstore.MediaDownloading, MarkUnread: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,5 +96,30 @@ func TestHistorySyncDoesNotReplaceAStoredMessageOfAnotherAuthor(t *testing.T) {
 	}
 	if m.Text != "bobJID" || m.Sender != bobJID || m.Media != nil {
 		t.Errorf("Message = %+v, want the stored one unchanged", m)
+	}
+}
+
+// A redelivery reports a thumbnail fill once; a redelivery that changes nothing reports none.
+func TestARedeliveryReportsAThumbnailFillOnce(t *testing.T) {
+	s, _ := newStore(t)
+	put := func(m whatsapp.Message) bool {
+		t.Helper()
+		_, filled, err := s.PutLive(whatsapp.NewMessage{Chat: colGroup, Kind: whatsapp.KindGroup, Message: m}, chatstore.LivePolicy{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return filled
+	}
+	if put(whatsapp.Message{ID: "x", Sender: annJID, Time: 1, Media: pic("")}) {
+		t.Error("a new Message reports a fill")
+	}
+	if put(whatsapp.Message{ID: "x", Sender: bobJID, Time: 1, Media: pic("t")}) {
+		t.Error("a copy of another author reports a fill")
+	}
+	if !put(whatsapp.Message{ID: "x", Sender: annJID, Time: 1, Media: pic("t")}) {
+		t.Error("the fill is not reported")
+	}
+	if put(whatsapp.Message{ID: "x", Sender: annJID, Time: 1, Media: pic("t")}) {
+		t.Error("a second copy reports a fill")
 	}
 }

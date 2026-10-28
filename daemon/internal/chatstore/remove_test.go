@@ -117,7 +117,7 @@ func TestDeleteChatRemovesEveryRowOfTheChat(t *testing.T) {
 	s, db := newStore(t)
 	removed := seedChat(t, s, db)
 	other := "other@g.us"
-	if _, err := s.PutLive(whatsapp.NewMessage{Chat: other, Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: "o1", Sender: annJID, Time: 1, Text: "keep"}}, chatstore.LivePolicy{}); err != nil {
+	if _, _, err := s.PutLive(whatsapp.NewMessage{Chat: other, Kind: whatsapp.KindGroup, Message: whatsapp.Message{ID: "o1", Sender: annJID, Time: 1, Text: "keep"}}, chatstore.LivePolicy{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetDraft(colGroup, chatstore.Draft{Text: "hi", Attachments: []string{"/tmp/a.png"}}); err != nil {
