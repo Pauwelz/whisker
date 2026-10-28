@@ -68,6 +68,10 @@ _Avoid_: File, blob, upload, asset
 A chronological entry in a Chat timeline sent by a Participant, carrying text or Media, and open to subsequent in-place mutations (Edit, Reaction, Revoke, Delivery State). A System Message is the one kind that no Participant writes.
 _Avoid_: Post, item, event, packet, bubble
 
+**Message links**:
+The actions of one Message, such as reply, copy text and delete, as links below the Message. A click on ⋯ or a right click on the Message shows them. They look like the Chat links.
+_Avoid_: Message menu, action menu
+
 **System Message**:
 A Message that records a change to a Chat, such as a Participant who joins, a new subject, a new Disappearing timer, a changed security code of a contact or a new device on the account of the user. No Participant writes it, and nobody can react to it, quote it, edit it or revoke it.
 _Avoid_: System line, group event, stub, notice
