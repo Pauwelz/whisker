@@ -25,7 +25,7 @@ whisker does not do calls, Status, Communities or more than one account.
 
 - Omarchy on Linux, amd64.
 - A phone with WhatsApp.
-- A login keyring that has the Secret Service API, such as gnome-keyring. Omarchy installs one.
+- A default keyring that has the Secret Service API, such as gnome-keyring. Omarchy installs one.
 
 ## Install and remove
 

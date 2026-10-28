@@ -12,6 +12,8 @@ whisker is the Omarchy product: a Quickshell/QML Plugin and its own Go Daemon. I
 - `ncruces/go-sqlite3` with the `adiantum` VFS gives encrypted SQLite in pure Go.
 - `zalando/go-keyring` reads and writes the store key in the Secret Service.
 - `godbus/dbus` calls the Notifications service on the session bus.
+- `golang.org/x/sys/unix` gives `prctl` (`PR_SET_DUMPABLE` off, so no core dumps) and `openat2` (opens attachments without following links).
+- `go.mau.fi/libsignal` is a direct dependency only to replace its logger with a silent one. Its log lines hold raw bytes of remote Messages.
 - `rsc.io/qr` renders the QR code ([research](research/qr-library.md)).
 - The Daemon uses whatsmeow's `util/hkdfutil` and `util/cbcutil` packages for Media.
 - The JSON-RPC 2.0 envelope uses no library on either side.

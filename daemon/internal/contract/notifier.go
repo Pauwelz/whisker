@@ -22,7 +22,6 @@ const previewHidden = "New message"
 
 // notifier shows a desktop notification for a new Message when the policy (notifypolicy) says so.
 // It runs on the Daemon loop only.
-// shortcut: a live Message that arrives twice notifies twice, upgrade if WhatsApp repeats events.
 type notifier struct {
 	chats   *chatstore.Store
 	prefs   *settings.Store

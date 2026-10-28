@@ -14,7 +14,7 @@ var KEY_V = 0x56
 // `openChat.unsendable` lists the Attachment paths that the Daemon refused. The marks live in the view only.
 var EMPTY_DRAFT = { text: "", quote: "", edit: "", attachments: [] }
 
-// The Daemon refuses text over 65536 code points (WhatsApp's limit). The composer and both search fields cap their text here.
+// The Daemon refuses text over 65536 code points (WhatsApp's limit). The Composer caps its text here.
 var MAX_TEXT = 65536
 var TEXT_TOO_LONG = "That text is too long"
 
