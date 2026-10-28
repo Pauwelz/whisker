@@ -1,0 +1,42 @@
+name: Bug report
+description: Report something in whisker that does not work.
+labels: [bug, needs-triage]
+body:
+  - type: input
+    id: whisker-version
+    attributes:
+      label: whisker version
+      description: The `version` in `manifest.json`, or the output of `whisker-daemon --version`.
+    validations:
+      required: true
+  - type: input
+    id: omarchy-version
+    attributes:
+      label: Omarchy version
+      description: The output of `omarchy version`.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the pop-out.
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected and actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Daemon log
+      description: |
+        Run this command and paste the output.
+        The log holds only ids and error codes, not message text.
+        `journalctl --user -t omarchy-shell --since "1 hour ago" | grep whisker-daemon`
+      render: text
