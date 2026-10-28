@@ -107,3 +107,19 @@ test("Save as starts in ~/Downloads with the file name, and ~ becomes the home f
   assert.equal(Media.savePath("/tmp/a.pdf", "/home/u"), "/tmp/a.pdf");
   assert.equal(Media.savePath("~user/a", "/home/u"), "~user/a");
 });
+
+test("the probe result decides: open a safe type, ask for the rest", () => {
+  const probe = { busy: false, exitCode: 0, output: "application/pdf\n" };
+  assert.equal(Media.openDecision(probe), "open");
+  assert.equal(Media.openDecision({ ...probe, output: "text/html\n" }), "ask");
+  assert.equal(Media.openDecision({ ...probe, exitCode: 127, output: "application/pdf" }), "ask");
+  assert.equal(Media.openDecision({ ...probe, busy: true }), "ask");
+});
+
+test("a probe is settled when it failed, or when it ended and gave its output", () => {
+  assert.equal(Media.probeSettled({ exitCode: null, output: null }), false);
+  assert.equal(Media.probeSettled({ exitCode: 0, output: null }), false);
+  assert.equal(Media.probeSettled({ exitCode: null, output: "text/plain" }), false);
+  assert.equal(Media.probeSettled({ exitCode: 0, output: "text/plain" }), true);
+  assert.equal(Media.probeSettled({ exitCode: 127, output: null }), true);
+});

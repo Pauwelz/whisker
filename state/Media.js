@@ -125,6 +125,17 @@ function mimeIsSafe(mime) {
   return SAFE_MIMES.indexOf(type) !== -1 || type.indexOf("application/vnd.openxmlformats-officedocument.") === 0
 }
 
+// What to do with a file for the default app, from the probe: { busy, exitCode, output }. A busy or failed probe asks.
+function openDecision(probe) {
+  if (probe.busy || probe.exitCode !== 0) return "ask"
+  return mimeIsSafe(probe.output) ? "open" : "ask"
+}
+
+// The probe ends in two events, the exit and the output. A failed exit needs no output, so it settles at once.
+function probeSettled(probe) {
+  return probe.exitCode !== null && (probe.exitCode !== 0 || probe.output !== null)
+}
+
 // Voice notes play in the pop-out. `playingKey` is the mediaKey of the note that plays now, or "".
 function isVoice(message) {
   return !!message.media && message.media.kind === "voice"

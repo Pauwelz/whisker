@@ -141,6 +141,7 @@ Item {
   // Ends what belongs to the open Chat. The Daemon deletes the plain Media copies of the Chat.
   function leaveChat() {
     confirmOpen = null
+    openToken++
     stopTyping()
     stopPlayer()
     send(Media.mediaReleaseRequest, view.openChat.jid)
@@ -184,6 +185,7 @@ Item {
     popoutOpen = open
     if (!open) {
       confirmOpen = null
+      openToken++
       stopPlayer()
       stopTyping()
     }
@@ -278,33 +280,50 @@ Item {
       return
     }
     if (mimeProbe.running) { // one probe at a time: a second Open asks, so it never takes the answer of the first
-      confirmOpen = { message: message, path: path }
+      applyOpenDecision({ busy: true }, message, path)
       return
     }
     mimeProbe.message = message
     mimeProbe.path = path
+    mimeProbe.token = openToken
+    mimeProbe.exitCode = null
+    mimeProbe.output = null
     mimeProbe.command = Media.mimeProbeCommand(path)
     mimeProbe.running = true
   }
 
-  // Probes the content type of a file for the default app. A safe type opens at once, any other answer asks first.
+  // Applies the answer of Media.openDecision: opens the file or asks first.
+  function applyOpenDecision(probe, message, path) {
+    if (Media.openDecision(probe) === "open") {
+      opener.command = Media.openCommand(message, path)
+      opener.startDetached()
+    } else {
+      confirmOpen = { message: message, path: path }
+    }
+  }
+
+  // Leaving the Chat or closing the pop-out bumps this, so a probe that ends later opens and asks nothing.
+  property int openToken: 0
+
+  // Probes the content type of a file for the default app.
   Process {
     id: mimeProbe
     property var message: null
     property string path: ""
-    // A probe that fails (no `file` binary, a bad exit code) asks.
-    onExited: function(exitCode) { if (exitCode !== 0) root.confirmOpen = { message: message, path: path } }
+    property int token: 0
+    property var exitCode: null
+    property var output: null
+    function settle() {
+      var probe = { busy: false, exitCode: exitCode, output: output }
+      if (token === root.openToken && Media.probeSettled(probe)) {
+        token = -1 // the other event of this probe then does nothing
+        root.applyOpenDecision(probe, message, path)
+      }
+    }
+    onExited: function(code) { exitCode = code; settle() }
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: {
-        var open = { message: mimeProbe.message, path: mimeProbe.path }
-        if (Media.mimeIsSafe(text)) {
-          opener.command = Media.openCommand(open.message, open.path)
-          opener.startDetached()
-        } else {
-          root.confirmOpen = open
-        }
-      }
+      onStreamFinished: { mimeProbe.output = text; mimeProbe.settle() }
     }
   }
 
