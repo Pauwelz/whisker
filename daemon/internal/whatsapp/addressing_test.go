@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"go.mau.fi/whatsmeow"
@@ -70,5 +71,50 @@ func TestALiveGroupMessageTeachesTheAddressingMode(t *testing.T) {
 	c.handle(evt)
 	if lid, _ := c.lidGroups.Load(sysGroup); lid != true {
 		t.Errorf("lidGroups = %v, want true", lid)
+	}
+}
+
+// A group with no event yet has an unknown mode. The first Quote or Reaction looks it up once, and the LID goes out.
+func TestAnUnknownAddressingModeIsLookedUpOnce(t *testing.T) {
+	own := types.JID{User: "3160", Server: types.DefaultUserServer}
+	other := types.JID{User: "3161", Server: types.DefaultUserServer}
+	otherLID := types.JID{User: "9161", Server: types.HiddenUserServer}
+	group := types.JID{User: "1", Server: types.GroupServer}
+	dev := &store.Device{ID: &own, LIDs: pnToLID{pairs: map[types.JID]types.JID{other: otherLID}}}
+	c := &Client{cli: whatsmeow.NewClient(dev, waLog.Noop)}
+	calls := 0
+	c.groupInfo = func(context.Context, types.JID) (*types.GroupInfo, error) {
+		calls++
+		return &types.GroupInfo{AddressingMode: types.AddressingModeLID}, nil
+	}
+	for i := 0; i < 2; i++ {
+		c.learnAddressing(group)
+		if got := c.wireJID(group, other); got != otherLID {
+			t.Errorf("wireJID = %v, want %v", got, otherLID)
+		}
+	}
+	if calls != 1 {
+		t.Errorf("lookups = %d, want 1", calls)
+	}
+}
+
+// A failed lookup keeps the phone JID and is tried again at the next send.
+func TestAFailedAddressingLookupKeepsThePhoneJID(t *testing.T) {
+	own := types.JID{User: "3160", Server: types.DefaultUserServer}
+	other := types.JID{User: "3161", Server: types.DefaultUserServer}
+	group := types.JID{User: "1", Server: types.GroupServer}
+	c := &Client{cli: whatsmeow.NewClient(&store.Device{ID: &own}, waLog.Noop)}
+	calls := 0
+	c.groupInfo = func(context.Context, types.JID) (*types.GroupInfo, error) {
+		calls++
+		return nil, errors.New("offline")
+	}
+	c.learnAddressing(group)
+	c.learnAddressing(group)
+	if got := c.wireJID(group, other); got != other {
+		t.Errorf("wireJID = %v, want %v", got, other)
+	}
+	if calls != 2 {
+		t.Errorf("lookups = %d, want 2", calls)
 	}
 }

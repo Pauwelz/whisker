@@ -24,6 +24,7 @@ func (c *Client) Send(chat, id, text string, quote *Quote, timer int64) error {
 		if quote != nil || timer > 0 { // a quote and the timer ride in the ContextInfo of an extended text Message
 			info := &waE2E.ContextInfo{}
 			if quote != nil {
+				c.learnAddressing(jid)
 				info.StanzaID = proto.String(quote.ID)
 				info.Participant = proto.String(c.quoteSender(jid, quote.Sender))
 				info.QuotedMessage = &waE2E.Message{Conversation: proto.String(quote.Text)}
@@ -57,9 +58,22 @@ func (c *Client) noteAddressing(chat types.JID, mode types.AddressingMode) {
 	}
 }
 
+// learnAddressing looks up the addressing mode of a Group Chat that no event showed yet, so a Quote or Reaction can use the LID.
+// A failed lookup changes nothing: the phone JID goes out, and the next send tries again.
+func (c *Client) learnAddressing(chat types.JID) {
+	if _, known := c.lidGroups.Load(chat); known || chat.Server != types.GroupServer {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	if info, err := c.groupInfo(ctx, chat); err == nil {
+		c.lidGroups.Store(chat, info.AddressingMode == types.AddressingModeLID)
+	}
+}
+
 // wireJID is the JID to put in a Message that every Participant of the Group Chat reads. The chat store keeps the phone JID of an author,
 // but a group that addresses by LID hides the phone numbers, and the other Participants must not learn one from a Quote or a Reaction.
-// The JID stays as it is for another Chat, a PN group, a group of unknown mode, or a JID without a LID in the store.
+// The JID stays as it is for another Chat, a PN group, a group whose lookup failed, or a JID without a LID in the store.
 func (c *Client) wireJID(chat, jid types.JID) types.JID {
 	if lid, _ := c.lidGroups.Load(chat); lid != true || jid.Server != types.DefaultUserServer {
 		return jid
@@ -87,6 +101,7 @@ func (c *Client) React(chat, id, sender, emoji string) error {
 		}
 	}
 	return c.send(chat, editTimeout, func(jid types.JID) (*waE2E.Message, whatsmeow.SendRequestExtra) {
+		c.learnAddressing(jid)
 		return c.cli.BuildReaction(jid, c.wireJID(jid, senderJID), id, emoji), whatsmeow.SendRequestExtra{}
 	})
 }

@@ -50,9 +50,9 @@ type Client struct {
 	syncMu  sync.Mutex
 	pending []Event // the flag events of a full App State sync, until it completes
 
-	// lidGroups holds the addressing mode of each Group Chat that a live event or a joined-group event showed: true for LID.
-	// shortcut: only the current run knows it, so the first reply or Reaction in a group after a start, before any live event of it, still sends the phone JID. Upgrade with GetGroupInfo.
+	// lidGroups holds the addressing mode of each Group Chat that an event or a group lookup showed: true for LID.
 	lidGroups sync.Map
+	groupInfo func(context.Context, types.JID) (*types.GroupInfo, error) // the group lookup; a test replaces it
 }
 
 // SetDeviceIdentity names the linked device "whisker (hostname)" on the phone. Call it once, before the first connect and pair.
@@ -82,6 +82,7 @@ func NewClient(container *sqlstore.Container) (*Client, error) {
 	c := &Client{cli: whatsmeow.NewClient(dev, waLog.Noop), events: make(chan Event, 64)}
 	// The first App State sync after a link is a full sync. Without this, its Pin, Archive, Mute and Read Marker events are lost.
 	c.cli.EmitAppStateEventsOnFullSync = true
+	c.groupInfo = c.cli.GetGroupInfo
 	c.cli.AddEventHandler(c.handle)
 	return c, nil
 }
