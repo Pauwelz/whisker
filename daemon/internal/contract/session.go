@@ -21,9 +21,6 @@ import (
 // Tests replace it with a manual clock.
 var Clock clock.Clock = clock.Real
 
-// maxMuteWait is the longest wait of the Mute end timer, in seconds (24 h).
-const maxMuteWait = 24 * 60 * 60
-
 // keepGoing is what a step returns when the Daemon goes on. Any other value is an exit code.
 const keepGoing = -1
 
@@ -32,6 +29,14 @@ func exitIf(ok bool) int {
 		return keepGoing
 	}
 	return ExitError
+}
+
+// doneChans are the per-session channels that carry the results of work off the Daemon loop.
+// Assign the zero value to drop them all.
+type doneChans struct {
+	media        <-chan mediaResult        // the results of the Media downloads
+	participants <-chan participantsResult // the results of the Group Chat Participant lookups
+	adminRevoke  <-chan adminRevokeResult  // the results of the admin checks of admin revokes
 }
 
 // session is the state of one Run. It lives on the Daemon loop; only the sends and downloads run on other goroutines.
@@ -50,26 +55,24 @@ type session struct {
 	pasteDone     chan pasteResult    // the results of the clipboard reads of draft.paste
 	current       json.RawMessage     // the id of the request in progress; guard answers it after a panic
 
-	ready            bool
-	port             whatsapp.Port
-	media            *media.Store
-	events           <-chan whatsapp.Event
-	chats            *chatstore.Store
-	box              *outbox
-	read             *reader // clears Read Markers and sends Read Receipts
-	notices          *notifier
-	pres             *presenter
-	loader           *mediaLoader
-	hist             *history                  // the open On-Demand History Sync requests
-	sent             <-chan sendResult         // the results of the sends
-	mediaDone        <-chan mediaResult        // the results of the Media downloads
-	participantsDone <-chan participantsResult // the results of the Group Chat Participant lookups
-	adminRevokeDone  <-chan adminRevokeResult  // the results of the admin checks of admin revokes
-	historyEnded     <-chan historyEnd         // the requests of On-Demand History Sync that got no answer
-	expiryTick       <-chan time.Time          // fires when the sweep of Disappearing Messages is due
-	retryConnect     <-chan time.Time          // fires when a failed connect of a linked Profile is due again
-	muteTick         <-chan time.Time          // fires when the next Mute ends, so the bar count moves
-	muteAt           int64                     // the Mute end that muteTick waits for
+	ready        bool
+	port         whatsapp.Port
+	media        *media.Store
+	events       <-chan whatsapp.Event
+	chats        *chatstore.Store
+	box          *outbox
+	read         *reader // clears Read Markers and sends Read Receipts
+	notices      *notifier
+	pres         *presenter
+	loader       *mediaLoader
+	hist         *history          // the open On-Demand History Sync requests
+	sent         <-chan sendResult // the results of the sends
+	done         doneChans
+	historyEnded <-chan historyEnd // the requests of On-Demand History Sync that got no answer
+	expiryTick   <-chan time.Time  // fires when the sweep of Disappearing Messages is due
+	retryConnect <-chan time.Time  // fires when a failed connect of a linked Profile is due again
+	muteTick     <-chan time.Time  // fires when the next Mute ends, so the bar count moves
+	muteAt       int64             // the Mute end that muteTick waits for
 }
 
 // open opens the Profile and sends `ready`, or tells the Plugin that the keyring is unavailable.
@@ -96,10 +99,10 @@ func (s *session) open() int {
 		}
 		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, s.notices.show, autoDownloads)
 		s.sent = s.box.results
-		s.participantsDone = s.box.participants
-		s.adminRevokeDone = s.box.adminRevokes
+		s.done.participants = s.box.participants
+		s.done.adminRevoke = s.box.adminRevokes
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)
-		s.mediaDone = s.loader.results
+		s.done.media = s.loader.results
 		s.hist = newHistory(s.port, s.send, s.logOut)
 		s.historyEnded = s.hist.ended
 		// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
@@ -162,7 +165,8 @@ func (s *session) unlink(by string) int {
 	dropAllPasted() // the Drafts go with the Profile
 	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader, s.hist = false, nil, nil, nil, nil, nil, nil, nil, nil, nil
 	s.pastedPending = nil
-	s.sent, s.participantsDone, s.adminRevokeDone, s.mediaDone, s.historyEnded, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, nil, nil, nil, 0
+	s.done = doneChans{}
+	s.sent, s.historyEnded, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, 0
 	s.attn.Set(s.attn.Open(), "") // the Chat is gone with the Profile
 	if err := s.profile.Delete(); err != nil {
 		fmt.Fprintln(s.logOut, "profile delete failed")
@@ -317,35 +321,4 @@ func (s *session) merge(a whatsapp.ChatAlias) bool {
 	}
 	s.scheduleMuteEnd()
 	return s.send(notification("chatMerged", map[string]any{"from": a.LID, "to": a.Phone})) && s.send(notification("chatsChanged", nil))
-}
-
-// scheduleMuteEnd sets one timer for the earliest Mute end, so the Plugin counts the Chat again when its Mute ends.
-// It keeps the timer that waits for the same end, and drops an older one.
-func (s *session) scheduleMuteEnd() {
-	until, ok, err := s.chats.NextMuteEnd()
-	switch {
-	case err != nil:
-		fmt.Fprintln(s.logOut, "chat store read failed")
-	case !ok:
-		s.muteTick, s.muteAt = nil, 0
-	case until != s.muteAt:
-		// The wait is capped: a far end must not overflow the Duration. The tick re-checks the end.
-		wait := time.Duration(min(until-Clock.Now().Unix(), maxMuteWait)) * time.Second
-		s.muteTick, s.muteAt = Clock.After(wait), until
-	}
-}
-
-// ownDevices shows a notice when the account of the user has a device that no earlier list held.
-// The set is updated first: a failed notice is not shown again after the next connection.
-func (s *session) ownDevices(ev whatsapp.OwnDevices) bool {
-	if ev.Failed {
-		fmt.Fprintln(s.logOut, "own device list failed") // the error text could hold ids
-		return true
-	}
-	added, err := s.chats.NoteOwnDevices(ev.IDs)
-	if err != nil {
-		fmt.Fprintln(s.logOut, "chat store write failed")
-		return true
-	}
-	return !added || s.box.systemMessage(whatsapp.NewMessage{Chat: ev.Chat, Kind: whatsapp.KindSelf, Message: ev.Notice})
 }

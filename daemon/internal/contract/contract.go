@@ -153,13 +153,13 @@ func Run(in io.Reader, out, logOut io.Writer, profile Profile, prefs *settings.S
 			step = func() int { return s.onEvent(ev) }
 		case <-s.expiryTick:
 			step = func() int { return exitIf(s.sweepExpired()) }
-		case r := <-s.mediaDone:
+		case r := <-s.done.media:
 			step = func() int { return exitIf(s.loader.done(r)) }
 		case r := <-s.sent:
 			step = func() int { return exitIf(s.box.done(r)) }
-		case r := <-s.participantsDone:
+		case r := <-s.done.participants:
 			step = func() int { return exitIf(s.box.participantsDone(r)) }
-		case r := <-s.adminRevokeDone:
+		case r := <-s.done.adminRevoke:
 			step = func() int { return exitIf(s.box.adminRevokeDone(r)) }
 		case r := <-s.pasteDone:
 			step = func() int { return s.pasted(r) }
