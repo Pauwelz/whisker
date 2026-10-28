@@ -38,6 +38,8 @@ const (
 	editTimeout      = 15 * time.Second
 	uploadTimeout    = 10 * time.Minute
 	storeTimeout     = 5 * time.Second
+	// lookupTimeout bounds the group lookup before a Quote or Reaction: it runs on the Daemon loop, so a hang freezes every request.
+	lookupTimeout = 3 * time.Second
 )
 
 // Client is the whatsmeow adapter: the only place whatsmeow types appear.

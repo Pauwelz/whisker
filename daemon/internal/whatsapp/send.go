@@ -64,7 +64,7 @@ func (c *Client) learnAddressing(chat types.JID) {
 	if _, known := c.lidGroups.Load(chat); known || chat.Server != types.GroupServer {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), lookupTimeout)
 	defer cancel()
 	if info, err := c.groupInfo(ctx, chat); err == nil {
 		c.lidGroups.Store(chat, info.AddressingMode == types.AddressingModeLID)
