@@ -245,16 +245,21 @@ Item {
               color: line.panel.contentForeground
               font.family: line.panel.contentFontFamily
               font.pixelSize: Style.font.body
-              onVisibleChanged: if (visible) {
+              // A delegate that is created while Save as is open is visible from the start, with no change to react to.
+              function start() {
                 text = Media.defaultSavePath(line.message)
                 cursorPosition = text.length
                 forceActiveFocus()
               }
+              onVisibleChanged: if (visible) start()
+              Component.onCompleted: if (visible) start()
               Keys.onPressed: function(event) {
                 if (event.key === Qt.Key_Escape) {
                   line.panel.savingId = ""
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                  line.panel.whiskerService.saveMedia(line.message, Media.savePath(text, Quickshell.env("HOME")))
+                  var path = Media.savePath(text, Quickshell.env("HOME"))
+                  if (path === "") return // Enter never saves to an empty path
+                  line.panel.whiskerService.saveMedia(line.message, path)
                   line.panel.savingId = ""
                 } else {
                   return

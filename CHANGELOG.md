@@ -15,6 +15,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - A desktop notification gives up after 3 seconds when the session bus does not answer. A hung bus no longer piles up work.
 - Open no longer leaves a hidden question after you leave the Chat while the file type is checked. The first Escape now works as expected.
 - A failed or unreadable check of the Omarchy lock state now counts as locked. whisker no longer marks Messages as read on a screen nobody sees.
+- Save as keeps its default path and focus after you scroll the Message out of view and back. Enter no longer saves to an empty path.
 
 ### Security
 

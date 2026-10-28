@@ -106,6 +106,7 @@ test("Save as starts in ~/Downloads with the file name, and ~ becomes the home f
   assert.equal(Media.savePath(" ~/Downloads/a.pdf ", "/home/u"), "/home/u/Downloads/a.pdf");
   assert.equal(Media.savePath("/tmp/a.pdf", "/home/u"), "/tmp/a.pdf");
   assert.equal(Media.savePath("~user/a", "/home/u"), "~user/a");
+  assert.equal(Media.savePath("  ", "/home/u"), ""); // the Save as field refuses an empty path
 });
 
 test("the probe result decides: open a safe type, ask for the rest", () => {
