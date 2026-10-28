@@ -105,18 +105,23 @@ Panel {
     }
   }
 
+  // Drops the reply or the Edit of the composer. An Edit also drops its text. Escape and ✕ call it.
+  function cancelReplyOrEdit() {
+    root.whiskerService.changeDraft(root.editingId !== "" ? { edit: "", text: "" } : { quote: "" })
+  }
+
   // Runs a fixed shortcut. The decision is Daemon.shortcutAction.
   function runShortcut(shortcut) {
     var asking = !!root.whiskerService && root.whiskerService.asking
-    var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat, asking: asking, picker: root.reactingId !== "", messageLinks: root.linksId !== "", quoting: root.quoting !== null })
+    var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat, asking: asking, picker: root.reactingId !== "", messageLinks: root.linksId !== "", replyOrEdit: root.quoting !== null || root.editingId !== "" })
     if (action === "closeQuestion") {
       root.whiskerService.cancelQuestion()
     } else if (action === "closePicker") {
       root.reactingId = ""
     } else if (action === "closeMessageLinks") {
       root.linksId = ""
-    } else if (action === "cancelQuote") {
-      root.whiskerService.changeDraft({ quote: "" })
+    } else if (action === "cancelReplyOrEdit") {
+      cancelReplyOrEdit()
     } else if (action === "closeChat") {
       root.whiskerService.closeChat()
     } else if (action === "closeSettings") {
@@ -984,7 +989,7 @@ Panel {
             }
             Button {
               text: "✕"
-              onClicked: root.whiskerService.changeDraft(root.editingId !== "" ? { edit: "", text: "" } : { quote: "" })
+              onClicked: root.cancelReplyOrEdit()
             }
           }
 
