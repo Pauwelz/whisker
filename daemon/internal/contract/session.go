@@ -37,6 +37,8 @@ type doneChans struct {
 	media        <-chan mediaResult        // the results of the Media downloads
 	participants <-chan participantsResult // the results of the Group Chat Participant lookups
 	adminRevoke  <-chan adminRevokeResult  // the results of the admin checks of admin revokes
+	sent         <-chan sendResult         // the results of the sends
+	historyEnded <-chan historyEnd         // the requests of On-Demand History Sync that got no answer
 }
 
 // session is the state of one Run. It lives on the Daemon loop; only the sends and downloads run on other goroutines.
@@ -65,14 +67,12 @@ type session struct {
 	notices      *notifier
 	pres         *presenter
 	loader       *mediaLoader
-	hist         *history          // the open On-Demand History Sync requests
-	sent         <-chan sendResult // the results of the sends
+	hist         *history // the open On-Demand History Sync requests
 	done         doneChans
-	historyEnded <-chan historyEnd // the requests of On-Demand History Sync that got no answer
-	expiryTick   <-chan time.Time  // fires when the sweep of Disappearing Messages is due
-	retryConnect <-chan time.Time  // fires when a failed connect of a linked Profile is due again
-	muteTick     <-chan time.Time  // fires when the next Mute ends, so the bar count moves
-	muteAt       int64             // the Mute end that muteTick waits for
+	expiryTick   <-chan time.Time // fires when the sweep of Disappearing Messages is due
+	retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
+	muteTick     <-chan time.Time // fires when the next Mute ends, so the bar count moves
+	muteAt       int64            // the Mute end that muteTick waits for
 }
 
 // open opens the Profile and sends `ready`, or tells the Plugin that the keyring is unavailable.
@@ -98,13 +98,13 @@ func (s *session) open() int {
 			return err == nil && cur.AutoDownloads(size)
 		}
 		s.box = newOutbox(s.chats, s.port, s.media, s.send, s.logOut, s.read.incoming, s.notices.show, autoDownloads)
-		s.sent = s.box.results
+		s.done.sent = s.box.results
 		s.done.participants = s.box.participants
 		s.done.adminRevoke = s.box.adminRevokes
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)
 		s.done.media = s.loader.results
 		s.hist = newHistory(s.port, s.send, s.logOut)
-		s.historyEnded = s.hist.ended
+		s.done.historyEnded = s.hist.ended
 		// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
 		_, err := s.chats.Expire(Clock.Now().Unix())
 		storeFailed(s.logOut, storeWrite, err)
@@ -165,7 +165,7 @@ func (s *session) unlink(by string) int {
 	s.ready, s.port, s.media, s.events, s.chats, s.box, s.read, s.pres, s.loader, s.hist = false, nil, nil, nil, nil, nil, nil, nil, nil, nil
 	s.pastedPending = nil
 	s.done = doneChans{}
-	s.sent, s.historyEnded, s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, nil, nil, 0
+	s.expiryTick, s.retryConnect, s.muteTick, s.muteAt = nil, nil, nil, 0
 	s.attn.Set(s.attn.Open(), "") // the Chat is gone with the Profile
 	if err := s.profile.Delete(); err != nil {
 		fmt.Fprintln(s.logOut, "profile delete failed")
