@@ -873,6 +873,17 @@ test("reactionChips keys have no prototype", () => {
   assert.deepEqual(chips.map((c) => [c.emoji, c.count]), [["__proto__", 1], ["constructor", 1], ["toString", 1]]);
 });
 
+test("the lock probe: a good answer sets the state, a failed or unreadable probe means locked", () => {
+  assert.equal(Daemon.lockedFromProbe({ exitCode: 0, output: "true\n" }), true);
+  assert.equal(Daemon.lockedFromProbe({ exitCode: 0, output: "false\n" }), false);
+  assert.equal(Daemon.lockedFromProbe({ exitCode: 0, output: "" }), true);
+  assert.equal(Daemon.lockedFromProbe({ exitCode: 0, output: "oops" }), true);
+  assert.equal(Daemon.lockedFromProbe({ exitCode: 127, output: null }), true);
+  assert.equal(Daemon.lockedFromProbe({ exitCode: 1, output: "false" }), true);
+  assert.equal(Daemon.lockedFromProbe({ exitCode: null, output: "false" }), null); // the probe has not ended
+  assert.equal(Daemon.lockedFromProbe({ exitCode: 0, output: null }), null);
+});
+
 test("attention needs an open pop-out, no idle and no lock", () => {
   assert.equal(Daemon.attentionOpen(true, false, false), true);
   assert.equal(Daemon.attentionOpen(true, true, false), false);

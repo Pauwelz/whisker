@@ -371,6 +371,14 @@ function shortcutAction(shortcut, state, local) {
   return shortcut === "Ctrl+F" && onList ? "focusSearch" : "none"
 }
 
+// The lock state from the probe `omarchy-shell lock isLocked` ({ exitCode, output }; null until the exit or the output is in).
+// Only a good "false" means unlocked. A failed or unreadable probe means locked, so no Message is read on a screen nobody sees.
+function lockedFromProbe(probe) {
+  if (probe.exitCode === null) return null
+  if (probe.exitCode !== 0) return true
+  return probe.output === null ? null : probe.output.trim() !== "false"
+}
+
 // True when the user can see the pop-out: it is open, the session is not idle and the screen is not locked.
 function attentionOpen(opened, idle, locked) {
   return opened && !idle && !locked

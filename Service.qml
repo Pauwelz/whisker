@@ -212,9 +212,16 @@ Item {
   Process {
     id: lockProbe
     command: ["omarchy-shell", "lock", "isLocked"]
+    property var exitCode: null
+    property var output: null
+    function settle() {
+      var locked = Daemon.lockedFromProbe({ exitCode: exitCode, output: output })
+      if (locked !== null) root.screenLocked = locked
+    }
+    onExited: function(code) { exitCode = code; settle() }
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.screenLocked = text.trim() === "true"
+      onStreamFinished: { lockProbe.output = text; lockProbe.settle() }
     }
   }
 
@@ -223,7 +230,11 @@ Item {
     repeat: true
     running: root.popoutOpen && daemon.running
     triggeredOnStart: true
-    onTriggered: lockProbe.running = true
+    onTriggered: {
+      lockProbe.exitCode = null
+      lockProbe.output = null
+      lockProbe.running = true
+    }
   }
 
   // Media the user clicked to open, by key, until its path arrives.
