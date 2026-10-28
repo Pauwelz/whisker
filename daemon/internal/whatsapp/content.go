@@ -173,7 +173,7 @@ func MentionsIn(text string, jids []string) []string {
 	}
 	present := make([]string, 0, min(len(jids), MaxMentions))
 	for _, jid := range jids {
-		if user, _, _ := strings.Cut(jid, "@"); words[user] {
+		if words[userOf(jid)] {
 			present = append(present, jid)
 		}
 	}
@@ -204,8 +204,7 @@ func ReplaceMentions(text string, labels map[string]string) string {
 // mentionsUser reports whether a JID in mentions has one of the user parts (the phone number and the LID of the user).
 func mentionsUser(mentions []string, users ...string) bool {
 	for _, jid := range mentions {
-		user, _, _ := strings.Cut(jid, "@")
-		user, _, _ = strings.Cut(user, ":")
+		user, _, _ := strings.Cut(userOf(jid), ":")
 		for _, u := range users {
 			if u != "" && u == user {
 				return true

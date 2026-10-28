@@ -474,8 +474,8 @@ func (c *Client) phoneString(s string) string {
 	return c.phone(jid).String()
 }
 
-// phoneMentions keeps the mentions that the text holds, as phone JIDs. A LID token in the text becomes the phone token too,
-// so the text and the list name the same JID.
+// phoneMentions rewrites each LID mention token in the text to its phone token. It also returns the mentions that the text holds, as phone JIDs.
+// The text and the list then name the same JID.
 func (c *Client) phoneMentions(text string, jids []string) (string, []string) {
 	var out []string
 	labels := map[string]string{}
