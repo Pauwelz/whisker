@@ -224,7 +224,7 @@ Item {
             text: "This file type is not on the safe list. Open it in its default app anyway?"
             answers: [
               { label: "open anyway", run: function() { line.panel.whiskerService.confirmLaunch() } },
-              { label: "cancel", run: function() { line.panel.whiskerService.cancelLaunch() } }
+              { label: "cancel", run: function() { line.panel.whiskerService.cancelQuestion() } }
             ]
           }
           // Save as: a path that starts as ~/Downloads/<name>. Enter saves, Escape cancels.

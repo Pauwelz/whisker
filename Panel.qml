@@ -107,11 +107,10 @@ Panel {
 
   // Runs a fixed shortcut. The decision is Daemon.shortcutAction.
   function runShortcut(shortcut) {
-    var asking = root.whiskerService.confirmOpen !== null || composer.pasteQuestion !== null
+    var asking = !!root.whiskerService && root.whiskerService.asking
     var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat, asking: asking })
     if (action === "closeQuestion") {
-      root.whiskerService.cancelLaunch()
-      if (composer.pasteQuestion !== null) root.whiskerService.answerPaste(null)
+      root.whiskerService.cancelQuestion()
     } else if (action === "closeChat") {
       root.whiskerService.closeChat()
     } else if (action === "closeSettings") {
@@ -131,7 +130,7 @@ Panel {
     root.reactingId = ""
     root.menuId = ""
     root.savingId = ""
-    root.whiskerService.cancelLaunch()
+    root.whiskerService.cancelOpenQuestion()
   }
 
   // Called by MessageLine, which cannot reach the composer.

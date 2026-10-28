@@ -140,7 +140,7 @@ Item {
 
   // Ends what belongs to the open Chat. The Daemon deletes the plain Media copies of the Chat.
   function leaveChat() {
-    confirmOpen = null
+    cancelQuestion()
     openToken++
     stopTyping()
     stopPlayer()
@@ -184,7 +184,7 @@ Item {
   function setPopoutOpen(open) {
     popoutOpen = open
     if (!open) {
-      confirmOpen = null
+      cancelOpenQuestion()
       openToken++
       stopPlayer()
       stopTyping()
@@ -338,7 +338,17 @@ Item {
     opener.startDetached()
   }
 
-  function cancelLaunch() {
+  // The one question that waits: the Open question or the paste question (Draft.questionOpen).
+  readonly property bool asking: Draft.questionOpen(view, confirmOpen)
+
+  // The one way to cancel the question that is open.
+  function cancelQuestion() {
+    cancelOpenQuestion()
+    view = Draft.pasteAnswered(view)
+  }
+
+  // Overlays and the pop-out close only the Open question: the paste question belongs to the Composer and stays.
+  function cancelOpenQuestion() {
     confirmOpen = null
   }
 
@@ -421,11 +431,11 @@ Item {
   }
 
   // Called by Attach or Paste text in the question about pasted files and text.
-  // attach: true attaches the files, false pastes the text, null drops the question.
+  // attach: true attaches the files, false pastes the text.
   function answerPaste(attach) {
     var question = Draft.pasteQuestion(view)
     view = Draft.pasteAnswered(view)
-    if (!question || attach === null) return
+    if (!question) return
     if (attach) changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(view), question.paths) })
     else pasteText()
   }

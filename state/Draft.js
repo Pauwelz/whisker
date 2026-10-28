@@ -160,6 +160,11 @@ function pasteQuestion(state, home) {
   return { paths: choice.paths, text: "Attach " + n + (n === 1 ? " file" : " files") + " from " + from + "?" }
 }
 
+// True while a question waits: the paste question, or the Open question (`confirmOpen`, or null).
+function questionOpen(state, confirmOpen) {
+  return confirmOpen !== null || pasteQuestion(state) !== null
+}
+
 // The Attachments of the Draft with the pasted paths added at the end. A path that is already in the list stays once.
 function appendAttachments(draft, paths) {
   return paths.reduce(function(list, path) { return list.indexOf(path) < 0 ? list.concat([path]) : list }, draft.attachments)

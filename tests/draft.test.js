@@ -229,3 +229,13 @@ test("a paste of files and text asks first, and a switch of Chat drops the quest
   assert.equal(Draft.pasteQuestion(Draft.pasteAnswered(state)), null);
   assert.equal(Draft.pasteQuestion(Timeline.openChat(state, { jid: "2@s.whatsapp.net", name: "Bo", kind: "direct" })), null);
 });
+
+test("a question is open for the paste question or the Open question", () => {
+  const open = { message, path: "/a" };
+  assert.equal(Draft.questionOpen(opened(), null), false);
+  assert.equal(Draft.questionOpen(opened(), open), true);
+  const asked = Draft.pasteAsked(opened(), ["/a"]);
+  assert.equal(Draft.questionOpen(asked, null), true);
+  assert.equal(Draft.questionOpen(Draft.pasteAnswered(asked), null), false);
+  assert.equal(Draft.questionOpen(Timeline.openChat(asked, { jid: "2@s.whatsapp.net", name: "Bo", kind: "direct" }), null), false);
+});

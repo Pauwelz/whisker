@@ -109,7 +109,7 @@ FocusScope {
     answers: [
       { label: "attach", run: function() { composer.service.answerPaste(true); input.forceActiveFocus() } },
       { label: "paste text", run: function() { composer.service.answerPaste(false); input.forceActiveFocus() } },
-      { label: "cancel", run: function() { composer.service.answerPaste(null); input.forceActiveFocus() } }
+      { label: "cancel", run: function() { composer.service.cancelQuestion(); input.forceActiveFocus() } }
     ]
   }
 
@@ -212,11 +212,6 @@ FocusScope {
         else composer.panel.runShortcut("Escape")
       }
       Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Escape && composer.pasteQuestion !== null) {
-          event.accepted = true
-          composer.service.answerPaste(null)
-          return
-        }
         if (composer.suggestions.length > 0) {
           var move = Shortcode.shortcodeKeyAction(event.key, (event.modifiers & Qt.ShiftModifier) !== 0)
           if (move !== "default") {
