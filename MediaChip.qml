@@ -10,6 +10,7 @@ Column {
   id: chip
   required property var message
   required property var panel // the pop-out: service, colours and the Save as state
+  property bool hovered: false // the pointer is over the Message: the links show
   readonly property var service: panel.whiskerService
   readonly property string thumbnail: Media.thumbnailSource(message, Media.mediaPath(panel.view, message))
   readonly property string badge: Media.fileBadge(message)
@@ -115,18 +116,18 @@ Column {
         }
       }
       Row {
+        // Hidden, not removed, so hover never changes the height of the Message.
+        opacity: chip.hovered ? 1 : 0
+        enabled: chip.hovered
         spacing: Style.space(8)
         Repeater {
           model: Media.chipLinks(chip.message)
-          Text {
+          Link {
             required property var modelData
             text: modelData.label
-            textFormat: Text.PlainText
-            color: chip.failed && modelData.action === "download" ? Color.urgent : Color.accent
-            font.underline: true
             font.family: chip.panel.contentFontFamily
             font.pixelSize: Style.font.caption
-            TapHandler { onTapped: chip.run(modelData.action) }
+            onClicked: chip.run(modelData.action)
           }
         }
       }

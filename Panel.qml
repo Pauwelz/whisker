@@ -38,7 +38,7 @@ Panel {
   property string chatLinksFor: "" // the jid of the Chat whose links show in the Chat header, or empty
   // The open Chat as the Chat list holds it, for the pin and mute state of its links. Null when a search hides it.
   readonly property var openChatRow: root.openChat ? ChatList.chatRow(root.view, root.openChat.jid) : null
-  property string menuId: "" // the Message whose action menu is open, or empty
+  property string linksId: "" // the Message whose Message links show, or empty
   // Not `settings`: the base Panel owns that name, and the bar writes its shell.json settings into it.
   readonly property var profileSettings: root.view.settings || null
   // The open Chat and its timeline come from the Daemon state; the Chat view only shows them.
@@ -108,9 +108,11 @@ Panel {
   // Runs a fixed shortcut. The decision is Daemon.shortcutAction.
   function runShortcut(shortcut) {
     var asking = !!root.whiskerService && root.whiskerService.asking
-    var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat, asking: asking })
+    var action = Daemon.shortcutAction(shortcut, root.view, { showSettings: root.showSettings, showNewChat: root.showNewChat, asking: asking, messageLinks: root.linksId !== "" })
     if (action === "closeQuestion") {
       root.whiskerService.cancelQuestion()
+    } else if (action === "closeMessageLinks") {
+      root.linksId = ""
     } else if (action === "closeChat") {
       root.whiskerService.closeChat()
     } else if (action === "closeSettings") {
@@ -125,10 +127,10 @@ Panel {
     }
   }
 
-  // Closes the Message overlays: the Reaction picker, the menu and the Save as field. Open one only after this. A question stays.
+  // Closes the Message overlays: the Reaction picker, the Message links and the Save as field. Open one only after this. A question stays.
   function closeOverlays() {
     root.reactingId = ""
-    root.menuId = ""
+    root.linksId = ""
     root.savingId = ""
   }
 
@@ -851,7 +853,7 @@ Panel {
                 id: chatLinks
                 active: root.openChatRow !== null && root.chatLinksFor === root.openChat.jid
                 visible: active
-                sourceComponent: ChatLinks { chat: root.openChatRow; panel: root }
+                sourceComponent: ChatLinks { chat: root.openChatRow; panel: root; linkColor: root.contentForeground }
               }
               Button {
                 visible: root.openChatRow !== null
@@ -906,11 +908,11 @@ Panel {
                 TapHandler { onTapped: root.whiskerService.loadOlderMessages() }
               }
             }
-            // A click on empty space closes the quick emoji bar and the menu.
+            // A click on empty space closes the quick emoji bar and the Message links.
             MouseArea {
               anchors.fill: parent
               z: -1
-              enabled: root.reactingId !== "" || root.menuId !== ""
+              enabled: root.reactingId !== "" || root.linksId !== ""
               onClicked: root.closeOverlays()
             }
             delegate: MessageLine {

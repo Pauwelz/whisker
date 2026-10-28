@@ -8,25 +8,21 @@ Row {
   id: links
   required property var chat
   required property var panel // the pop-out: service and colours
+  property color linkColor: Color.muted // the Chat header passes the text colour
   property bool muting: false
   spacing: Style.space(8)
 
   Repeater {
     // `muting` changes when mute is clicked, so the end times of the mute choices are fresh.
     model: ChatList.chatLinks(links.chat, links.muting, Math.floor(Date.now() / 1000))
-    Text {
+    Link {
       required property var modelData
       text: modelData.text
-      color: links.panel.contentForeground
+      color: links.linkColor
       font.family: links.panel.contentFontFamily
-      font.pixelSize: Style.font.body
-      font.underline: hover.hovered
-      HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
-      TapHandler {
-        onTapped: {
-          if (modelData.option) links.panel.whiskerService.chooseChatOption(links.chat, modelData.option)
-          links.muting = !modelData.option
-        }
+      onClicked: {
+        if (modelData.option) links.panel.whiskerService.chooseChatOption(links.chat, modelData.option)
+        links.muting = !modelData.option
       }
     }
   }

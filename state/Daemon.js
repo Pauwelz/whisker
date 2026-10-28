@@ -357,12 +357,13 @@ function draftSetDue(state, frame) {
   return draft.text !== "" || draft.quote !== "" || draft.edit !== "" || draft.attachments.length > 0
 }
 
-// The fixed shortcuts of the pop-out. `shortcut` is "Escape" or "Ctrl+F"; `local` is { showSettings } as in panelParts.
-// Escape goes back one level: Chat, then settings, then it closes the pop-out. Ctrl+F searches, on the Chat list only.
-// Returns "closeChat", "closeSettings", "closePopout", "focusSearch" or "none".
+// The fixed shortcuts of the pop-out. `shortcut` is "Escape" or "Ctrl+F"; `local` is { showSettings, showNewChat, asking, messageLinks }.
+// Escape goes back one level: a question, the Message links, the Chat, then settings, then it closes the pop-out. Ctrl+F searches, on the Chat list only.
+// Returns "closeQuestion", "closeMessageLinks", "closeChat", "closeNewChat", "closeSettings", "closePopout", "focusSearch" or "none".
 function shortcutAction(shortcut, state, local) {
   if (shortcut === "Escape") {
     if (local.asking) return "closeQuestion" // the Open or the paste question
+    if (local.messageLinks) return "closeMessageLinks"
     if (state.openChat) return "closeChat"
     if (local.showNewChat) return "closeNewChat"
     return local.showSettings ? "closeSettings" : "closePopout"

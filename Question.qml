@@ -23,16 +23,11 @@ Column {
     spacing: Style.space(8)
     Repeater {
       model: question.answers
-      Text {
+      Link {
         required property var modelData
         text: modelData.label
-        textFormat: Text.PlainText
-        color: question.panel ? question.panel.contentForeground : Color.foreground
         font.family: question.panel ? question.panel.contentFontFamily : Style.font.family
-        font.pixelSize: Style.font.body
-        font.underline: hover.hovered
-        HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { onTapped: modelData.run() }
+        onClicked: modelData.run()
       }
     }
   }

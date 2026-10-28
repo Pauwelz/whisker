@@ -17,26 +17,27 @@ Item {
   readonly property bool isMessage: row.kind === "message"
   readonly property bool mine: isMessage && message.fromMe === true
   readonly property bool group: !!panel.openChat && panel.openChat.kind === "group"
-  readonly property bool menuOpen: isMessage && panel.menuId === message.id
+  readonly property bool linksOpen: isMessage && panel.linksId === message.id
   readonly property bool pickerOpen: isMessage && panel.reactingId === message.id
-  // The toolbar shows on hover, and stays while its quick emoji bar or the menu is open.
-  readonly property bool toolsShown: isMessage && (hover.hovered || menuOpen || pickerOpen)
+  // The toolbar shows on hover, and stays while its quick emoji bar or the Message links are open.
+  readonly property bool toolsShown: isMessage && (hover.hovered || linksOpen || pickerOpen)
   implicitHeight: content.implicitHeight
-  z: menuOpen || pickerOpen ? 10 : 1 // the menu draws over the lines below
+  z: pickerOpen ? 10 : 1 // the quick emoji bar draws over the lines below
 
   HoverHandler { id: hover }
-  // A right click opens the menu.
+  // A right click shows or hides the Message links.
   TapHandler {
     acceptedButtons: Qt.RightButton
-    onTapped: if (line.isMessage) line.openMenu()
+    onTapped: if (line.isMessage) line.toggleLinks()
   }
 
-  function openMenu() {
+  function toggleLinks() {
+    var open = line.linksOpen
     line.panel.closeOverlays()
-    line.panel.menuId = line.message.id
+    if (!open) line.panel.linksId = line.message.id
   }
 
-  // Runs one action of Message.actionsFor. The toolbar and the menu call it.
+  // Runs one action of Message.actionsFor. The toolbar and the Message links call it.
   function run(name) {
     var service = line.panel.whiskerService
     var message = line.message
@@ -214,7 +215,7 @@ Item {
           Loader {
             active: line.isMessage && Media.chipShown(line.message)
             visible: active
-            sourceComponent: MediaChip { message: line.message; panel: line.panel }
+            sourceComponent: MediaChip { message: line.message; panel: line.panel; hovered: hover.hovered }
           }
           // Open asks first for a file type that is not on the safe list. Save as stays in the links above.
           Question {
@@ -354,6 +355,21 @@ Item {
           font.pixelSize: Style.font.caption
           TapHandler { onTapped: line.panel.whiskerService.retryMessage(line.message.id) }
         }
+        // The Message links: every action the rule allows, below the Message. The lines below move down.
+        Flow {
+          visible: line.linksOpen
+          width: parent.width
+          spacing: Style.space(8)
+          Repeater {
+            model: line.linksOpen ? Message.menuActions(line.message, Math.floor(Date.now() / 1000)) : []
+            Link {
+              required property string modelData
+              text: Message.ACTION_LABELS[modelData].toLowerCase()
+              font.family: line.panel.contentFontFamily
+              onClicked: line.run(modelData)
+            }
+          }
+        }
       }
     }
   }
@@ -400,34 +416,7 @@ Item {
           horizontalPadding: Style.space(4)
           verticalPadding: 0
           fontSize: Style.font.caption
-          onClicked: modelData.name === "more" ? line.openMenu() : line.run(modelData.name)
-        }
-      }
-    }
-  }
-
-  // The menu: every action the rule allows. It opens upward in the lower half of the timeline.
-  Rectangle {
-    readonly property bool up: !!line.ListView.view && line.y - line.ListView.view.contentY > line.ListView.view.height / 2
-    visible: line.menuOpen
-    x: bodyArea.indent
-    y: up ? -height : line.height
-    width: Style.space(180)
-    height: menuColumn.height + Style.space(8)
-    color: Color.background
-    border.color: Color.muted
-    border.width: 1
-    Column {
-      id: menuColumn
-      anchors.centerIn: parent
-      width: parent.width - Style.space(8)
-      Repeater {
-        model: line.menuOpen ? Message.menuActions(line.message, Math.floor(Date.now() / 1000)) : []
-        Button {
-          required property string modelData
-          width: parent.width
-          text: Message.ACTION_LABELS[modelData]
-          onClicked: line.run(modelData)
+          onClicked: modelData.name === "more" ? line.toggleLinks() : line.run(modelData.name)
         }
       }
     }

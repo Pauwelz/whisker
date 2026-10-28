@@ -456,7 +456,7 @@ Item {
     send(Message.revokeRequest, view.openChat.jid, messageId)
   }
 
-  // Called by "Delete for me" in the Message menu. The Daemon sends messageExpired, which removes the Message.
+  // Called by "delete for me" in the Message links. The Daemon sends messageExpired, which removes the Message.
   function deleteMessageForMe(messageId) {
     send(Message.deleteForMeRequest, view.openChat.jid, messageId)
   }
