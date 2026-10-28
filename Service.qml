@@ -198,7 +198,7 @@ Item {
   }
 
   // The user is away when the session is idle for a minute or the screen is locked. The Daemon then counts the pop-out as closed.
-  property bool screenLocked: false
+  property bool screenLocked: true // fail closed until the first probe answers: a missing command may never report an exit
   onScreenLockedChanged: syncAttention()
 
   IdleMonitor {
@@ -231,6 +231,7 @@ Item {
     running: root.popoutOpen && daemon.running
     triggeredOnStart: true
     onTriggered: {
+      if (lockProbe.running) return // a reset now would drop the result of the run that is still busy
       lockProbe.exitCode = null
       lockProbe.output = null
       lockProbe.running = true

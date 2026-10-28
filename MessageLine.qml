@@ -258,9 +258,10 @@ Item {
                   line.panel.savingId = ""
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                   var path = Media.savePath(text, Quickshell.env("HOME"))
-                  if (path === "") return // Enter never saves to an empty path
-                  line.panel.whiskerService.saveMedia(line.message, path)
-                  line.panel.savingId = ""
+                  if (path !== "") { // Enter never saves to an empty path, and never adds a new line
+                    line.panel.whiskerService.saveMedia(line.message, path)
+                    line.panel.savingId = ""
+                  }
                 } else {
                   return
                 }
