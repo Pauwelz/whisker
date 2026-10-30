@@ -73,6 +73,8 @@ func (c *Client) handle(evt any) {
 			return
 		}
 		c.events <- NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Ephemeral: evt.IsEphemeral, Message: c.messageOf(evt.Info, evt.Message, body)}
+	case *events.MediaRetry:
+		c.mediaRetried(evt)
 	case *events.Receipt:
 		if c.isOwn(evt.Sender) && (evt.Type == types.ReceiptTypeRead || evt.Type == types.ReceiptTypeReadSelf) {
 			c.events <- ReadElsewhere{Chat: c.chatOf(evt.MessageSource).String(), IDs: slices.Clone(evt.MessageIDs)}

@@ -17,9 +17,11 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/proto/waMmsRetry"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 
 	"github.com/Pauwelz/whisker/daemon/internal/media"
@@ -54,6 +56,8 @@ type Client struct {
 
 	// lidGroups holds the addressing mode of each Group Chat that an event or a group lookup showed: true for LID.
 	lidGroups sync.Map
+	// retries holds the media key of each Message the phone was asked to upload again, by Message ID, until its answer comes.
+	retries   sync.Map
 	groupInfo func(context.Context, types.JID) (*types.GroupInfo, error) // the group lookup; a test replaces it
 }
 
@@ -415,7 +419,67 @@ func mediaOf(m *waE2E.Message) *Media {
 func (c *Client) Download(ref Media, dst *os.File, limit int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 	defer cancel()
-	return c.cli.DownloadMediaWithPathToFile(ctx, ref.DirectPath, ref.FileEncSHA256, ref.FileSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false, capDisk{file: dst, max: limit})
+	err := c.cli.DownloadMediaWithPathToFile(ctx, ref.DirectPath, ref.FileEncSHA256, ref.FileSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false, capDisk{file: dst, max: limit})
+	if errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith403) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith404) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith410) {
+		return fmt.Errorf("%w: %w", ErrMediaExpired, err)
+	}
+	return err
+}
+
+type pendingRetry struct {
+	chat string
+	key  []byte
+}
+
+// RequestMediaRetry asks the phone to upload the Media again. In a LID group the receipt names the author by LID, as the group expects.
+func (c *Client) RequestMediaRetry(chat, sender, id string, fromMe bool, key []byte) error {
+	if !c.cli.IsConnected() {
+		return ErrOffline
+	}
+	jid, err := types.ParseJID(chat)
+	if err != nil {
+		return err
+	}
+	info := c.retryInfo(jid, sender, id, fromMe)
+	c.retries.Store(id, pendingRetry{chat: chat, key: key})
+	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
+	defer cancel()
+	if err := c.cli.SendMediaRetryReceipt(ctx, &info, key); err != nil {
+		c.retries.Delete(id)
+		return err
+	}
+	return nil
+}
+
+// retryInfo is the Message a media retry receipt names. Only a group names the author.
+func (c *Client) retryInfo(chat types.JID, sender, id string, fromMe bool) types.MessageInfo {
+	info := types.MessageInfo{ID: id, MessageSource: types.MessageSource{Chat: chat, IsFromMe: fromMe, IsGroup: chat.Server == types.GroupServer}}
+	if info.IsGroup {
+		c.learnAddressing(chat)
+		info.Sender, _ = types.ParseJID(c.quoteSender(chat, sender))
+	}
+	return info
+}
+
+// mediaRetried turns the answer of the phone into a MediaRetried event. It ignores an answer nobody asked for or one that does not decrypt.
+func (c *Client) mediaRetried(evt *events.MediaRetry) {
+	v, ok := c.retries.LoadAndDelete(evt.MessageID)
+	if !ok {
+		return
+	}
+	p := v.(pendingRetry)
+	out := MediaRetried{Chat: p.chat, ID: evt.MessageID}
+	data, err := whatsmeow.DecryptMediaRetryNotification(evt, p.key)
+	switch {
+	case errors.Is(err, whatsmeow.ErrMediaNotAvailableOnPhone):
+		out.NotOnPhone = true
+	case err != nil:
+	case data.GetResult() == waMmsRetry.MediaRetryNotification_SUCCESS:
+		out.DirectPath = data.GetDirectPath()
+	case data.GetResult() == waMmsRetry.MediaRetryNotification_NOT_FOUND:
+		out.NotOnPhone = true
+	}
+	c.events <- out
 }
 
 // DownloadThumbnail fails when the body is above MaxThumbnailBytes. It uses the media key and key type of the file itself; whatsmeow's own DownloadThumbnail knows only link previews.

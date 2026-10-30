@@ -234,6 +234,8 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		if isNew {
 			s.loader.autoStart(ev)
 		}
+	case whatsapp.MediaRetried:
+		ok = s.loader.retried(ev)
 	case whatsapp.MessageEdited:
 		ok = s.box.edited(ev)
 	case whatsapp.MessageRevoked:

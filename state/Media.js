@@ -6,7 +6,7 @@
 // Media: paths, download and open steps, labels and the Media chip.
 
 // The states of Media. The Daemon sends them (docs/contract.md).
-var MEDIA_STATE = { NONE: "none", DOWNLOADING: "downloading", READY: "ready", FAILED: "failed" }
+var MEDIA_STATE = { NONE: "none", DOWNLOADING: "downloading", READY: "ready", FAILED: "failed", GONE: "gone" }
 
 // Media. The Daemon sends paths only on request (media.open). `mediaPaths` holds them by Chat and Message id.
 // An empty path means the request is out. Views show the path only when it is not empty.
@@ -74,6 +74,7 @@ function formatSize(bytes) {
 function mediaStatus(message) {
   if (!message.media) return ""
   if (message.media.state === MEDIA_STATE.DOWNLOADING) return "Downloading…"
+  if (message.media.state === MEDIA_STATE.GONE) return "Not on phone"
   return message.media.state === MEDIA_STATE.FAILED ? "Download failed" : ""
 }
 

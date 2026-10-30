@@ -58,6 +58,10 @@ type Port interface {
 	// It fails with ErrDownloadTooLarge when it would write more than limit bytes (see DownloadCap).
 	// It can block for a long time: call it off the Daemon loop.
 	Download(ref Media, dst *os.File, limit int64) error
+	// RequestMediaRetry asks the phone to upload the Media of a Message again. sender is the author, "" for the user.
+	// key is the media key. The answer comes later as a MediaRetried event. It returns ErrOffline when there is no connection.
+	// It can block for a long time: call it off the Daemon loop.
+	RequestMediaRetry(chat, sender, id string, fromMe bool, key []byte) error
 	// DownloadThumbnail downloads the separate thumbnail of Media (ThumbDirectPath), and checks it against its hashes.
 	DownloadThumbnail(ref Media) ([]byte, error)
 	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.
@@ -130,6 +134,10 @@ const MaxThumbnailBytes = 256 << 10
 
 // ErrThumbnailTooLarge means a thumbnail is above MaxThumbnailBytes. Code drops such a thumbnail and never cuts it.
 var ErrThumbnailTooLarge = errors.New("thumbnail too large")
+
+// ErrMediaExpired means the link of Media is dead (HTTP 403, 404 or 410). It wraps the error of whatsmeow, which holds the status.
+// The phone can upload the Media again: see RequestMediaRetry.
+var ErrMediaExpired = errors.New("media link expired")
 
 // ErrOffline means Send found no connection. The Message is not sent.
 var ErrOffline = errors.New("not connected")
@@ -472,6 +480,14 @@ type ChatAlias struct {
 	Phone string `json:"phone"`
 }
 
+// MediaRetried is the answer of the phone to RequestMediaRetry. DirectPath is the new link of the Media.
+// NotOnPhone is true when the phone no longer holds the Media. With neither, the phone failed to upload it.
+type MediaRetried struct {
+	Chat, ID   string
+	DirectPath string
+	NotOnPhone bool
+}
+
 // Connected and Disconnected report the connection to WhatsApp.
 // Reason on Disconnected is empty for a plain drop, which whatsmeow reconnects by itself, or one of the Disconnect reasons below.
 type Connected struct{}
@@ -493,6 +509,7 @@ type OwnDevices struct {
 
 func (OwnDevices) isEvent()     {}
 func (NewMessage) isEvent()     {}
+func (MediaRetried) isEvent()   {}
 func (Receipt) isEvent()        {}
 func (ChatTimer) isEvent()      {}
 func (GroupSubject) isEvent()   {}

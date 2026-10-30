@@ -580,6 +580,9 @@ The automatic rule is fixed. Media from History Sync never downloads by itself.
 | `downloading` | The download runs. |
 | `ready` | Stored in the Profile, encrypted. `media.open` and `media.save` work. |
 | `failed` | The download failed. `media.download` tries again. |
+| `gone` | The link expired and the phone no longer holds the Media. This state is final: `media.download` fails with -32008. |
+
+When a download fails because the link expired (HTTP 403, 404 or 410), the Daemon asks the phone to upload the Media again. The state stays `downloading`. When the phone answers, the Daemon downloads from the new link, or sets `gone`. In a Group Chat that addresses by LID, the request names the author by LID. The Daemon asks once for each download.
 
 Every state change sends `messageChanged`. A revoked Message (Tombstone) has no `media`, and its stored file is deleted. The Daemon sets Media that was `downloading` at a restart back to `none`.
 
@@ -587,7 +590,7 @@ The Daemon stores received Media encrypted again in the Profile, in the CDN form
 
 #### `media.download`
 
-Params: `chat` and `id`. Valid for Media in state `none` or `failed`. The Daemon answers `{"message": {...}}` with state `downloading`, then sends `messageChanged` with `ready` or `failed`. Error -32008 means no such Media, or it is already `downloading` or `ready`.
+Params: `chat` and `id`. Valid for Media in state `none` or `failed`. The Daemon answers `{"message": {...}}` with state `downloading`, then sends `messageChanged` with `ready` or `failed`. Error -32008 means no such Media, or it is `downloading`, `ready` or `gone`.
 
 #### `media.open`
 

@@ -20,6 +20,7 @@ const maxParallelDownloads = 3
 // downloadPort is what the mediaLoader needs from WhatsApp.
 type downloadPort interface {
 	Download(ref whatsapp.Media, dst *os.File, limit int64) error
+	RequestMediaRetry(chat, sender, id string, fromMe bool, key []byte) error
 	DownloadThumbnail(ref whatsapp.Media) ([]byte, error)
 }
 
@@ -35,6 +36,8 @@ type mediaLoader struct {
 	notify   func(chat, id string) bool
 	logOut   io.Writer
 	inflight map[string]bool
+	// awaiting holds the Media that the phone was asked to upload again, until its MediaRetried answer comes.
+	awaiting map[string]bool
 	results  chan mediaResult
 	// thumbTried holds the thumbnails fetched in this run, done or not. An oversized one loses its link in the store.
 	thumbTried    map[string]bool
@@ -47,6 +50,7 @@ type mediaLoader struct {
 type mediaResult struct {
 	chat, id  string
 	err       error
+	retried   bool // the download ran on a link that the phone uploaded again: a second expiry fails
 	thumbnail bool
 	data      []byte // the thumbnail
 }
@@ -56,11 +60,13 @@ func newMediaLoader(chats *chatstore.Store, port downloadPort, store *media.Stor
 	store.Wipe()
 	storeFailed(logOut, storeWrite, chats.ResetDownloads())
 	chats.RemoveMedia = store.Remove
-	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}, thumbSlots: make(chan struct{}, maxParallelDownloads), fileSlots: make(chan struct{}, maxParallelDownloads), autoDownloads: autoDownloads}
+	return &mediaLoader{chats: chats, port: port, store: store, notify: notify, logOut: logOut, inflight: map[string]bool{}, awaiting: map[string]bool{}, results: make(chan mediaResult, 16), thumbTried: map[string]bool{}, thumbSlots: make(chan struct{}, maxParallelDownloads), fileSlots: make(chan struct{}, maxParallelDownloads), autoDownloads: autoDownloads}
 }
 
 // start downloads the Media of a Message that is marked downloading. It does nothing while that Media is in flight.
-func (l *mediaLoader) start(chat, id string) {
+func (l *mediaLoader) start(chat, id string) { l.begin(chat, id, false) }
+
+func (l *mediaLoader) begin(chat, id string, retried bool) {
 	ref, err := l.chats.MediaOf(chat, id)
 	key := messageKey(chat, id)
 	if err != nil || l.inflight[key] {
@@ -73,7 +79,7 @@ func (l *mediaLoader) start(chat, id string) {
 		err := l.store.Ingest(chat, id, ref.Kind, func(f *os.File) error {
 			return l.port.Download(ref.Media, f, whatsapp.DownloadCap(ref.Size))
 		})
-		l.results <- mediaResult{chat: chat, id: id, err: err}
+		l.results <- mediaResult{chat: chat, id: id, err: err, retried: retried}
 	}()
 }
 
@@ -145,21 +151,67 @@ func (l *mediaLoader) done(r mediaResult) bool {
 	if r.thumbnail {
 		return l.thumbnailDone(r)
 	}
-	delete(l.inflight, messageKey(r.chat, r.id))
+	key := messageKey(r.chat, r.id)
+	delete(l.inflight, key)
+	delete(l.awaiting, key)
 	state := chatstore.MediaReady
 	if r.err != nil {
+		if errors.Is(r.err, whatsapp.ErrMediaExpired) && !r.retried && l.askPhone(r.chat, r.id) {
+			return true
+		}
 		fmt.Fprintln(l.logOut, "media download failed") // the error text could hold hosts or paths
 		state = chatstore.MediaFailed
 	}
-	changed, err := l.chats.EndDownload(r.chat, r.id, state)
+	return l.end(r.chat, r.id, state)
+}
+
+// askPhone asks the phone to upload expired Media again. The Media stays downloading until the answer comes.
+// It returns false when the request cannot be made.
+func (l *mediaLoader) askPhone(chat, id string) bool {
+	ref, err := l.chats.MediaOf(chat, id)
+	m, msgErr := l.chats.Message(chat, id)
+	if err != nil || msgErr != nil {
+		return false
+	}
+	l.awaiting[messageKey(chat, id)] = true
+	go func() {
+		if err := l.port.RequestMediaRetry(chat, m.Sender, id, m.FromMe, ref.Key); err != nil {
+			l.results <- mediaResult{chat: chat, id: id, err: err, retried: true}
+		}
+	}()
+	return true
+}
+
+// retried handles the answer of the phone. An answer for Media that nobody asked about changes nothing.
+// It returns false when a frame could not be written.
+func (l *mediaLoader) retried(ev whatsapp.MediaRetried) bool {
+	key := messageKey(ev.Chat, ev.ID)
+	if !l.awaiting[key] {
+		return true
+	}
+	delete(l.awaiting, key)
+	switch {
+	case ev.NotOnPhone:
+		return l.end(ev.Chat, ev.ID, chatstore.MediaGone)
+	case ev.DirectPath == "" || storeFailed(l.logOut, storeWrite, l.chats.SetDirectPath(ev.Chat, ev.ID, ev.DirectPath)):
+		fmt.Fprintln(l.logOut, "media retry failed")
+		return l.end(ev.Chat, ev.ID, chatstore.MediaFailed)
+	}
+	l.begin(ev.Chat, ev.ID, true)
+	return true
+}
+
+// end stores the final state of a download and tells the Plugin. It returns false when a frame could not be written.
+func (l *mediaLoader) end(chat, id, state string) bool {
+	changed, err := l.chats.EndDownload(chat, id, state)
 	if storeFailed(l.logOut, storeWrite, err) {
 		return true
 	}
 	if !changed {
-		l.store.Remove(r.chat, r.id) // the Message was revoked meanwhile: keep no file
+		l.store.Remove(chat, id) // the Message was revoked meanwhile: keep no file
 		return true
 	}
-	return l.notify(r.chat, r.id)
+	return l.notify(chat, id)
 }
 
 // downloadReply handles `media.download`. The caller runs start after the reply.

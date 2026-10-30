@@ -31,6 +31,9 @@ type Fake struct {
 	logouts        int
 	content        string
 	dlErr          error
+	expired        []string
+	retries        []string
+	retryErr       error
 	downloads      int
 	dlDelay        time.Duration
 	dlActive       int
@@ -406,8 +409,31 @@ func (f *Fake) SetDownloadDelay(d time.Duration) {
 // DownloadPeak is the most Download calls that ran at the same time.
 func (f *Fake) DownloadPeak() int { f.mu.Lock(); defer f.mu.Unlock(); return f.dlPeak }
 
+// SetExpired makes Download fail with ErrMediaExpired for Media with one of these direct paths.
+func (f *Fake) SetExpired(paths ...string) { f.mu.Lock(); f.expired = paths; f.mu.Unlock() }
+
+// SetMediaRetryError makes RequestMediaRetry fail with err. Pass nil to stop failing.
+func (f *Fake) SetMediaRetryError(err error) { f.mu.Lock(); f.retryErr = err; f.mu.Unlock() }
+
+// MediaRetryRequests lists the RequestMediaRetry calls that worked as "chat|sender|id|fromMe", in order.
+func (f *Fake) MediaRetryRequests() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.retries...)
+}
+
+func (f *Fake) RequestMediaRetry(chat, sender, id string, fromMe bool, _ []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.retryErr != nil {
+		return f.retryErr
+	}
+	f.retries = append(f.retries, fmt.Sprintf("%s|%s|%s|%t", chat, sender, id, fromMe))
+	return nil
+}
+
 // Download writes the scripted content through the same cap as the real client.
-func (f *Fake) Download(_ Media, dst *os.File, limit int64) error {
+func (f *Fake) Download(ref Media, dst *os.File, limit int64) error {
 	f.mu.Lock()
 	f.downloads++
 	f.dlActive++
@@ -417,7 +443,11 @@ func (f *Fake) Download(_ Media, dst *os.File, limit int64) error {
 	time.Sleep(delay)
 	f.mu.Lock()
 	f.dlActive--
+	expired := slices.Contains(f.expired, ref.DirectPath)
 	f.mu.Unlock()
+	if expired {
+		return ErrMediaExpired
+	}
 	if err != nil {
 		return err
 	}

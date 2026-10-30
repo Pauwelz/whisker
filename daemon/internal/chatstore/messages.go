@@ -101,6 +101,7 @@ const (
 	MediaDownloading = "downloading"
 	MediaReady       = "ready"
 	MediaFailed      = "failed"
+	MediaGone        = "gone" // the phone no longer holds the Media: final
 )
 
 // MessagePage is a page of a Chat timeline, oldest first. More tells whether older Messages exist.
@@ -694,9 +695,15 @@ func (s *Store) BeginDownload(chat, id string) (bool, error) {
 	return s.change(`UPDATE media SET state = ? WHERE chat_jid = ? AND id = ? AND state IN (?, ?)`, MediaDownloading, chat, id, MediaNone, MediaFailed)
 }
 
-// EndDownload moves downloading Media to ready or failed. It reports whether it moved.
+// EndDownload moves downloading Media to ready, failed or gone. It reports whether it moved.
 func (s *Store) EndDownload(chat, id, state string) (bool, error) {
 	return s.change(`UPDATE media SET state = ? WHERE chat_jid = ? AND id = ? AND state = ?`, state, chat, id, MediaDownloading)
+}
+
+// SetDirectPath stores the new link of Media that the phone uploaded again. The hashes stay.
+func (s *Store) SetDirectPath(chat, id, path string) error {
+	_, err := s.db.Exec(`UPDATE media SET direct_path = ? WHERE chat_jid = ? AND id = ?`, path, chat, id)
+	return err
 }
 
 // ResetDownloads sets Media that was downloading when the Daemon stopped back to none, so a click can fetch it again.

@@ -44,6 +44,10 @@ test("Media rows say what they are and what the user can do", () => {
   assert.equal(Media.canOpenMedia(photo), true);
   assert.equal(Media.mediaStatus({ ...pdf, media: { ...pdf.media, state: "downloading" } }), "Downloading…");
   assert.equal(Media.mediaStatus({ ...pdf, media: { ...pdf.media, state: "failed" } }), "Download failed");
+  const gone = { ...pdf, media: { ...pdf.media, state: "gone" } };
+  assert.equal(Media.mediaStatus(gone), "Not on phone");
+  assert.equal(Media.canDownloadMedia(gone), false);
+  assert.deepEqual(plain(Media.chipLinks(gone)), []);
 });
 
 test("audio, voice and video open in mpv that reads only local files", () => {

@@ -118,3 +118,21 @@ func TestAFailedAddressingLookupKeepsThePhoneJID(t *testing.T) {
 		t.Errorf("lookups = %d, want 2", calls)
 	}
 }
+
+// A media retry receipt names the author by LID in a LID group, and not at all in a Direct Chat.
+func TestRetryInfoNamesTheLIDSenderInALIDGroup(t *testing.T) {
+	own := types.JID{User: "3160", Server: types.DefaultUserServer}
+	other := types.JID{User: "3161", Server: types.DefaultUserServer}
+	otherLID := types.JID{User: "9161", Server: types.HiddenUserServer}
+	group := types.JID{User: "1", Server: types.GroupServer}
+	dev := &store.Device{ID: &own, LIDs: pnToLID{pairs: map[types.JID]types.JID{other: otherLID}}}
+	c := &Client{cli: whatsmeow.NewClient(dev, waLog.Noop)}
+	c.noteAddressing(group, types.AddressingModeLID)
+
+	if got := c.retryInfo(group, other.String(), "m1", false); got.Sender != otherLID || !got.IsGroup || got.ID != "m1" {
+		t.Errorf("group info = %+v, want sender %v", got, otherLID)
+	}
+	if got := c.retryInfo(other, other.String(), "m1", false); !got.Sender.IsEmpty() || got.IsGroup {
+		t.Errorf("direct info = %+v, want no sender", got)
+	}
+}
