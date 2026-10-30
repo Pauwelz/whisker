@@ -155,6 +155,30 @@ func TestRetryInfoAddressesADirectChatByLID(t *testing.T) {
 	}
 }
 
+// The receipt of a LID Direct Chat goes out by LID, so the answer names the LID. It still finds the request of the phone Chat.
+func TestMediaRetryAnswerByLIDFindsThePhoneChat(t *testing.T) {
+	c := systemClient()
+	phone := types.JID{User: "3161", Server: types.DefaultUserServer}
+	lid := types.JID{User: "9161", Server: types.HiddenUserServer}
+	c.cli.Store.LIDs = lidToPN{pairs: map[types.JID]types.JID{lid: phone}}
+	c.retries.Store(retryKey{phone.String(), "m1"}, []byte("a"))
+
+	c.handle(&events.MediaRetry{MessageID: "m1", ChatID: lid, Error: &events.MediaRetryError{Code: 2}})
+	if got := (<-c.events).(MediaRetried); got.Chat != phone.String() || !got.NotOnPhone {
+		t.Errorf("event = %+v, want not on phone in %v", got, phone)
+	}
+}
+
+// lidToPN is a LID store that knows the given LID to phone pairs only.
+type lidToPN struct {
+	store.LIDStore
+	pairs map[types.JID]types.JID
+}
+
+func (s lidToPN) GetPNForLID(_ context.Context, lid types.JID) (types.JID, error) {
+	return s.pairs[lid], nil
+}
+
 // Two Chats can hold the same Message ID. The answer for one must not use the media key of the other.
 func TestMediaRetryAnswerIsKeyedByChat(t *testing.T) {
 	c := systemClient()
