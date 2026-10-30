@@ -20,6 +20,7 @@ func TestMediaDownloadFailureLogsTheStatus(t *testing.T) {
 	r.nextFrame()
 	r.send(`{"jsonrpc":"2.0","id":2,"method":"media.download","params":{"chat":"` + mediaChat + `","id":"m1"}}`)
 	r.waitLog("media download failed status=403\n")
+	r.finish() // stop the Daemon before the cleanup restores the Clock
 	if strings.Contains(r.errOut.String(), "status code") {
 		t.Errorf("log %q holds error text", r.errOut.String())
 	}
@@ -31,6 +32,7 @@ func TestConnectFailureLogsACode(t *testing.T) {
 	r.port.SetConnectError(errors.New("dial tcp web.whatsapp.com"))
 	r.start()
 	r.waitLog("connect failed reason=unknown\n")
+	r.finish() // stop the Daemon before the cleanup restores the Clock
 	if strings.Contains(r.errOut.String(), "whatsapp.com") {
 		t.Errorf("log %q holds a host", r.errOut.String())
 	}
@@ -40,6 +42,7 @@ func TestDisconnectLogsTheCode(t *testing.T) {
 	r := startedRunner(t)
 	r.port.Emit(whatsapp.Disconnected{Reason: whatsapp.DisconnectTemporaryBan, Code: 102})
 	r.waitLog("disconnected reason=temporary-ban code=102\n")
+	r.finish() // stop the Daemon before the cleanup restores the Clock
 }
 
 func TestPresenceFailureLogsACode(t *testing.T) {
@@ -49,4 +52,5 @@ func TestPresenceFailureLogsACode(t *testing.T) {
 	r.start()
 	r.port.Emit(whatsapp.Connected{})
 	r.waitLog("presence failed reason=no-push-name\n")
+	r.finish() // stop the Daemon before the cleanup restores the Clock
 }
