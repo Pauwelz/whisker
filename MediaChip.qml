@@ -41,7 +41,8 @@ Column {
         anchors.fill: parent
         visible: chip.thumbnail !== "" && !Media.chipBlurred(chip.message)
         source: chip.thumbnail
-        fillMode: Image.PreserveAspectCrop
+        fillMode: Image.PreserveAspectFit // a portrait image keeps its shape inside the landscape box
+        autoTransform: true // a downloaded photo shows upright from its EXIF Orientation
         sourceSize: Qt.size(Style.space(112), Style.space(72)) // a downloaded file is decoded small, twice the box for a scaled screen
         asynchronous: true
       }

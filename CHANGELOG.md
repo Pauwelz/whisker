@@ -23,6 +23,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- A Media thumbnail now keeps its aspect ratio inside the chip. A portrait image is no longer cropped to a landscape strip, and a downloaded photo shows upright.
 - Your online or offline status now reaches your contacts right after you link. whisker sends it again when WhatsApp tells it your push name.
 - Escape closes the quick emoji bar, or cancels a reply or an Edit, before it leaves the Chat.
 - A Group Chat that you join shows its name, not its number. At each connection whisker also repairs Group Chats that show a number.
