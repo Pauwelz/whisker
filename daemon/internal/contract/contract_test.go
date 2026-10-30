@@ -92,17 +92,18 @@ type notified struct{ Summary, Body string }
 
 // runner runs the Daemon on pipes, with a fake keyring, a manual clock and a Profile in a temp dir.
 type runner struct {
-	t       *testing.T
-	fake    *keystore.Fake
-	clock   *clock.Manual
-	expiry  *clock.Manual // the timers of the Disappearing Message sweep
-	dir     string
-	runtime string // $XDG_RUNTIME_DIR of the Daemon
-	in      *io.PipeWriter
-	frames  chan string
-	done    chan int
-	errOut  logBuffer
-	started bool
+	t        *testing.T
+	fake     *keystore.Fake
+	clock    *clock.Manual
+	expiry   *clock.Manual // the timers of the Disappearing Message sweep
+	dir      string
+	runtime  string // $XDG_RUNTIME_DIR of the Daemon
+	in       *io.PipeWriter
+	frames   chan string
+	done     chan int
+	errOut   logBuffer
+	started  bool
+	finished bool
 
 	portMu   sync.Mutex
 	portUsed bool
@@ -118,7 +119,12 @@ func newRunner(t *testing.T) *runner {
 	r := &runner{runtime: runtime, t: t, fake: keystore.NewFake(), clock: clock.NewManual(), expiry: clock.NewManual(), dir: filepath.Join(t.TempDir(), "whisker"), port: whatsapp.NewFake(), desktop: &desktop.Fake{}}
 	r.expiry.SetNow(1000) // fixed Message times for the fixtures
 	contract.Clock = r.expiry
-	t.Cleanup(func() { contract.Clock = oldClock })
+	t.Cleanup(func() {
+		if r.started && !r.finished {
+			r.finish() // a running Daemon reads Clock, so stop it before the swap back
+		}
+		contract.Clock = oldClock
+	})
 	return r
 }
 
@@ -201,6 +207,7 @@ func (r *runner) waitLog(text string) {
 // finish closes stdin and returns the exit code, the frames the Daemon still sent, and its logs.
 func (r *runner) finish() (int, []string, string) {
 	r.start()
+	r.finished = true
 	r.in.Close()
 	code := <-r.done
 	var rest []string
