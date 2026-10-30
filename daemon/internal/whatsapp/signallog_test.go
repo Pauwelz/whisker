@@ -21,7 +21,7 @@ func TestShortGroupSkmsgWritesNothingToStdout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewClient(container)
+	c, err := NewClient(container, &fakeRetries{})
 	if err != nil {
 		t.Fatal(err)
 	}

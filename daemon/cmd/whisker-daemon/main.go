@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/Pauwelz/whisker/daemon/internal/chatstore"
 	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
 	"github.com/Pauwelz/whisker/daemon/internal/desktop"
@@ -92,7 +93,9 @@ func run(frames io.Writer) int {
 	// The lock is held, so no live Daemon owns these copies. No key is needed, so a locked keyring does not skip this.
 	p.Media().Wipe()
 	whatsapp.SetDeviceIdentity(version)
-	newPort := func() (whatsapp.Port, error) { return whatsapp.NewClient(p.Device()) }
+	newPort := func() (whatsapp.Port, error) {
+		return whatsapp.NewClient(p.Device(), chatstore.New(p.Chat(), clock.Real.Now))
+	}
 	return contract.Run(stdinUntilSignal(), frames, os.Stderr, p, prefs, newPort, desktop.DBus{LogOut: os.Stderr})
 }
 

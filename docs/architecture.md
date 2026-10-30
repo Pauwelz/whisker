@@ -89,6 +89,15 @@ The scheme covers the device store, the chat store and the Media. Profile Settin
 8. **Re-implemented helpers.** whatsmeow has no public function to decrypt a Media file on disk. The Daemon re-implements `getMediaKeys` (HKDF-SHA256 of the per-file key with the Media type as info, 112 bytes: IV, cipher key, MAC key) and `validateMedia` (HMAC over IV and ciphertext, truncated to 10 bytes). This takes about 20 lines. It uses the public `util/hkdfutil.SHA256`. A whatsmeow version bump that changes `util/` breaks the build, so the change is caught at compile time.
 9. **Logs.** Logs are plain. They never hold message text, captions, contact names or Media paths. They hold only ids and error codes.
 
+### Sent Messages for retries
+
+A recipient that cannot decrypt a sent Message sends a retry receipt. The Daemon must then send the exact original Message again.
+
+1. **Where.** The chat store keeps each sent Message proto in the table `retry_messages`. whatsmeow's own table `whatsmeow_retry_buffer` stays empty. `UseRetryMessageStore` is on, and the Daemon replaces `Device.EventBuffer` with a wrapper. The wrapper passes the incoming-buffer methods to whatsmeow unchanged. It serves the outgoing methods from the chat store, which is why the table is encrypted like the rest of the chat store.
+2. **How long.** 7 days, the limit of whatsmeow. The Daemon removes older rows when whatsmeow asks, about every 12 hours.
+3. **Early delete.** The chat store deletes the rows of a Message when it revokes, deletes or expires the Message, or clears or deletes the Chat. A retry receipt then gets no resend. The rows are keyed by Message id, not by Chat: the JID that whatsmeow sent to can be a phone-number JID or a LID. A row of an edit or a reaction stores the id it acts on (`target_id`), so deleting the target removes them too. A revoke stores no target: it holds no text, and it must stay retryable after the revoke deletes its target. There is no foreign key, because those ids are not in `messages`.
+4. **Receiving.** `AutomaticMessageRerequestFromPhone` is on. When a Message does not decrypt, the Daemon asks the phone to send it again. The Message arrives late, and the normal duplicate check keeps it from becoming a second Message.
+
 ### Threat boundary
 
 A `0600` file is readable by every process of the same user. A key in the Secret Service is too. The encryption keeps the stores and Media away from indexers, backup or sync tools and sandboxed apps. It does not keep them from a hostile native process of the same user.

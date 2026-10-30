@@ -50,6 +50,7 @@ func TestMigrateTurnsAnAttachmentPathIntoAList(t *testing.T) {
 		`INSERT INTO drafts VALUES ('one@s.whatsapp.net', 'a', '', '', '/x/y.png'), ('none@s.whatsapp.net', 'b', '', '', '')`,
 		`ALTER TABLE messages DROP COLUMN in_unread_count`, // undo the steps after version 20 that Migrate runs again
 		`ALTER TABLE messages DROP COLUMN revoked_by_admin`,
+		`DROP TABLE retry_messages`,
 		`PRAGMA user_version = 20`,
 	} {
 		if _, err := db.Exec(q); err != nil {

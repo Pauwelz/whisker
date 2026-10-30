@@ -76,7 +76,8 @@ func deviceName(host string) string {
 }
 
 // NewClient loads the device from the device store (a new unpaired device if there is none).
-func NewClient(container *sqlstore.Container) (*Client, error) {
+// Sent Messages go to retries, so a retry receipt after a restart gets the original Message.
+func NewClient(container *sqlstore.Container, retries RetryStore) (*Client, error) {
 	dev, err := container.GetFirstDevice(context.Background())
 	if err != nil {
 		return nil, err
@@ -84,6 +85,11 @@ func NewClient(container *sqlstore.Container) (*Client, error) {
 	c := &Client{cli: whatsmeow.NewClient(dev, waLog.Noop), events: make(chan Event, 64)}
 	// The first App State sync after a link is a full sync. Without this, its Pin, Archive, Mute and Read Marker events are lost.
 	c.cli.EmitAppStateEventsOnFullSync = true
+	// Whisker deletes a retry row with its Message. whatsmeow's own table cannot, so the wrapper replaces it.
+	c.cli.Store.EventBuffer = newRetryBuffer(c.cli.Store.EventBuffer, retries)
+	c.cli.UseRetryMessageStore = true
+	// A Message that does not decrypt comes again from the phone.
+	c.cli.AutomaticMessageRerequestFromPhone = true
 	c.groupInfo = c.cli.GetGroupInfo
 	c.cli.AddEventHandler(c.handle)
 	return c, nil

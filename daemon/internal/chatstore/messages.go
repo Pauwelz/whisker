@@ -266,6 +266,9 @@ func (s *Store) revoke(chat, id, sender string, fromMe, byAdmin bool) (bool, err
 	if err != nil || !changed {
 		return changed, err
 	}
+	if err := s.deleteRetries(id); err != nil {
+		return true, err
+	}
 	if _, err := s.DeleteMedia(chat, id); err != nil {
 		return true, err
 	}
@@ -311,8 +314,11 @@ func (s *Store) Expire(now int64) ([]Expired, error) {
 	return gone, nil
 }
 
-// DeleteMessage deletes a Message with its Media and Reactions. Expire and "delete for me" use it.
+// DeleteMessage deletes a Message with its Media, Reactions and retry rows. Expire and "delete for me" use it.
 func (s *Store) DeleteMessage(chat, id string) error {
+	if err := s.deleteRetries(id); err != nil {
+		return err
+	}
 	if _, err := s.DeleteMedia(chat, id); err != nil {
 		return err
 	}

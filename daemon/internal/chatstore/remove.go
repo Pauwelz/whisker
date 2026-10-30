@@ -53,6 +53,7 @@ func (s *Store) DeleteChat(chat string) (attachments []string, gone bool, err er
 			`DELETE FROM reactions WHERE chat_jid = ?`,
 			`DELETE FROM recipients WHERE chat_jid = ?`,
 			`DELETE FROM group_receipts WHERE chat_jid = ?`,
+			`DELETE FROM retry_messages WHERE chat_jid = ?`,
 			`DELETE FROM drafts WHERE chat_jid = ?`,
 			`DELETE FROM pictures WHERE jid = ?`,
 			`DELETE FROM chats WHERE jid = ?`,

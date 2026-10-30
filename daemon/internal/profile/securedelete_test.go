@@ -127,7 +127,7 @@ func oldStore(t *testing.T, marker string) (*Profile, []byte) {
 	if err := s.DeleteMessage(chatJID, "m1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := old.Exec("ALTER TABLE messages DROP COLUMN revoked_by_admin"); err != nil { // undo the step that Migrate runs again
+	if _, err := old.Exec("ALTER TABLE messages DROP COLUMN revoked_by_admin; DROP TABLE retry_messages"); err != nil { // undo the step that Migrate runs again
 		t.Fatal(err)
 	}
 	if _, err := old.Exec("PRAGMA user_version = 24"); err != nil {
