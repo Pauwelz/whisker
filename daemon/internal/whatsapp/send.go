@@ -115,6 +115,32 @@ func (c *Client) React(chat, id, sender, emoji string) error {
 	})
 }
 
+// maxHeaderBytes is how much of an image imageSize reads. The size sits in the first bytes of the formats it knows.
+const maxHeaderBytes = 256 << 10
+
+// imageSize gives the pixel size of the image in plain, or nil for both when it is unknown. plain holds the stripped bytes, so the kept
+// Orientation decides the size. It reads a bounded prefix and rewinds plain.
+func imageSize(mime string, plain io.ReadSeeker) (width, height *uint32, err error) {
+	head, err := io.ReadAll(io.LimitReader(plain, maxHeaderBytes))
+	if err != nil {
+		return nil, nil, err
+	}
+	if w, h, ok := media.ImageSize(mime, head); ok {
+		width, height = proto.Uint32(w), proto.Uint32(h)
+	}
+	_, err = plain.Seek(0, io.SeekStart)
+	return width, height, err
+}
+
+// imageMessage is the Message of an uploaded image.
+func imageMessage(up whatsmeow.UploadResponse, mime, caption string, width, height *uint32) *waE2E.ImageMessage {
+	return &waE2E.ImageMessage{
+		URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
+		FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: proto.Uint64(up.FileLength),
+		Mimetype: proto.String(mime), Caption: proto.String(caption), Width: width, Height: height,
+	}
+}
+
 // SendMedia uploads plain, then sends the Media Message. A retry uses the same Message ID.
 func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption string, timer int64) error {
 	if !c.cli.IsConnected() {
@@ -123,15 +149,9 @@ func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption str
 	ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
 	defer cancel()
 	var width, height *uint32
-	if m.Kind == media.Image { // plain holds the stripped bytes, so the kept Orientation decides the size
-		b, err := io.ReadAll(plain)
-		if err != nil {
-			return err
-		}
-		if w, h, ok := media.ImageSize(m.Mime, b); ok {
-			width, height = proto.Uint32(w), proto.Uint32(h)
-		}
-		if _, err := plain.Seek(0, io.SeekStart); err != nil {
+	if m.Kind == media.Image {
+		var err error
+		if width, height, err = imageSize(m.Mime, plain); err != nil {
 			return err
 		}
 	}
@@ -141,11 +161,7 @@ func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption str
 	}
 	msg := &waE2E.Message{}
 	if m.Kind == media.Image {
-		msg.ImageMessage = &waE2E.ImageMessage{
-			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
-			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: proto.Uint64(up.FileLength),
-			Mimetype: proto.String(m.Mime), Caption: proto.String(caption), Width: width, Height: height,
-		}
+		msg.ImageMessage = imageMessage(up, m.Mime, caption, width, height)
 	} else {
 		msg.DocumentMessage = &waE2E.DocumentMessage{
 			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
