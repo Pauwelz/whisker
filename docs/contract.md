@@ -559,7 +559,7 @@ The Plugin clears all activity on `disconnected`.
 Outgoing (Plugin to Daemon):
 
 - `chat.typing` has params `chat` and `typing` (boolean). Valid once the Daemon is `ready` and linked. The Daemon sends Composing (true) or Paused (false) to the Chat, only if "send typing" is on. The result is empty. The Plugin sends it when the composer gets or loses text, and when the Chat or the pop-out closes.
-- `Online` is not a method. The Daemon derives it: it sends `Online` while `attention.Open()` is true and "send online" is on, and otherwise sends unavailable. It follows the pop-out, not the shell. It recomputes on `attention.set`, on `settings.set` and after each `connected` (WhatsApp needs the availability once per connection). A user who turns "send online" off may also stop receiving Presence from WhatsApp.
+- `Online` is not a method. The Daemon derives it: it sends `Online` while `attention.Open()` is true and "send online" is on, and otherwise sends unavailable. It follows the pop-out, not the shell. It recomputes on `attention.set`, on `settings.set` and after each `connected` (WhatsApp needs the availability once per connection). It sends the presence again when WhatsApp delivers the own push name, because WhatsApp refuses presence until it knows that name. A user who turns "send online" off may also stop receiving Presence from WhatsApp.
 
 Fixtures: `presence-incoming.jsonl`, `presence-online.jsonl`, `presence-typing.jsonl`.
 
