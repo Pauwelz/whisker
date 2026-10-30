@@ -42,6 +42,54 @@ func contentOf(m *waE2E.Message, viewOnce bool) (content, bool) {
 	return content{}, false
 }
 
+// unwrapChild returns the Message to show for m: the Message inside associatedChildMessage, or m itself.
+// parent is the ID of the parent that a paired child names (the HD or motion-photo half of a photo), or "".
+// The parent key is read from the wrapper first, then from the inner Message.
+func unwrapChild(m *waE2E.Message) (shown *waE2E.Message, parent string) {
+	inner := m.GetAssociatedChildMessage().GetMessage()
+	if inner == nil {
+		return m, ""
+	}
+	if !strings.HasSuffix(contextOf(inner).GetPairedMediaType().String(), "_CHILD") {
+		return inner, ""
+	}
+	for _, info := range []*waE2E.MessageContextInfo{m.GetMessageContextInfo(), inner.GetMessageContextInfo()} {
+		if id := info.GetMessageAssociation().GetParentMessageKey().GetID(); id != "" && !ReservedID(id) {
+			return inner, id
+		}
+	}
+	return inner, ""
+}
+
+// pairChildren gives each parent in msgs the Media of its paired child. A child whose parent is missing,
+// or has another author, stays as a Message of its own. The parent keeps its thumbnail when the child has none.
+func pairChildren(msgs []Message, children map[string][]Message) []Message {
+	at := make(map[string]int, len(msgs))
+	for i, m := range msgs {
+		at[m.ID] = i
+	}
+	for parent, kids := range children {
+		for _, kid := range kids {
+			i, ok := at[parent]
+			if !ok || msgs[i].FromMe != kid.FromMe || (!kid.FromMe && msgs[i].Sender != kid.Sender) {
+				msgs = append(msgs, kid)
+				continue
+			}
+			msgs[i].Media = withThumbnail(kid.Media, msgs[i].Media)
+		}
+	}
+	return msgs
+}
+
+// withThumbnail is the Media of a child, with the thumbnail of the parent when the child came without one.
+func withThumbnail(child, parent *Media) *Media {
+	m := *child
+	if len(m.Thumbnail) == 0 && parent != nil {
+		m.Thumbnail = parent.Thumbnail
+	}
+	return &m
+}
+
 // placeholderOf is the one-line text of a poll, an event, a contact card or a location. Empty for other Messages.
 func placeholderOf(m *waE2E.Message) string {
 	for _, poll := range []*waE2E.PollCreationMessage{m.GetPollCreationMessage(), m.GetPollCreationMessageV2(), m.GetPollCreationMessageV3(), m.GetPollCreationMessageV5(), m.GetPollCreationMessageV6()} {

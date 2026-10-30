@@ -249,6 +249,28 @@ func (s *Store) Edit(ev whatsapp.MessageEdited, window time.Duration) (bool, err
 		ev.Text, strings.Join(ev.Mentions, " "), boolInt(ev.MentionsMe), ev.Chat, ev.ID, boolInt(ev.FromMe), ev.Sender, ev.Time, int64(window/time.Second))
 }
 
+// ReplaceMedia gives a stored Message the Media of its paired child (an HD photo or a motion photo), in state.
+// Only the author can replace: ev.FromMe and ev.Sender must match the stored Message, as for Edit. A Tombstone keeps no Media.
+// The text, Quote and Reactions stay. The Media keeps its thumbnail when the child has none, and the file of the old Media goes.
+// It reports whether the Message changed.
+func (s *Store) ReplaceMedia(ev whatsapp.MediaReplaced, state string) (bool, error) {
+	m := ev.Media
+	thumb := m.Thumbnail
+	if len(thumb) > whatsapp.MaxThumbnailBytes {
+		thumb = nil
+	}
+	changed, err := s.change(`UPDATE media SET kind = ?, mime = ?, name = ?, size = ?, media_key = ?, direct_path = ?, file_sha256 = ?, file_enc_sha256 = ?, state = ?,
+		thumbnail = CASE WHEN length(?) = 0 THEN thumbnail ELSE ? END, duration = ?, gif = ?, played = 0, thumb_direct_path = ?, thumb_sha256 = ?, thumb_enc_sha256 = ?
+		WHERE chat_jid = ? AND id = ? AND EXISTS (SELECT 1 FROM messages WHERE chat_jid = ? AND id = ? AND revoked = 0 AND `+authorSQL+`)`,
+		m.Kind, m.Mime, m.Name, m.Size, m.Key, m.DirectPath, m.FileSHA256, m.FileEncSHA256, state,
+		thumb, thumb, m.Duration, m.Gif, m.ThumbDirectPath, m.ThumbSHA256, m.ThumbEncSHA256,
+		ev.Chat, ev.ID, ev.Chat, ev.ID, boolInt(ev.FromMe), ev.Sender)
+	if changed && s.RemoveMedia != nil {
+		s.RemoveMedia(ev.Chat, ev.ID)
+	}
+	return changed, err
+}
+
 // Revoke turns a Message into a Tombstone: it empties the text and keeps the position. It reports whether the Message changed.
 // Only the author can revoke: fromMe and sender must match the stored Message, as for Edit.
 // A Tombstone keeps no Media: the Media row goes, and so does the stored file (through RemoveMedia).

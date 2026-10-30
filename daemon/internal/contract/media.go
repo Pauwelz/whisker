@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,6 +61,7 @@ type mediaResult struct {
 	chat, id  string
 	err       error
 	waited    *recovery
+	encSHA256 []byte // the FileEncSHA256 of the Media that was downloaded
 	thumbnail bool
 	data      []byte // the thumbnail
 }
@@ -86,14 +88,14 @@ func (l *mediaLoader) start(chat, id string) {
 		err := l.store.Ingest(chat, id, ref.Kind, func(f *os.File) error {
 			return l.port.Download(ref.Media, f, whatsapp.DownloadCap(ref.Size))
 		})
-		l.results <- mediaResult{chat: chat, id: id, err: err}
+		l.results <- mediaResult{chat: chat, id: id, err: err, encSHA256: ref.FileEncSHA256}
 	}()
 }
 
 // autoStart starts the download of a live Message that livePolicy stored as downloading.
-func (l *mediaLoader) autoStart(ev whatsapp.NewMessage) {
-	if ref, err := l.chats.MediaOf(ev.Chat, ev.Message.ID); err == nil && ref.State == chatstore.MediaDownloading {
-		l.start(ev.Chat, ev.Message.ID)
+func (l *mediaLoader) autoStart(chat, id string) {
+	if ref, err := l.chats.MediaOf(chat, id); err == nil && ref.State == chatstore.MediaDownloading {
+		l.start(chat, id)
 	}
 }
 
@@ -165,6 +167,11 @@ func (l *mediaLoader) done(r mediaResult) bool {
 	asked := l.awaiting[key] != nil
 	delete(l.inflight, key)
 	delete(l.awaiting, key)
+	if ref, err := l.chats.MediaOf(r.chat, r.id); err == nil && !bytes.Equal(ref.FileEncSHA256, r.encSHA256) {
+		l.store.Remove(r.chat, r.id) // an HD child replaced the Media while it downloaded: this file is the old one
+		l.autoStart(r.chat, r.id)
+		return true
+	}
 	state := chatstore.MediaReady
 	if r.err != nil {
 		if errors.Is(r.err, whatsapp.ErrMediaExpired) && !asked && l.askPhone(r.chat, r.id) {

@@ -68,11 +68,17 @@ func (c *Client) handle(evt any) {
 			c.events <- Reaction{Chat: chat.String(), ID: r.GetKey().GetID(), Sender: c.senderOf(evt.Info.MessageSource).String(), FromMe: evt.Info.IsFromMe, Emoji: r.GetText()}
 			return
 		}
-		body, ok := contentOf(evt.Message, evt.IsViewOnce)
+		m, parent := unwrapChild(evt.Message)
+		body, ok := contentOf(m, evt.IsViewOnce)
 		if !ok || evt.IsEdit || chat.Server == types.BroadcastServer {
 			return
 		}
-		c.events <- NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Ephemeral: evt.IsEphemeral, Message: c.messageOf(evt.Info, evt.Message, body)}
+		msg := NewMessage{Chat: chat.String(), Kind: c.kindOf(chat), Ephemeral: evt.IsEphemeral, Message: c.messageOf(evt.Info, m, body)}
+		if parent != "" && body.Media != nil {
+			c.events <- MediaReplaced{Chat: msg.Chat, ID: parent, Sender: msg.Message.Sender, FromMe: msg.Message.FromMe, Media: body.Media, Child: msg}
+			return
+		}
+		c.events <- msg
 	case *events.MediaRetry:
 		c.mediaRetried(evt)
 	case *events.Receipt:
@@ -501,6 +507,7 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 		if conv.GetMuteEndTime() != 0 {
 			chat.MutedUntil = muteUntil(int64(conv.GetMuteEndTime()))
 		}
+		children := map[string][]Message{} // paired children by parent ID
 		for _, hm := range conv.GetMessages() {
 			// A stub can lack a sender, so it is read before ParseWebMessage. A stub without content that whisker does not show is dropped.
 			if wm := hm.GetMessage(); wm.GetMessageStubType() != waWeb.WebMessageInfo_UNKNOWN {
@@ -516,15 +523,21 @@ func (c *Client) historySync(data *waHistorySync.HistorySync) (HistorySync, []Ch
 			if err != nil || ReservedID(parsed.Info.ID) {
 				continue
 			}
-			if body, ok := contentOf(parsed.Message, parsed.IsViewOnce); ok {
-				m := c.messageOf(parsed.Info, parsed.Message, body)
+			shown, parent := unwrapChild(parsed.Message)
+			if body, ok := contentOf(shown, parsed.IsViewOnce); ok {
+				m := c.messageOf(parsed.Info, shown, body)
 				m.Reactions = historyReactions(hm.GetMessage().GetReactions(), c.phoneString)
 				if m.FromMe {
 					m.State = historyState(hm.GetMessage().GetStatus())
 				}
+				if parent != "" && m.Media != nil { // the child often comes before its parent
+					children[parent] = append(children[parent], m)
+					continue
+				}
 				chat.Messages = append(chat.Messages, m)
 			}
 		}
+		chat.Messages = pairChildren(chat.Messages, children)
 		batch.Chats = append(batch.Chats, chat)
 	}
 	return batch, historyAliases(data)

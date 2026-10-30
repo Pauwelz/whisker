@@ -10,6 +10,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 ### Fixed
 
 - A set of photos or videos sent at once no longer shows an extra "Unsupported message" line before the Media.
+- A photo sent in HD, or as a motion photo, now shows as one Message with the HD image or the motion-photo video. It no longer adds an "Unsupported message" line or notification.
 
 ## [1.3.0] - 2026-10-30
 

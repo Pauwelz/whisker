@@ -235,8 +235,10 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 		var isNew bool
 		ok, isNew = s.box.incomingMessage(ev)
 		if isNew {
-			s.loader.autoStart(ev)
+			s.loader.autoStart(ev.Chat, ev.Message.ID)
 		}
+	case whatsapp.MediaReplaced:
+		ok = s.mediaReplaced(ev)
 	case whatsapp.MediaRetried:
 		ok = s.loader.retried(ev)
 	case whatsapp.MessageEdited:
@@ -319,4 +321,23 @@ func (s *session) merge(a whatsapp.ChatAlias) bool {
 	}
 	s.scheduleMuteEnd()
 	return s.send(notification("chatMerged", map[string]any{"from": a.LID, "to": a.Phone})) && s.send(notification("chatsChanged", nil))
+}
+
+// mediaReplaced gives a stored Message the Media of its paired child (an HD photo or a motion photo).
+// The parent line changes: no new line, no notice. Without the parent in the store, the child shows as a Message of its own.
+func (s *session) mediaReplaced(ev whatsapp.MediaReplaced) bool {
+	replaced, err := s.chats.ReplaceMedia(ev, livePolicy(ev.Child, s.box.autoDownloads).MediaState)
+	if storeFailed(s.logOut, storeWrite, err) {
+		return true
+	}
+	if replaced {
+		s.loader.autoStart(ev.Chat, ev.ID)
+		return s.box.notify(ev.Chat, ev.ID)
+	}
+	// shortcut: a parent that arrives after its child shows as a second line; pair them in the store if that happens in practice.
+	ok, isNew := s.box.incomingMessage(ev.Child)
+	if isNew {
+		s.loader.autoStart(ev.Child.Chat, ev.Child.Message.ID)
+	}
+	return ok
 }

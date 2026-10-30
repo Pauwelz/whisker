@@ -415,6 +415,18 @@ type MessageEdited struct {
 	MentionsMe bool     `json:"mentionsMe"`
 }
 
+// MediaReplaced means the paired child of a photo sent in HD or as a motion photo arrived. Its Media replaces the Media of the parent ID.
+// Sender and FromMe name the author of the child: only the author of the parent can replace its Media.
+// Child is the child as a Message of its own, to store when the parent is not in the store.
+type MediaReplaced struct {
+	Chat   string
+	ID     string
+	Sender string
+	FromMe bool
+	Media  *Media
+	Child  NewMessage
+}
+
 // MessageRevoked means a stored Message was revoked for everyone.
 // Sender and FromMe name the revoker: only the author can revoke a Message.
 // For a revoke by a group admin, Sender and FromMe name the author that the revoke names (FromMe: the user)
@@ -521,6 +533,7 @@ func (Presence) isEvent()       {}
 func (ChatPresence) isEvent()   {}
 func (MessageEdited) isEvent()  {}
 func (MessageRevoked) isEvent() {}
+func (MediaReplaced) isEvent()  {}
 func (Reaction) isEvent()       {}
 func (Connected) isEvent()      {}
 func (OwnPushName) isEvent()    {}
