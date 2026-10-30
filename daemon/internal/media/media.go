@@ -104,7 +104,7 @@ func (s *Store) hash(parts ...string) string { return hex.EncodeToString(mac(s.n
 
 // mediaKeys returns the IV, cipher key and MAC key of one stored file. Each Message id has its own key.
 // The Chat is not part of the key, because MoveChat moves files between Chats.
-// shortcut: two Chats with the same id share a key and IV, which shows only equal leading blocks. Fix it with a re-encrypt in MoveChat.
+// Two Chats with the same id share a key and IV. docs/adr/0001-media-file-key-without-chat.md accepts that risk.
 func (s *Store) mediaKeys(id string, k Kind) (iv, cipherKey, macKey []byte, err error) {
 	if len(s.fileKey) == 0 {
 		return nil, nil, nil, errNoKey
