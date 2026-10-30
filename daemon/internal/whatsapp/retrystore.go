@@ -17,7 +17,6 @@ type RetryStore interface {
 	AddRetry(chat, id, targetID, format string, data []byte) error
 	// Retry finds the Message in chat or altChat. A Message that is not there gives sql.ErrNoRows.
 	Retry(chat, altChat, id string) (format string, data []byte, err error)
-	DeleteOldRetries() error
 }
 
 // retryBuffer is the EventBuffer of the device. It keeps whatsmeow's incoming buffer and moves the outgoing events to a RetryStore.
@@ -43,9 +42,8 @@ func (b *retryBuffer) GetOutgoingEvent(_ context.Context, chat, altChat types.JI
 	return b.retries.Retry(chat.String(), altChat.String(), id)
 }
 
-func (b *retryBuffer) DeleteOldOutgoingEvents(context.Context) error {
-	return b.retries.DeleteOldRetries()
-}
+// DeleteOldOutgoingEvents does nothing: whatsmeow calls it on every send, and the chat store's expiry sweep removes old rows instead.
+func (b *retryBuffer) DeleteOldOutgoingEvents(context.Context) error { return nil }
 
 // retryTarget is the id that an edit or a reaction acts on. Any other Message has none.
 // A revoke has none: it holds no text, and it must stay retryable after its target is gone.
@@ -57,7 +55,11 @@ func retryTarget(format string, data []byte) (string, error) {
 	if err := proto.Unmarshal(data, &m); err != nil {
 		return "", fmt.Errorf("read sent message: %w", err)
 	}
-	if pm := m.GetProtocolMessage(); pm.GetType() != waE2E.ProtocolMessage_REVOKE {
+	pm := m.GetEditedMessage().GetMessage().GetProtocolMessage() // BuildEdit wraps the edit
+	if pm == nil {
+		pm = m.GetProtocolMessage()
+	}
+	if pm.GetType() != waE2E.ProtocolMessage_REVOKE {
 		if id := pm.GetKey().GetID(); id != "" {
 			return id, nil
 		}

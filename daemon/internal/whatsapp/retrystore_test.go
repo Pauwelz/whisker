@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store"
@@ -48,7 +49,6 @@ type retryRow struct {
 
 type fakeRetries struct {
 	added   []retryRow
-	cleaned int
 	gotChat string
 	gotAlt  string
 	gotID   string
@@ -63,7 +63,6 @@ func (f *fakeRetries) Retry(chat, alt, id string) (string, []byte, error) {
 	f.gotChat, f.gotAlt, f.gotID = chat, alt, id
 	return "wa", []byte("x"), f.err
 }
-func (f *fakeRetries) DeleteOldRetries() error { f.cleaned++; return nil }
 
 func TestRetryBufferPassesTheIncomingMethodsToTheInnerBuffer(t *testing.T) {
 	inner := &fakeInner{}
@@ -93,9 +92,6 @@ func TestRetryBufferKeepsOutgoingEventsInTheRetryStore(t *testing.T) {
 	if err := b.AddOutgoingEvent(ctx, chat, "id1", "wa", []byte{0xff}); err == nil {
 		t.Error("an invalid proto must fail") // the wa format must parse, so a bad row never hides a target
 	}
-	if err := b.DeleteOldOutgoingEvents(ctx); err != nil || r.cleaned != 1 {
-		t.Errorf("DeleteOldOutgoingEvents = %v, cleaned %d; want nil, 1", err, r.cleaned)
-	}
 	alt := types.NewJID("6", types.DefaultUserServer)
 	format, data, err := b.GetOutgoingEvent(ctx, chat, alt, "id1")
 	if err != nil || format != "wa" || string(data) != "x" {
@@ -124,7 +120,7 @@ func TestRetryBufferStoresTheTargetOfAnEditRevokeOrReaction(t *testing.T) {
 		target string
 	}{
 		"text":     {&waE2E.Message{Conversation: proto.String("hi")}, ""},
-		"edit":     {&waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{Key: key, Type: waE2E.ProtocolMessage_MESSAGE_EDIT.Enum()}}, "target"},
+		"edit":     {(*whatsmeow.Client)(nil).BuildEdit(types.NewJID("5", types.HiddenUserServer), "target", &waE2E.Message{Conversation: proto.String("v2")}), "target"},
 		"revoke":   {&waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{Key: key, Type: waE2E.ProtocolMessage_REVOKE.Enum()}}, ""},
 		"reaction": {&waE2E.Message{ReactionMessage: &waE2E.ReactionMessage{Key: key, Text: proto.String("+")}}, "target"},
 		"no key":   {&waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{}}, ""},

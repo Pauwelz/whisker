@@ -49,14 +49,14 @@ func TestRetryOfAMissingMessageIsNoRows(t *testing.T) {
 	}
 }
 
-func TestDeleteOldRetriesKeepsSevenDays(t *testing.T) {
+func TestExpireDeletesRetriesOlderThanSevenDays(t *testing.T) {
 	s, db := newStore(t)
 	for id, age := range map[string]time.Duration{"old": 7*24*time.Hour + time.Minute, "new": 7*24*time.Hour - time.Minute} {
 		if _, err := db.Exec(`INSERT INTO retry_messages (chat_jid, id, format, data, timestamp) VALUES (?, ?, 'wa', x'00', ?)`, phoneJID, id, now.Add(-age).UnixMilli()); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := s.DeleteOldRetries(); err != nil {
+	if _, err := s.Expire(now.Unix()); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := s.Retry(phoneJID, "", "new"); err != nil {

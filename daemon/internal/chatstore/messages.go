@@ -289,6 +289,9 @@ type Expired struct{ Chat, ID string }
 // Expire deletes every Disappearing Message whose timer ended at or before now (Unix seconds), with its Media.
 // A Message that expired while the Daemon was off goes at the next call. It returns the deleted Messages.
 func (s *Store) Expire(now int64) ([]Expired, error) {
+	if err := s.deleteOldRetries(); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(`SELECT chat_jid, id FROM messages WHERE expires_at > 0 AND expires_at <= ?`, now)
 	if err != nil {
 		return nil, err

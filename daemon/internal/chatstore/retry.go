@@ -23,8 +23,8 @@ func (s *Store) Retry(chat, altChat, id string) (format string, data []byte, err
 	return format, data, err
 }
 
-// DeleteOldRetries deletes the stored Messages that are older than the age limit.
-func (s *Store) DeleteOldRetries() error {
+// deleteOldRetries deletes the stored Messages that are older than the age limit. The expiry sweep calls it.
+func (s *Store) deleteOldRetries() error {
 	_, err := s.db.Exec(`DELETE FROM retry_messages WHERE timestamp < ?`, s.now().Add(-retryMaxAge).UnixMilli())
 	return err
 }
