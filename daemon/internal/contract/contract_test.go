@@ -688,6 +688,29 @@ func TestSendOfflineErrorKeepsTheMessagePending(t *testing.T) {
 	}
 }
 
+// Presence fails until whatsmeow knows the push name. The push name event sends it again.
+func TestPresenceIsSentWhenThePushNameArrives(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetPresenceError(whatsapp.ErrOffline)
+	r.start()
+	for _, want := range []string{"ready", "linked"} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	r.port.Emit(whatsapp.Connected{})
+	r.nextFrame() // connected
+	r.port.SetPresenceError(nil)
+	r.port.Emit(whatsapp.OwnPushName{})
+	if code, _, _ := r.finish(); code != contract.ExitOK {
+		t.Errorf("exit code = %d, want %d", code, contract.ExitOK)
+	}
+	if got := r.port.OnlineCalls(); len(got) != 1 || got[0] {
+		t.Errorf("presence calls = %v, want one unavailable after the push name", got)
+	}
+}
+
 // run feeds input to a Daemon with a working keyring and returns its exit code, stdout and stderr.
 func run(t *testing.T, input string) (int, string, string) {
 	t.Helper()

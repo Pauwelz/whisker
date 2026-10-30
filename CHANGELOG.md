@@ -21,6 +21,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- Your online or offline status now reaches your contacts right after you link. whisker sends it again when WhatsApp tells it your push name.
 - Escape closes the quick emoji bar, or cancels a reply or an Edit, before it leaves the Chat.
 - A Group Chat that you join shows its name, not its number. At each connection whisker also repairs Group Chats that show a number.
 - A mention of you shows as `@You`. A mention in a group that hides phone numbers shows the name, not a long number.

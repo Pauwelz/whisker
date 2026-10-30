@@ -475,6 +475,9 @@ type ChatAlias struct {
 // Connected and Disconnected report the connection to WhatsApp.
 // Reason on Disconnected is empty for a plain drop, which whatsmeow reconnects by itself, or one of the Disconnect reasons below.
 type Connected struct{}
+
+// OwnPushName reports that whatsmeow now knows the push name of the user. WhatsApp accepts Presence only after it.
+type OwnPushName struct{}
 type Disconnected struct {
 	Reason string `json:"reason"`
 }
@@ -500,6 +503,7 @@ func (MessageEdited) isEvent()  {}
 func (MessageRevoked) isEvent() {}
 func (Reaction) isEvent()       {}
 func (Connected) isEvent()      {}
+func (OwnPushName) isEvent()    {}
 func (Disconnected) isEvent()   {}
 func (QRCode) isEvent()         {}
 func (PairSuccess) isEvent()    {}

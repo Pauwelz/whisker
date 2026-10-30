@@ -38,6 +38,8 @@ func (c *Client) handle(evt any) {
 		c.emitContactBook()
 		go c.emitOwnDevices()
 		go c.emitGroupSubjects()
+	case *events.PushNameSetting:
+		c.events <- OwnPushName{}
 	case *events.IdentityChange: // implicit or announced: the user sees the change either way
 		chat := c.phone(evt.JID)
 		c.emitSystem(chat, c.systemMessage(chat, types.EmptyJID, types.EmptyJID, SystemIdentity, nil, "", evt.Timestamp))

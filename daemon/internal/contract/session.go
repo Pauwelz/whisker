@@ -222,6 +222,8 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 	case whatsapp.Connected:
 		s.pres.connected() // before the `connected` frame
 		ok = s.box.connected() && s.mergeKnownLIDs()
+	case whatsapp.OwnPushName:
+		s.pres.pushNameKnown()
 	case whatsapp.Disconnected:
 		ok = s.box.disconnected(ev.Reason) && s.hist.disconnected()
 	case whatsapp.OwnDevices:

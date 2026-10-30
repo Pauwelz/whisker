@@ -41,6 +41,12 @@ func (p *presenter) connected() {
 	p.sync()
 }
 
+// pushNameKnown runs when whatsmeow learns the push name. An earlier SendPresence may have failed without it, so send again.
+func (p *presenter) pushNameKnown() {
+	p.known = false
+	p.sync()
+}
+
 // sync sends the availability when it differs from what WhatsApp has, and subscribes to the Attended Chat.
 func (p *presenter) sync() {
 	prefs, err := p.prefs.Get()

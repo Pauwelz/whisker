@@ -21,6 +21,7 @@ type Fake struct {
 	connectErr     error
 	connects       int
 	sendErr        error
+	presenceErr    error
 	sent           []string
 	uploads        []string
 	timers         []int64
@@ -199,7 +200,8 @@ func (f *Fake) SetPairCode(code string, err error) {
 func (f *Fake) SetConnectError(err error) { f.mu.Lock(); f.connectErr = err; f.mu.Unlock() }
 
 // SetSendError makes Send fail with err. Pass nil to stop failing.
-func (f *Fake) SetSendError(err error) { f.mu.Lock(); f.sendErr = err; f.mu.Unlock() }
+func (f *Fake) SetPresenceError(err error) { f.mu.Lock(); f.presenceErr = err; f.mu.Unlock() }
+func (f *Fake) SetSendError(err error)     { f.mu.Lock(); f.sendErr = err; f.mu.Unlock() }
 
 // Sent lists the IDs that Send accepted, in order.
 func (f *Fake) Sent() []string {
@@ -638,6 +640,9 @@ func (f *Fake) Events() <-chan Event { return f.events }
 func (f *Fake) SendPresence(online bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.presenceErr != nil {
+		return f.presenceErr
+	}
 	f.online = append(f.online, online)
 	return nil
 }
