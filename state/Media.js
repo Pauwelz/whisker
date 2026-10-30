@@ -37,6 +37,16 @@ function previewsFile(message) {
   return !!message.media && message.media.state === MEDIA_STATE.READY && message.media.kind === "image" && !message.media.thumbnail
 }
 
+// A path holds only while the Media of its Message is ready. Media that an HD child replaced is not ready, and its old file is gone.
+function forgetStalePath(state, message) {
+  var key = mediaKey(message.chat, message.id)
+  var known = state.mediaPaths || {}
+  if (known[key] === undefined || (message.media && message.media.state === MEDIA_STATE.READY)) return state
+  var paths = Common.withChanges(known, {})
+  delete paths[key]
+  return Common.withChanges(state, { mediaPaths: paths })
+}
+
 // The Messages of the open Chat whose path the Plugin must ask for. markMediaRequested then stops a second request.
 function mediaToLoad(state) {
   if (!state.openChat) return []

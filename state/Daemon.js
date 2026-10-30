@@ -177,7 +177,7 @@ var NOTIFICATIONS = {
   chatCleared: { fold: Timeline.clearMessages, refreshesChats: true },
   chatRemoved: { fold: ChatList.chatRemoved, refreshesChats: true },
   historyReceived: { fold: Timeline.historyReceived },
-  messageChanged: { fold: function (state, params) { return Timeline.upsertMessage(state, params.message) } },
+  messageChanged: { fold: function (state, params) { return Timeline.upsertMessage(Media.forgetStalePath(state, params.message), params.message) } },
   chatMerged: { fold: Timeline.chatMerged },
   presenceChanged: { fold: ChatList.presenceChanged },
   pictureChanged: { fold: ChatList.pictureChanged },

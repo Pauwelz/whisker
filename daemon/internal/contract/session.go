@@ -232,11 +232,7 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 	case whatsapp.OwnDevices:
 		ok = s.ownDevices(ev)
 	case whatsapp.NewMessage:
-		var isNew bool
-		ok, isNew = s.box.incomingMessage(ev)
-		if isNew {
-			s.loader.autoStart(ev.Chat, ev.Message.ID)
-		}
+		ok = s.incomingMessage(ev)
 	case whatsapp.MediaReplaced:
 		ok = s.mediaReplaced(ev)
 	case whatsapp.MediaRetried:
@@ -335,9 +331,14 @@ func (s *session) mediaReplaced(ev whatsapp.MediaReplaced) bool {
 		return s.box.notify(ev.Chat, ev.ID)
 	}
 	// shortcut: a parent that arrives after its child shows as a second line; pair them in the store if that happens in practice.
-	ok, isNew := s.box.incomingMessage(ev.Child)
+	return s.incomingMessage(ev.Child)
+}
+
+// incomingMessage stores a live Message and starts the download that livePolicy asked for.
+func (s *session) incomingMessage(ev whatsapp.NewMessage) bool {
+	ok, isNew := s.box.incomingMessage(ev)
 	if isNew {
-		s.loader.autoStart(ev.Child.Chat, ev.Child.Message.ID)
+		s.loader.autoStart(ev.Chat, ev.Message.ID)
 	}
 	return ok
 }

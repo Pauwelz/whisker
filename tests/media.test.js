@@ -128,3 +128,15 @@ test("a probe is settled when it failed, or when it ended and gave its output", 
   assert.equal(Media.probeSettled({ exitCode: 0, output: "text/plain" }), true);
   assert.equal(Media.probeSettled({ exitCode: 127, output: null }), true);
 });
+
+// An HD child replaces the Media of a photo. The Daemon deletes the old file, so the Plugin asks for the new path once it is ready.
+test("replaced Media drops the path of the old file", () => {
+  const frame = (media) => ({ jsonrpc: "2.0", method: "messageChanged", params: { message: { ...photo, media } } });
+  let state = Timeline.upsertMessage({ openChat: { jid: photo.chat, messages: [] } }, photo);
+  state = Daemon.applyFrame(state, { jsonrpc: "2.0", id: 1, result: { chat: photo.chat, id: "m1", path: "/run/sd.jpg" } });
+  assert.equal(Media.mediaPath(state, photo), "/run/sd.jpg");
+  state = Daemon.applyFrame(state, frame({ ...photo.media, size: 9000, state: "downloading" }));
+  assert.equal(Media.mediaPath(state, photo), "");
+  state = Daemon.applyFrame(state, frame({ ...photo.media, size: 9000 }));
+  assert.deepEqual(plain(Media.mediaToLoad(state).map((m) => m.id)), ["m1"]);
+});
