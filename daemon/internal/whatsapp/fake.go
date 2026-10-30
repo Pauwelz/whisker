@@ -204,9 +204,11 @@ func (f *Fake) SetPairCode(code string, err error) {
 // SetConnectError makes Connect fail with err. Pass nil to stop failing.
 func (f *Fake) SetConnectError(err error) { f.mu.Lock(); f.connectErr = err; f.mu.Unlock() }
 
-// SetSendError makes Send fail with err. Pass nil to stop failing.
+// SetPresenceError makes SendPresence fail with err. Pass nil to stop failing.
 func (f *Fake) SetPresenceError(err error) { f.mu.Lock(); f.presenceErr = err; f.mu.Unlock() }
-func (f *Fake) SetSendError(err error)     { f.mu.Lock(); f.sendErr = err; f.mu.Unlock() }
+
+// SetSendError makes Send fail with err. Pass nil to stop failing.
+func (f *Fake) SetSendError(err error) { f.mu.Lock(); f.sendErr = err; f.mu.Unlock() }
 
 // Sent lists the IDs that Send accepted, in order.
 func (f *Fake) Sent() []string {

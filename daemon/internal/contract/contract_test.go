@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"go.mau.fi/whatsmeow"
+
 	"github.com/Pauwelz/whisker/daemon/internal/clock"
 	"github.com/Pauwelz/whisker/daemon/internal/contract"
 	"github.com/Pauwelz/whisker/daemon/internal/desktop"
@@ -692,7 +694,7 @@ func TestSendOfflineErrorKeepsTheMessagePending(t *testing.T) {
 func TestPresenceIsSentWhenThePushNameArrives(t *testing.T) {
 	r := newRunner(t)
 	r.port.SetLinked(true)
-	r.port.SetPresenceError(whatsapp.ErrOffline)
+	r.port.SetPresenceError(whatsmeow.ErrNoPushName)
 	r.start()
 	for _, want := range []string{"ready", "linked"} {
 		if f := r.nextFrame(); !strings.Contains(f, want) {
@@ -703,6 +705,8 @@ func TestPresenceIsSentWhenThePushNameArrives(t *testing.T) {
 	r.nextFrame() // connected
 	r.port.SetPresenceError(nil)
 	r.port.Emit(whatsapp.OwnPushName{})
+	for deadline := time.Now().Add(5 * time.Second); len(r.port.OnlineCalls()) == 0 && time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+	}
 	if code, _, _ := r.finish(); code != contract.ExitOK {
 		t.Errorf("exit code = %d, want %d", code, contract.ExitOK)
 	}

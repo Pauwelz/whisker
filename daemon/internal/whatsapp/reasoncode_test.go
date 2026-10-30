@@ -1,11 +1,15 @@
 package whatsapp
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"testing"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/socket"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
@@ -20,11 +24,16 @@ func TestReasonCodes(t *testing.T) {
 	for _, tc := range []struct {
 		got, want string
 	}{
-		{PresenceCode(fmt.Errorf("x: %w", whatsmeow.ErrNoPushName)), CodeNoPushName},
-		{PresenceCode(ErrOffline), CodeOffline},
-		{PresenceCode(errors.New("Alice")), CodeUnknown},
-		{ConnectCode(whatsmeow.ErrAlreadyConnected), CodeAlreadyConnected},
-		{ConnectCode(errors.New("dial example.com")), CodeUnknown},
+		{PresenceReason(fmt.Errorf("x: %w", whatsmeow.ErrNoPushName)), ReasonNoPushName},
+		{PresenceReason(ErrOffline), ReasonOffline},
+		{PresenceReason(errors.New("Alice")), ReasonUnknown},
+		{ConnectReason(whatsmeow.ErrAlreadyConnected), ReasonAlreadyConnected},
+		{ConnectReason(errors.New("dial example.com")), ReasonUnknown},
+		{ConnectReason(fmt.Errorf("x: %w", store.ErrDeviceDeleted)), ReasonDeviceDeleted},
+		{ConnectReason(fmt.Errorf("x: %w", socket.ErrDialFailed)), ReasonNetwork},
+		{ConnectReason(context.DeadlineExceeded), ReasonNetwork},
+		{ConnectReason(&net.OpError{Op: "dial", Err: errors.New("example.com")}), ReasonNetwork},
+		{ConnectReason(socket.ErrWithStatusCode{StatusCode: 403}), ReasonRejected},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("code = %q, want %q", tc.got, tc.want)

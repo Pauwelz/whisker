@@ -142,7 +142,7 @@ func (s *session) startPort() bool {
 // connect connects the port. An unlinked Profile starts linking, and a failure ends it with `linkFailed`.
 func (s *session) connect() bool {
 	if err := s.port.Connect(); err != nil {
-		fmt.Fprintf(s.logOut, "connect failed reason=%s\n", whatsapp.ConnectCode(err))
+		fmt.Fprintf(s.logOut, "connect failed reason=%s\n", whatsapp.ConnectReason(err))
 		if !s.port.Linked() {
 			return s.send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonConnectFailed}))
 		}

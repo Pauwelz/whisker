@@ -57,14 +57,14 @@ func (p *presenter) sync() {
 	}
 	if want := p.attn.Open() && prefs.SendOnline; !p.known || want != p.online {
 		if err := p.port.SendPresence(want); err != nil {
-			fmt.Fprintf(p.logOut, "presence failed reason=%s\n", whatsapp.PresenceCode(err))
+			fmt.Fprintf(p.logOut, "presence failed reason=%s\n", whatsapp.PresenceReason(err))
 		} else {
 			p.known, p.online = true, want
 		}
 	}
 	if chat := p.attn.Attended(); chat != "" && !strings.HasSuffix(chat, "@g.us") && !p.subscribed[chat] {
 		if err := p.port.SubscribePresence(chat); err != nil {
-			fmt.Fprintf(p.logOut, "presence subscribe failed reason=%s\n", whatsapp.PresenceCode(err))
+			fmt.Fprintf(p.logOut, "presence subscribe failed reason=%s\n", whatsapp.PresenceReason(err))
 		} else {
 			p.subscribed[chat] = true
 		}
