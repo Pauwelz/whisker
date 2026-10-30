@@ -42,6 +42,10 @@ bin/whisker-daemon --version
 bin/whisker-daemon             # type JSON lines; press Ctrl+D to stop
 ```
 
+`scripts/build-daemon.sh --dev` builds a dev build. A dev build writes the type of each "Unsupported message" to stderr.
+The Plugin puts that line in the journal. Read it with `journalctl --user | grep 'unsupported message'`.
+The line holds the Message id and field names only, never text. Releases do not contain this code.
+
 The Plugin runs `bin/whisker-daemon`. Edited Plugin QML loads only after a shell restart, because the Service is `keepLoaded`.
 
 ## Tests

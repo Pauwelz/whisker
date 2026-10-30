@@ -331,6 +331,9 @@ func (c *Client) ProfilePicture(chat, knownID string) (string, []byte, error) {
 }
 
 func (c *Client) messageOf(info types.MessageInfo, m *waE2E.Message, body content) Message {
+	if body.Text == unsupportedText {
+		logUnsupported(info.ID, m)
+	}
 	text, mentions := c.phoneMentions(body.Text, body.Mentions)
 	return Message{
 		ID: info.ID, Sender: c.senderOf(info.MessageSource).String(), FromMe: info.IsFromMe, Time: info.Timestamp.Unix(),
