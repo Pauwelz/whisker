@@ -3,6 +3,7 @@ package whatsapp
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"time"
 
@@ -113,6 +114,19 @@ func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption str
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
 	defer cancel()
+	var width, height *uint32
+	if m.Kind == media.Image { // plain holds the stripped bytes, so the kept Orientation decides the size
+		b, err := io.ReadAll(plain)
+		if err != nil {
+			return err
+		}
+		if w, h, ok := media.ImageSize(m.Mime, b); ok {
+			width, height = proto.Uint32(w), proto.Uint32(h)
+		}
+		if _, err := plain.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+	}
 	up, err := c.cli.UploadReader(ctx, plain, nil, whatsmeow.MediaType(m.Kind.Info()))
 	if err != nil {
 		return err
@@ -122,7 +136,7 @@ func (c *Client) SendMedia(chat, id string, m Media, plain *os.File, caption str
 		msg.ImageMessage = &waE2E.ImageMessage{
 			URL: proto.String(up.URL), DirectPath: proto.String(up.DirectPath), MediaKey: up.MediaKey,
 			FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: proto.Uint64(up.FileLength),
-			Mimetype: proto.String(m.Mime), Caption: proto.String(caption),
+			Mimetype: proto.String(m.Mime), Caption: proto.String(caption), Width: width, Height: height,
 		}
 	} else {
 		msg.DocumentMessage = &waE2E.DocumentMessage{
