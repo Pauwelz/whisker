@@ -7,6 +7,8 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-30
+
 ### Added
 
 - A sent image now carries its width and height, with the rotation of the photo applied.
