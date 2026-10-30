@@ -35,6 +35,7 @@ func TestContentOf(t *testing.T) {
 		{"reaction", &waE2E.Message{ReactionMessage: &waE2E.ReactionMessage{}}, false, "", false},
 		{"poll vote", &waE2E.Message{PollUpdateMessage: &waE2E.PollUpdateMessage{}}, false, "", false},
 		{"encrypted edit", &waE2E.Message{SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{}}, false, "", false},
+		{"album header", &waE2E.Message{AlbumMessage: &waE2E.AlbumMessage{ExpectedImageCount: proto.Uint32(2)}, MessageContextInfo: &waE2E.MessageContextInfo{}}, false, "", false},
 		{"metadata only", &waE2E.Message{MessageContextInfo: &waE2E.MessageContextInfo{}}, false, "", false},
 	}
 	for _, tt := range tests {

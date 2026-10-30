@@ -25,7 +25,7 @@ type content struct {
 }
 
 // contentOf maps a Message to its content. It reports false for a Message with nothing to show:
-// a Reaction, a poll vote, a protocol Message. Every other Message shows as something, never as a blank line.
+// a Reaction, a poll vote, a protocol Message, an album header. Every other Message shows as something, never as a blank line.
 func contentOf(m *waE2E.Message, viewOnce bool) (content, bool) {
 	if viewOnce || m.GetImageMessage().GetViewOnce() || m.GetVideoMessage().GetViewOnce() || m.GetAudioMessage().GetViewOnce() {
 		return content{Text: viewOnceText}, true // the Media is not kept: only the phone opens it
@@ -220,7 +220,9 @@ func hasVisibleContent(m *waE2E.Message) bool {
 	m.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
 		switch fd.Name() {
 		case "messageContextInfo", "senderKeyDistributionMessage", "protocolMessage", "reactionMessage",
-			"encReactionMessage", "pollUpdateMessage", "encEventResponseMessage", "keepInChatMessage", "secretEncryptedMessage":
+			"encReactionMessage", "pollUpdateMessage", "encEventResponseMessage", "keepInChatMessage", "secretEncryptedMessage",
+			"albumMessage": // the album header holds only a count: its Media come as their own Messages
+
 			return true
 		}
 		visible = true

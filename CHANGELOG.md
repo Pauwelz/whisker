@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- A set of photos or videos sent at once no longer shows an extra "Unsupported message" line before the Media.
+
 ## [1.3.0] - 2026-10-30
 
 ### Added
