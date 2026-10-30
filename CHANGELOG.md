@@ -16,6 +16,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- A sticker now shows at the size of a Media thumbnail, with its own aspect ratio, so it fits the compact Chat.
 - The actions of a Message are now Message links, a row of links below the Message. A click on ⋯ or a right click shows or hides the Message links. Escape closes them before the Chat.
 - The Media links (download, open, save as…) show only while the pointer is over the Message.
 - Links inside the pop-out are grey and underlined on hover. The links in the Chat header keep the text colour.

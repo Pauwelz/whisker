@@ -8,6 +8,9 @@
 // The states of Media. The Daemon sends them (docs/contract.md).
 var MEDIA_STATE = { NONE: "none", DOWNLOADING: "downloading", READY: "ready", FAILED: "failed", GONE: "gone" }
 
+// The box, in Style.space units, that a thumbnail or a sticker fits in with its own aspect ratio.
+var PREVIEW_BOX = { width: 56, height: 36 }
+
 // Media. The Daemon sends paths only on request (media.open). `mediaPaths` holds them by Chat and Message id.
 // An empty path means the request is out. Views show the path only when it is not empty.
 function mediaKey(chat, id) {

@@ -206,9 +206,11 @@ Item {
             readonly property string file: line.isMessage ? Media.mediaPath(line.panel.view, line.message) : ""
             visible: file !== "" && Media.showsInline(line.message)
             source: visible ? Media.fileUrl(file) : ""
-            width: Math.min(parent.width, Style.space(240))
-            sourceSize.width: Style.space(240) * Screen.devicePixelRatio
+            width: Style.space(Media.PREVIEW_BOX.width)
+            height: Style.space(Media.PREVIEW_BOX.height)
+            sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
             fillMode: Image.PreserveAspectFit
+            horizontalAlignment: Image.AlignLeft
             asynchronous: true
             TapHandler { onTapped: line.panel.whiskerService.openMedia(line.message) }
           }

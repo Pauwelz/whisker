@@ -33,8 +33,8 @@ Column {
     // Thumbnail, or the file-type badge when there is none. A click runs the main action.
     Item {
       id: preview
-      width: Style.space(56)
-      height: Style.space(36)
+      width: Style.space(Media.PREVIEW_BOX.width)
+      height: Style.space(Media.PREVIEW_BOX.height)
       visible: chip.thumbnail !== "" || chip.badge !== ""
       Image {
         id: thumb
@@ -43,7 +43,7 @@ Column {
         source: chip.thumbnail
         fillMode: Image.PreserveAspectFit // a portrait image keeps its shape inside the landscape box
         autoTransform: true // a downloaded photo shows upright from its EXIF Orientation
-        sourceSize: Qt.size(Style.space(112), Style.space(72)) // a downloaded file is decoded small, twice the box for a scaled screen
+        sourceSize: Qt.size(preview.width * 2, preview.height * 2) // a downloaded file is decoded small, twice the box for a scaled screen
         asynchronous: true
       }
       MultiEffect {
