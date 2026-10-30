@@ -36,6 +36,8 @@ func TestImageSize(t *testing.T) {
 
 	// 6 x 4 pixels in each WebP form
 	sized(t, "image/webp", webp(riffChunk("VP8X", "\x00\x00\x00\x00\x05\x00\x00\x03\x00\x00"), riffChunk("VP8L", "x")), 6, 4)
+	// a low byte of 0xFF carries into the next byte: 512 x 768
+	sized(t, "image/webp", webp(riffChunk("VP8X", "\x00\x00\x00\x00\xff\x01\x00\xff\x02\x00")), 512, 768)
 	sized(t, "image/webp", webp(riffChunk("VP8L", "\x2f\x05\xc0\x00\x00")), 6, 4)
 	sized(t, "image/webp", webp(riffChunk("VP8 ", "\x00\x00\x00\x9d\x01\x2a\x06\x00\x04\x00")), 6, 4)
 

@@ -56,7 +56,7 @@ func webpSize(b []byte) (w, h uint32, ok bool) {
 		if len(d) < 10 {
 			return 0, 0, false
 		}
-		return 1 + uint32(d[4]) | uint32(d[5])<<8 | uint32(d[6])<<16, 1 + uint32(d[7]) | uint32(d[8])<<8 | uint32(d[9])<<16, true
+		return 1 + (uint32(d[4]) | uint32(d[5])<<8 | uint32(d[6])<<16), 1 + (uint32(d[7]) | uint32(d[8])<<8 | uint32(d[9])<<16), true
 	case "VP8L": // 0x2F, then 14-bit width-1 and height-1
 		if len(d) < 5 || d[0] != 0x2F {
 			return 0, 0, false
