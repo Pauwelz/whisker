@@ -496,6 +496,7 @@ type Connected struct{}
 type OwnPushName struct{}
 type Disconnected struct {
 	Reason string `json:"reason"`
+	Code   int    `json:"code,omitempty"` // the ConnectFailure reason or TemporaryBan code of whatsmeow, for the log
 }
 
 // OwnDevices is the device list of the user's own account, read on each connection. IDs are the device ids.

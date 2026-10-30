@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.mau.fi/whatsmeow"
 )
 
 // Fake is a scripted Port for tests. A test calls Emit to play WhatsApp events.
@@ -446,7 +448,7 @@ func (f *Fake) Download(ref Media, dst *os.File, limit int64) error {
 	expired := slices.Contains(f.expired, ref.DirectPath)
 	f.mu.Unlock()
 	if expired {
-		return ErrMediaExpired
+		return fmt.Errorf("%w: %w", ErrMediaExpired, whatsmeow.ErrMediaDownloadFailedWith410)
 	}
 	if err != nil {
 		return err

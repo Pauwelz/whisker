@@ -48,9 +48,9 @@ func (c *Client) handle(evt any) {
 	case *events.StreamReplaced: // another client took the session: connecting again would start a fight over it
 		c.events <- Disconnected{Reason: DisconnectReplaced}
 	case *events.TemporaryBan:
-		c.events <- Disconnected{Reason: DisconnectTemporaryBan}
+		c.events <- Disconnected{Reason: DisconnectTemporaryBan, Code: int(evt.Code)}
 	case *events.ConnectFailure:
-		c.events <- Disconnected{Reason: DisconnectConnectFailure}
+		c.events <- Disconnected{Reason: DisconnectConnectFailure, Code: int(evt.Reason)}
 	case *events.Message:
 		if ReservedID(evt.Info.ID) {
 			return

@@ -136,7 +136,7 @@ func (l *mediaLoader) thumbnailDone(r mediaResult) bool {
 		if tooLarge {
 			storeFailed(l.logOut, storeWrite, l.chats.ClearThumbLink(r.chat, r.id))
 		}
-		fmt.Fprintln(l.logOut, "thumbnail download failed") // the error text could hold hosts
+		downloadFailed(l.logOut, "thumbnail", r.err)
 		return true
 	}
 	changed, err := l.chats.SetThumbnail(r.chat, r.id, r.data)
@@ -159,7 +159,7 @@ func (l *mediaLoader) done(r mediaResult) bool {
 		if errors.Is(r.err, whatsapp.ErrMediaExpired) && !r.retried && l.askPhone(r.chat, r.id) {
 			return true
 		}
-		fmt.Fprintln(l.logOut, "media download failed") // the error text could hold hosts or paths
+		downloadFailed(l.logOut, "media", r.err)
 		state = chatstore.MediaFailed
 	}
 	return l.end(r.chat, r.id, state)

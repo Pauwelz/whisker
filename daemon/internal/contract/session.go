@@ -142,7 +142,7 @@ func (s *session) startPort() bool {
 // connect connects the port. An unlinked Profile starts linking, and a failure ends it with `linkFailed`.
 func (s *session) connect() bool {
 	if err := s.port.Connect(); err != nil {
-		fmt.Fprintln(s.logOut, "connect failed") // the error text could name hosts
+		fmt.Fprintf(s.logOut, "connect failed reason=%s\n", whatsapp.ConnectCode(err))
 		if !s.port.Linked() {
 			return s.send(notification("linkFailed", map[string]any{"reason": whatsapp.ReasonConnectFailed}))
 		}
@@ -225,6 +225,9 @@ func (s *session) onEvent(ev whatsapp.Event) int {
 	case whatsapp.OwnPushName:
 		s.pres.pushNameKnown()
 	case whatsapp.Disconnected:
+		if ev.Code != 0 {
+			fmt.Fprintf(s.logOut, "disconnected reason=%s code=%d\n", ev.Reason, ev.Code)
+		}
 		ok = s.box.disconnected(ev.Reason) && s.hist.disconnected()
 	case whatsapp.OwnDevices:
 		ok = s.ownDevices(ev)
