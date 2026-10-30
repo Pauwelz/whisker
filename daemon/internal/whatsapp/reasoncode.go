@@ -3,6 +3,7 @@ package whatsapp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 
 	"go.mau.fi/whatsmeow"
@@ -30,6 +31,15 @@ func DownloadStatus(err error) int {
 		return he.StatusCode
 	}
 	return 0
+}
+
+// markExpired wraps a download error whose HTTP status says the link is dead (403, 404 or 410) in ErrMediaExpired. Other errors stay as they are.
+func markExpired(err error) error {
+	switch DownloadStatus(err) {
+	case 403, 404, 410:
+		return fmt.Errorf("%w: %w", ErrMediaExpired, err)
+	}
+	return err
 }
 
 // PresenceReason maps a presence error to one of the reasons above.

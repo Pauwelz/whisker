@@ -12,8 +12,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 - A sent image now carries its width and height, with the rotation of the photo applied.
 - After a restart, whisker still answers a retry request for a Message you sent in the last 7 days. The recipient no longer sees "Waiting for this message". whisker deletes that copy when you delete, revoke or clear the Message, or when it expires.
 - When a Message does not decrypt, whisker asks your phone to send it again. The Message arrives late and does not go missing.
-
-- Retry on Media with an expired link now asks your phone to upload the Media again, then downloads it. This helps most with old Media from History Sync. When the phone no longer has the Media, the Message shows "Not on phone" and Retry stops.
+- Retry on Media with an expired link now asks your phone to upload the Media again, then downloads it. This helps most with old Media from History Sync. When the phone no longer has the Media, the Message shows "Not on phone" and Retry stops. When the phone does not answer in 2 minutes, the download fails and Retry shows again.
 
 ### Changed
 

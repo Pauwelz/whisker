@@ -105,3 +105,49 @@ func TestRecoveredLinkThatExpiresAgainFails(t *testing.T) {
 		t.Errorf("requests = %v, want one", got)
 	}
 }
+
+// A phone that never answers ends the wait: the Media fails (Retry shows again), the request is dropped, and a late answer changes nothing.
+func TestUnansweredMediaRetryFails(t *testing.T) {
+	r := expiredImage(t)
+	r.expiry.Fire() // the sweep timer, set first
+	r.expiry.Fire() // the wait for the phone
+	if f := r.nextFrame(); !strings.Contains(f, `"failed"`) {
+		t.Fatalf("frame = %s, want failed", f)
+	}
+	if got := r.port.ForgottenMediaRetries(); len(got) != 1 || got[0] != mediaChat+"|m1" {
+		t.Errorf("forgotten = %v, want the request of m1", got)
+	}
+	r.port.Emit(whatsapp.MediaRetried{Chat: mediaChat, ID: "m1", DirectPath: "/new"})
+	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{ID: "t1", Sender: mediaChat, Time: 6, Text: "hi"}})
+	if f := r.nextFrame(); strings.Contains(f, `"ready"`) {
+		t.Fatalf("frame = %s, a late answer must not download", f)
+	}
+	if n := r.port.Downloads(); n != 1 {
+		t.Errorf("downloads = %d, want 1", n)
+	}
+	r.send(`{"jsonrpc":"2.0","id":3,"method":"media.download","params":{"chat":"` + mediaChat + `","id":"m1"}}`)
+	if f := r.nextFrame(); strings.Contains(f, "-32008") {
+		t.Fatalf("frame = %s, a failed Media can start again", f)
+	}
+}
+
+// A request to the phone that cannot be sent ends the Media as failed, at once.
+func TestMediaRetryThatCannotBeSentFails(t *testing.T) {
+	r := startedRunner(t)
+	r.port.SetDownload("pixels", nil)
+	r.port.SetExpired("/old")
+	r.port.SetMediaRetryError(errors.New("boom"))
+	r.port.Emit(whatsapp.NewMessage{Chat: mediaChat, Message: whatsapp.Message{
+		ID: "m1", Sender: mediaChat, Time: 5,
+		Media: &whatsapp.Media{Kind: media.Image, Mime: "image/jpeg", Size: 6, Key: make([]byte, 32), DirectPath: "/old"},
+	}})
+	for _, want := range []string{`"downloading"`, "chatsChanged", `"failed"`} {
+		if f := r.nextFrame(); !strings.Contains(f, want) {
+			t.Fatalf("frame = %s, want %s", f, want)
+		}
+	}
+	r.send(`{"jsonrpc":"2.0","id":3,"method":"media.download","params":{"chat":"` + mediaChat + `","id":"m1"}}`)
+	if f := r.nextFrame(); strings.Contains(f, "-32008") {
+		t.Fatalf("frame = %s, a failed Media can start again", f)
+	}
+}

@@ -62,6 +62,8 @@ type Port interface {
 	// key is the media key. The answer comes later as a MediaRetried event. It returns ErrOffline when there is no connection.
 	// It can block for a long time: call it off the Daemon loop.
 	RequestMediaRetry(chat, sender, id string, fromMe bool, key []byte) error
+	// ForgetMediaRetry drops the request of RequestMediaRetry for a Message. The phone did not answer in time; a late answer is ignored.
+	ForgetMediaRetry(chat, id string)
 	// DownloadThumbnail downloads the separate thumbnail of Media (ThumbDirectPath), and checks it against its hashes.
 	DownloadThumbnail(ref Media) ([]byte, error)
 	// MarkRead sends a Read Receipt for Messages of one sender in a Chat. In a Group Chat sender is the author.

@@ -9,6 +9,7 @@ import (
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 )
@@ -134,5 +135,46 @@ func TestRetryInfoNamesTheLIDSenderInALIDGroup(t *testing.T) {
 	}
 	if got := c.retryInfo(other, other.String(), "m1", false); !got.Sender.IsEmpty() || got.IsGroup {
 		t.Errorf("direct info = %+v, want no sender", got)
+	}
+}
+
+// A Direct Chat with a known LID gets the receipt by LID. Without a LID the phone JID goes out.
+func TestRetryInfoAddressesADirectChatByLID(t *testing.T) {
+	own := types.JID{User: "3160", Server: types.DefaultUserServer}
+	other := types.JID{User: "3161", Server: types.DefaultUserServer}
+	otherLID := types.JID{User: "9161", Server: types.HiddenUserServer}
+	stranger := types.JID{User: "3162", Server: types.DefaultUserServer}
+	dev := &store.Device{ID: &own, LIDs: pnToLID{pairs: map[types.JID]types.JID{other: otherLID}}}
+	c := &Client{cli: whatsmeow.NewClient(dev, waLog.Noop)}
+
+	if got := c.retryInfo(other, "", "m1", false); got.Chat != otherLID {
+		t.Errorf("chat = %v, want %v", got.Chat, otherLID)
+	}
+	if got := c.retryInfo(stranger, "", "m1", false); got.Chat != stranger {
+		t.Errorf("chat = %v, want %v", got.Chat, stranger)
+	}
+}
+
+// Two Chats can hold the same Message ID. The answer for one must not use the media key of the other.
+func TestMediaRetryAnswerIsKeyedByChat(t *testing.T) {
+	c := systemClient()
+	chatA := types.JID{User: "3161", Server: types.DefaultUserServer}
+	chatB := types.JID{User: "3162", Server: types.DefaultUserServer}
+	c.retries.Store(retryKey{chatA.String(), "m1"}, []byte("a"))
+	c.retries.Store(retryKey{chatB.String(), "m1"}, []byte("b"))
+
+	c.handle(&events.MediaRetry{MessageID: "m1", ChatID: chatB, Error: &events.MediaRetryError{Code: 2}})
+	if got := (<-c.events).(MediaRetried); got.Chat != chatB.String() || !got.NotOnPhone {
+		t.Errorf("event = %+v, want not on phone in %v", got, chatB)
+	}
+	if _, kept := c.retries.Load(retryKey{chatA.String(), "m1"}); !kept {
+		t.Error("the request of the other Chat was dropped")
+	}
+	c.ForgetMediaRetry(chatA.String(), "m1")
+	c.handle(&events.MediaRetry{MessageID: "m1", ChatID: chatA, Error: &events.MediaRetryError{Code: 2}})
+	select {
+	case ev := <-c.events:
+		t.Errorf("event %+v after the request was forgotten", ev)
+	default:
 	}
 }

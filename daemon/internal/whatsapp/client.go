@@ -56,7 +56,7 @@ type Client struct {
 
 	// lidGroups holds the addressing mode of each Group Chat that an event or a group lookup showed: true for LID.
 	lidGroups sync.Map
-	// retries holds the media key of each Message the phone was asked to upload again, by Message ID, until its answer comes.
+	// retries holds the media key of each Message the phone was asked to upload again, by chat and Message ID, until its answer comes.
 	retries   sync.Map
 	groupInfo func(context.Context, types.JID) (*types.GroupInfo, error) // the group lookup; a test replaces it
 }
@@ -420,16 +420,11 @@ func (c *Client) Download(ref Media, dst *os.File, limit int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 	defer cancel()
 	err := c.cli.DownloadMediaWithPathToFile(ctx, ref.DirectPath, ref.FileEncSHA256, ref.FileSHA256, ref.Key, whatsmeow.MediaType(ref.Kind.Info()), "", false, capDisk{file: dst, max: limit})
-	if errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith403) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith404) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith410) {
-		return fmt.Errorf("%w: %w", ErrMediaExpired, err)
-	}
-	return err
+	return markExpired(err)
 }
 
-type pendingRetry struct {
-	chat string
-	key  []byte
-}
+// retryKey names a Message in the retries map. The chat is the phone JID string of the chat store.
+type retryKey struct{ chat, id string }
 
 // RequestMediaRetry asks the phone to upload the Media again. In a LID group the receipt names the author by LID, as the group expects.
 func (c *Client) RequestMediaRetry(chat, sender, id string, fromMe bool, key []byte) error {
@@ -441,18 +436,28 @@ func (c *Client) RequestMediaRetry(chat, sender, id string, fromMe bool, key []b
 		return err
 	}
 	info := c.retryInfo(jid, sender, id, fromMe)
-	c.retries.Store(id, pendingRetry{chat: chat, key: key})
+	k := retryKey{chat, id}
+	c.retries.Store(k, key)
 	ctx, cancel := context.WithTimeout(context.Background(), editTimeout)
 	defer cancel()
 	if err := c.cli.SendMediaRetryReceipt(ctx, &info, key); err != nil {
-		c.retries.Delete(id)
+		c.retries.Delete(k)
 		return err
 	}
 	return nil
 }
 
+// ForgetMediaRetry drops the media key of a request that the phone did not answer. A later answer is ignored.
+func (c *Client) ForgetMediaRetry(chat, id string) { c.retries.Delete(retryKey{chat, id}) }
+
 // retryInfo is the Message a media retry receipt names. Only a group names the author.
+// A Direct Chat with a known LID goes out by LID, as WhatsApp addresses it. shortcut: a LID in the store counts as LID addressing.
 func (c *Client) retryInfo(chat types.JID, sender, id string, fromMe bool) types.MessageInfo {
+	if chat.Server == types.DefaultUserServer {
+		if lid := c.lidFor(chat); !lid.IsEmpty() {
+			chat = lid
+		}
+	}
 	info := types.MessageInfo{ID: id, MessageSource: types.MessageSource{Chat: chat, IsFromMe: fromMe, IsGroup: chat.Server == types.GroupServer}}
 	if info.IsGroup {
 		c.learnAddressing(chat)
@@ -463,13 +468,13 @@ func (c *Client) retryInfo(chat types.JID, sender, id string, fromMe bool) types
 
 // mediaRetried turns the answer of the phone into a MediaRetried event. It ignores an answer nobody asked for or one that does not decrypt.
 func (c *Client) mediaRetried(evt *events.MediaRetry) {
-	v, ok := c.retries.LoadAndDelete(evt.MessageID)
+	k := retryKey{c.phone(evt.ChatID).String(), evt.MessageID}
+	v, ok := c.retries.LoadAndDelete(k)
 	if !ok {
 		return
 	}
-	p := v.(pendingRetry)
-	out := MediaRetried{Chat: p.chat, ID: evt.MessageID}
-	data, err := whatsmeow.DecryptMediaRetryNotification(evt, p.key)
+	out := MediaRetried{Chat: k.chat, ID: k.id}
+	data, err := whatsmeow.DecryptMediaRetryNotification(evt, v.([]byte))
 	switch {
 	case errors.Is(err, whatsmeow.ErrMediaNotAvailableOnPhone):
 		out.NotOnPhone = true

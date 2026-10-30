@@ -79,18 +79,26 @@ func (c *Client) wireJID(chat, jid types.JID) types.JID {
 	if lid, _ := c.lidGroups.Load(chat); lid != true || jid.Server != types.DefaultUserServer {
 		return jid
 	}
+	if lid := c.lidFor(jid); !lid.IsEmpty() {
+		return lid
+	}
+	return jid // shortcut: with no LID in the store the phone JID goes out, as before; upgrade when WhatsApp offers a lookup for it
+}
+
+// lidFor is the LID of a phone JID: the user's own, or one from the LID store. It is the empty JID when none is known.
+func (c *Client) lidFor(jid types.JID) types.JID {
 	if own := c.cli.Store.ID; own != nil && jid.User == own.User && !c.cli.Store.GetLID().IsEmpty() {
 		return c.cli.Store.GetLID().ToNonAD()
 	}
 	if c.cli.Store.LIDs == nil {
-		return jid
+		return types.EmptyJID
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), storeTimeout)
 	defer cancel()
-	if mapped, err := c.cli.Store.LIDs.GetLIDForPN(ctx, jid); err == nil && !mapped.IsEmpty() {
+	if mapped, err := c.cli.Store.LIDs.GetLIDForPN(ctx, jid); err == nil {
 		return mapped.ToNonAD()
 	}
-	return jid // shortcut: with no LID in the store the phone JID goes out, as before; upgrade when WhatsApp offers a lookup for it
+	return types.EmptyJID
 }
 
 func (c *Client) React(chat, id, sender, emoji string) error {

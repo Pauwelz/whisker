@@ -36,6 +36,7 @@ type Fake struct {
 	expired        []string
 	retries        []string
 	retryErr       error
+	forgotten      []string
 	downloads      int
 	dlDelay        time.Duration
 	dlActive       int
@@ -426,6 +427,19 @@ func (f *Fake) MediaRetryRequests() []string {
 	return append([]string{}, f.retries...)
 }
 
+// ForgottenMediaRetries lists the ForgetMediaRetry calls as "chat|id", in order.
+func (f *Fake) ForgottenMediaRetries() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.forgotten...)
+}
+
+func (f *Fake) ForgetMediaRetry(chat, id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.forgotten = append(f.forgotten, chat+"|"+id)
+}
+
 func (f *Fake) RequestMediaRetry(chat, sender, id string, fromMe bool, _ []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -450,7 +464,7 @@ func (f *Fake) Download(ref Media, dst *os.File, limit int64) error {
 	expired := slices.Contains(f.expired, ref.DirectPath)
 	f.mu.Unlock()
 	if expired {
-		return fmt.Errorf("%w: %w", ErrMediaExpired, whatsmeow.ErrMediaDownloadFailedWith410)
+		return markExpired(whatsmeow.ErrMediaDownloadFailedWith410)
 	}
 	if err != nil {
 		return err
