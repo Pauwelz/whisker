@@ -16,6 +16,7 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- whisker no longer fetches a separate thumbnail again on each start when its link expired or its hash does not match. A thumbnail that failed for a network fault is still tried again on the next start.
 - A sticker now shows at the size of a Media thumbnail, with its own aspect ratio, so it fits the compact Chat.
 - The actions of a Message are now Message links, a row of links below the Message. A click on ⋯ or a right click shows or hides the Message links. Escape closes them before the Chat.
 - The Media links (download, open, save as…) show only while the pointer is over the Message.

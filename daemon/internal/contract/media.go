@@ -137,10 +137,10 @@ func (l *mediaLoader) autoImage(chat, id string, ref chatstore.MediaRef) {
 
 // thumbnailDone stores a fetched thumbnail and tells the Plugin. It returns false when a frame could not be written.
 func (l *mediaLoader) thumbnailDone(r mediaResult) bool {
-	tooLarge := errors.Is(r.err, whatsapp.ErrThumbnailTooLarge) || len(r.data) > whatsapp.MaxThumbnailBytes
-	if r.err != nil || len(r.data) == 0 || tooLarge {
-		// An oversized link is hostile: a later run does not fetch it again. Another failure is tried in the next run.
-		if tooLarge {
+	dead := whatsapp.ThumbnailLinkDead(r.err) || len(r.data) > whatsapp.MaxThumbnailBytes
+	if r.err != nil || len(r.data) == 0 || dead {
+		// A dead link is not fetched again in a later run. Another failure is tried in the next run.
+		if dead {
 			storeFailed(l.logOut, storeWrite, l.chats.ClearThumbLink(r.chat, r.id))
 		}
 		downloadFailed(l.logOut, "thumbnail", r.err)

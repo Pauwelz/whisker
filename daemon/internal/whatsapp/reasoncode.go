@@ -33,13 +33,28 @@ func DownloadStatus(err error) int {
 	return 0
 }
 
-// markExpired wraps a download error whose HTTP status says the link is dead (403, 404 or 410) in ErrMediaExpired. Other errors stay as they are.
-func markExpired(err error) error {
+// expired is true when the HTTP status of a download says the link is dead: 403, 404 or 410.
+func expired(err error) bool {
 	switch DownloadStatus(err) {
 	case 403, 404, 410:
+		return true
+	}
+	return false
+}
+
+// markExpired wraps a download error from an expired link in ErrMediaExpired. Other errors stay as they are.
+func markExpired(err error) error {
+	if expired(err) {
 		return fmt.Errorf("%w: %w", ErrMediaExpired, err)
 	}
 	return err
+}
+
+// ThumbnailLinkDead is true when a separate thumbnail link can never give the thumbnail: it is oversized, expired, or its hash or MAC does not match.
+// A timeout, a network error or another status can heal, so the next run tries again.
+func ThumbnailLinkDead(err error) bool {
+	return errors.Is(err, ErrThumbnailTooLarge) || expired(err) ||
+		errors.Is(err, whatsmeow.ErrInvalidMediaSHA256) || errors.Is(err, whatsmeow.ErrInvalidMediaEncSHA256) || errors.Is(err, whatsmeow.ErrInvalidMediaHMAC)
 }
 
 // PresenceReason maps a presence error to one of the reasons above.

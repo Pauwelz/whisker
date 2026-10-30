@@ -3,6 +3,7 @@ package contract_test
 import (
 	"errors"
 	"fmt"
+	"go.mau.fi/whatsmeow"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,25 +183,37 @@ func TestFailedThumbnailIsTriedInTheNextRun(t *testing.T) {
 	}
 }
 
-// The real download fails with a wrapped ErrThumbnailTooLarge: the link is cleared, so the next run does not fetch it.
-func TestThumbnailTooLargeErrorClearsTheLink(t *testing.T) {
-	r := newRunner(t)
-	r.port.SetThumbnail("", fmt.Errorf("last host: %w", whatsapp.ErrThumbnailTooLarge))
-	startWithVideo(t, r)
-	r.send(listVideoChat)
-	r.nextFrame()
-	r.waitLog("thumbnail download failed")
-	r.restart(t, nil)
-	r.port.SetLinked(true)
-	r.start()
-	r.nextFrame() // ready
-	r.nextFrame() // linked
-	r.send(listVideoChat)
-	r.nextFrame()
-	r.send(listVideoChat)
-	r.nextFrame()
-	if n := r.currentPort().ThumbnailDownloads(); n != 0 {
-		t.Errorf("thumbnail downloads in the new run = %d, want 0", n)
+// A link that can never give the thumbnail is cleared, so the next run does not fetch it: it is oversized, expired, or its hash or MAC does not match.
+func TestDeadThumbnailLinkIsCleared(t *testing.T) {
+	for name, err := range map[string]error{
+		"too large":   fmt.Errorf("last host: %w", whatsapp.ErrThumbnailTooLarge),
+		"403":         whatsmeow.ErrMediaDownloadFailedWith403,
+		"404":         whatsmeow.ErrMediaDownloadFailedWith404,
+		"410":         whatsmeow.ErrMediaDownloadFailedWith410,
+		"plain hash":  whatsmeow.ErrInvalidMediaSHA256,
+		"cipher hash": whatsmeow.ErrInvalidMediaEncSHA256,
+		"hmac":        whatsmeow.ErrInvalidMediaHMAC,
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newRunner(t)
+			r.port.SetThumbnail("", err)
+			startWithVideo(t, r)
+			r.send(listVideoChat)
+			r.nextFrame()
+			r.waitLog("thumbnail download failed")
+			r.restart(t, nil)
+			r.port.SetLinked(true)
+			r.start()
+			r.nextFrame() // ready
+			r.nextFrame() // linked
+			r.send(listVideoChat)
+			r.nextFrame()
+			r.send(listVideoChat)
+			r.nextFrame()
+			if n := r.currentPort().ThumbnailDownloads(); n != 0 {
+				t.Errorf("thumbnail downloads in the new run = %d, want 0", n)
+			}
+		})
 	}
 }
 
