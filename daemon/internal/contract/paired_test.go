@@ -1,6 +1,7 @@
 package contract_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -128,5 +129,58 @@ func TestAMotionPhotoChildTurnsTheParentIntoAVideo(t *testing.T) {
 	}
 	if f := page(t, r); strings.Contains(f, `"c1"`) {
 		t.Errorf("page = %s, want no line for the child", f)
+	}
+}
+
+// nextFrames reads frames until each wanted text came, in any order. It fails when a frame matches none of them.
+func nextFrames(t *testing.T, r *runner, wants ...string) {
+	t.Helper()
+	left := append([]string(nil), wants...)
+	for len(left) > 0 {
+		f := r.nextFrame()
+		i := slices.IndexFunc(left, func(w string) bool { return strings.Contains(f, w) })
+		if i < 0 {
+			t.Fatalf("frame = %s, want one of %q", f, left)
+		}
+		left = slices.Delete(left, i, i+1)
+	}
+}
+
+// A child can arrive before its parent, for example when the parent needed a retry. The parent then takes the Media of the child,
+// and the line of the child goes.
+func TestAParentAfterItsChildTakesTheMediaOfTheChild(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetDownload("pixels", nil)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	r.port.Emit(childOf(&whatsapp.Media{Kind: media.Video, Mime: "video/mp4", Size: 6, Key: make([]byte, 32), DirectPath: "/mp", FileEncSHA256: []byte("mp"), Duration: 2}))
+	nextFrames(t, r, `"id":"c1"`, "chatsChanged") // a video waits for a click
+	emitParent(r)
+	nextFrames(t, r, `"id":"p1"`, "chatsChanged", `"kind":"video"`, `"messageExpired"`, "chatsChanged")
+	f := page(t, r)
+	if strings.Contains(f, `"c1"`) || !strings.Contains(f, `"kind":"video"`) || !strings.Contains(f, "sunset") {
+		t.Errorf("page = %s, want only the parent, with its caption and the video of the child", f)
+	}
+}
+
+// A child of another author never takes over a Message: its line stays.
+func TestAChildOfAnotherAuthorKeepsItsLine(t *testing.T) {
+	r := newRunner(t)
+	r.port.SetLinked(true)
+	r.port.SetDownload("pixels", nil)
+	r.start()
+	r.nextFrame() // ready
+	r.nextFrame() // linked
+	child := childOf(&whatsapp.Media{Kind: media.Video, Mime: "video/mp4", Size: 6, Key: make([]byte, 32), DirectPath: "/mp", FileEncSHA256: []byte("mp")})
+	child.FromMe, child.Sender = true, ""
+	child.Child.Message.FromMe, child.Child.Message.Sender = true, ""
+	r.port.Emit(child)
+	nextFrames(t, r, `"id":"c1"`, "chatsChanged")
+	emitParent(r)
+	nextFrames(t, r, `"id":"p1"`, "chatsChanged", `"ready"`)
+	if f := page(t, r); !strings.Contains(f, `"c1"`) || !strings.Contains(f, `"p1"`) {
+		t.Errorf("page = %s, want both lines", f)
 	}
 }

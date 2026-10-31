@@ -73,6 +73,8 @@ type session struct {
 	retryConnect <-chan time.Time // fires when a failed connect of a linked Profile is due again
 	muteTick     <-chan time.Time // fires when the next Mute ends, so the bar count moves
 	muteAt       int64            // the Mute end that muteTick waits for
+	// orphans are live paired children stored as their own line, by Chat and parent ID. The parent takes their Media when it comes.
+	orphans map[string]whatsapp.MediaReplaced
 }
 
 // open opens the Profile and sends `ready`, or tells the Plugin that the keyring is unavailable.
@@ -104,6 +106,7 @@ func (s *session) open() int {
 		s.loader = newMediaLoader(s.chats, s.port, s.media, s.box.notify, s.logOut, autoDownloads)
 		s.done.media = s.loader.results
 		s.hist = newHistory(s.port, s.send, s.logOut)
+		s.orphans = map[string]whatsapp.MediaReplaced{}
 		s.done.historyEnded = s.hist.ended
 		// Messages that expired while the Daemon was off go before `ready`: the Plugin has shown none yet.
 		_, err := s.chats.Expire(Clock.Now().Unix())
@@ -330,15 +333,37 @@ func (s *session) mediaReplaced(ev whatsapp.MediaReplaced) bool {
 		s.loader.autoStart(ev.Chat, ev.ID)
 		return s.box.notify(ev.Chat, ev.ID)
 	}
-	// shortcut: a parent that arrives after its child shows as a second line; pair them in the store if that happens in practice.
+	// shortcut: the orphans live in memory only, so a Daemon restart or a parent from History Sync leaves two lines; persist them if that shows up.
+	s.orphans[messageKey(ev.Chat, ev.ID)] = ev
 	return s.incomingMessage(ev.Child)
 }
 
 // incomingMessage stores a live Message and starts the download that livePolicy asked for.
+// A new Message whose paired child came first takes the Media of that child before its own download starts.
 func (s *session) incomingMessage(ev whatsapp.NewMessage) bool {
 	ok, isNew := s.box.incomingMessage(ev)
 	if isNew {
+		ok = s.adoptOrphan(ev.Chat, ev.Message.ID) && ok
 		s.loader.autoStart(ev.Chat, ev.Message.ID)
 	}
 	return ok
+}
+
+// adoptOrphan gives a new parent the Media of its child that came first, then deletes the line of the child.
+// The child keeps its line when it may not replace the Media, for example when it has another author.
+func (s *session) adoptOrphan(chat, id string) bool {
+	key := messageKey(chat, id)
+	child, found := s.orphans[key]
+	if !found {
+		return true
+	}
+	delete(s.orphans, key)
+	replaced, err := s.chats.ReplaceMedia(child, livePolicy(child.Child, s.box.autoDownloads).MediaState)
+	if storeFailed(s.logOut, storeWrite, err) || !replaced {
+		return true
+	}
+	if !s.box.notify(chat, id) {
+		return false
+	}
+	return s.deletedForMe(whatsapp.DeletedForMe{Chat: chat, ID: child.Child.Message.ID}) && s.send(notification("chatsChanged", nil)) // the line of the child counted as unread
 }
