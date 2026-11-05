@@ -171,7 +171,10 @@ function dayLabel(seconds) {
 
 // The rows of the timeline, oldest first. Messages arrive oldest first.
 // A "day" row opens each day. A "system" row is a line that is not a Message (`system: true`).
-// A "message" row is `continued` when the row before it is a Message of the same sender: the line then hides time and sender.
+// A "message" row is `continued` when the row before it is a Message of the same sender, at most RUN_PAUSE seconds earlier:
+// the line then hides time and sender. So a longer pause starts a new Message Run with its own header.
+var RUN_PAUSE = 5 * 60
+
 function timelineRows(messages) {
   var rows = []
   var day = ""
@@ -186,7 +189,7 @@ function timelineRows(messages) {
       return
     }
     var previous = rows[rows.length - 1]
-    var continued = previous.kind === "message" && previous.message.fromMe === message.fromMe && previous.message.sender === message.sender
+    var continued = previous.kind === "message" && previous.message.fromMe === message.fromMe && previous.message.sender === message.sender && message.time - previous.message.time <= RUN_PAUSE
     rows.push({ kind: "message", message: message, continued: continued })
   })
   return rows

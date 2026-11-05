@@ -22,6 +22,18 @@ test("the Messages of the user form a run of their own", () => {
   assert.deepEqual(shape(rows), ["day", "m1", "~m2", "m3", "m4"]);
 });
 
+test("a pause of more than 5 minutes since the previous Message starts a run", () => {
+  const rows = Timeline.timelineRows([
+    from("a", "m1", at(1, 12, 0)),
+    from("a", "m2", at(1, 12, 4)),
+    from("a", "m3", at(1, 12, 9)),
+    from("a", "m4", at(1, 12, 15)),
+    mine("m5", at(1, 13, 0)),
+    mine("m6", at(1, 14, 0)),
+  ]);
+  assert.deepEqual(shape(rows), ["day", "m1", "~m2", "~m3", "m4", "m5", "m6"]);
+});
+
 test("a new day starts a run and adds a day separator", () => {
   const rows = Timeline.timelineRows([from("a", "m1", at(1, 23, 59)), from("a", "m2", at(2, 0, 1))]);
   assert.deepEqual(shape(rows), ["day", "m1", "day", "m2"]);

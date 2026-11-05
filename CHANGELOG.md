@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- A Message more than 5 minutes after the previous Message of the same sender now shows the sender and the time again. A pause in a Chat is now visible.
+
 ## [1.3.1] - 2026-10-31
 
 ### Fixed
