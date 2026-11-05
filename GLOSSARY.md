@@ -68,6 +68,10 @@ _Avoid_: File, blob, upload, asset
 A chronological entry in a Chat timeline sent by a Participant, carrying text or Media, and open to subsequent in-place mutations (Edit, Reaction, Revoke, Delivery State). A System Message is the one kind that no Participant writes.
 _Avoid_: Post, item, event, packet, bubble
 
+**Message Run**:
+Consecutive Messages from one sender, close in time, under one header with the sender and the time. A new sender, a long pause, a new day or a System Message starts a new Message Run.
+_Avoid_: group, cluster, block, burst
+
 **Message links**:
 The actions of one Message, such as reply, copy text and delete, as links below the Message. A click on ⋯ or a right click on the Message shows them. They look like the Chat links.
 _Avoid_: Message menu, action menu
