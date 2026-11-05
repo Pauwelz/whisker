@@ -22,7 +22,7 @@ test("the Messages of the user form a run of their own", () => {
   assert.deepEqual(shape(rows), ["day", "m1", "~m2", "m3", "m4"]);
 });
 
-test("a pause of more than 5 minutes since the previous Message starts a run", () => {
+test("a pause of more than 5 minutes since the previous Message starts a Message Run", () => {
   const rows = Timeline.timelineRows([
     from("a", "m1", at(1, 12, 0)),
     from("a", "m2", at(1, 12, 4)),

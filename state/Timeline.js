@@ -169,12 +169,13 @@ function dayLabel(seconds) {
   return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate())
 }
 
-// The rows of the timeline, oldest first. Messages arrive oldest first.
-// A "day" row opens each day. A "system" row is a line that is not a Message (`system: true`).
-// A "message" row is `continued` when the row before it is a Message of the same sender, at most RUN_PAUSE seconds earlier:
-// the line then hides time and sender. So a longer pause starts a new Message Run with its own header.
+// The longest pause, in seconds, between two Messages of one Message Run.
 var RUN_PAUSE = 5 * 60
 
+// The rows of the timeline, oldest first. Messages arrive oldest first.
+// A "day" row opens each day. A "system" row is a line that is not a Message (`system: true`).
+// A "message" row is `continued` when the row before it is a Message of the same sender, at most RUN_PAUSE earlier.
+// A continued line hides time and sender. A longer pause starts a new Message Run with its own header.
 function timelineRows(messages) {
   var rows = []
   var day = ""
