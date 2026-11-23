@@ -124,6 +124,10 @@ _Avoid_: Unsent buffer, scratch text, composer cache
 The Media that waits in a Draft until the user sends it. The user adds it with a paste. A Draft holds up to 30, in order. They never combine with a Quote or an Edit.
 _Avoid_: Staged file, upload, pick
 
+**Attachment Thumbnail**:
+The small image of an image Attachment in a Draft. The user checks it before sending.
+_Avoid_: Attachment preview, paste preview
+
 **App State**:
 The state that the primary phone syncs to all linked devices, such as `Pinned`, `Muted`, `Archived` and the Read Marker of a Chat. It is not the state of whisker.
 _Avoid_: Chat State, user preferences, settings sync, chat flags
