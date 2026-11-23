@@ -52,6 +52,19 @@ function plain(state) {
   return JSON.parse(JSON.stringify(Draft.draftOf(state)));
 }
 
+test("PNG, JPEG and WebP Attachments get an Attachment Thumbnail, and other types stay text-only", () => {
+  const paths = ["/p/a.png", "/p/b.JPG", "/p/c.jpeg", "/p/d.webp", "/p/e.gif", "/p/f.mp4", "/p/g.ogg", "/p/h.pdf", "/p/png", "/p.png/i"];
+  const state = Draft.changeDraft(opened(), { attachments: paths });
+  assert.deepEqual(Draft.attachmentRows(state).map((r) => r.thumbnail), [
+    "file:///p/a.png", "file:///p/b.JPG", "file:///p/c.jpeg", "file:///p/d.webp", "", "", "", "", "", "",
+  ]);
+});
+
+test("an Attachment Thumbnail keeps a # or ? in the file name", () => {
+  const state = Draft.changeDraft(opened(), { attachments: ["/p/a#1?.png"] });
+  assert.equal(Draft.attachmentRows(state)[0].thumbnail, "file:///p/a%231%3F.png");
+});
+
 test("Attachments are part of the Draft, in order, and keep the text", () => {
   let state = Draft.changeDraft(opened(), { text: "look" });
   state = Draft.changeDraft(state, { attachments: ["/home/me/photo.png", "/home/me/b.pdf"] });

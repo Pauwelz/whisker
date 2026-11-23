@@ -1,6 +1,7 @@
 .pragma library
 
 .import "Common.js" as Common
+.import "Media.js" as Media
 .import "Message.js" as Message
 
 // The Draft of the open Chat: text, Quote, Edit and Attachments, the send, paste and typing rules, and the composer keys.
@@ -196,12 +197,17 @@ function attachmentName(path) {
   return path.split("/").pop()
 }
 
-// One row per Attachment: its path, its text, and whether it is marked as not sendable.
+// The file: URL of the Attachment Thumbnail of `path`, or "" for a type that stays text-only.
+function attachmentThumbnail(path) {
+  return /\.(png|jpe?g|webp)$/i.test(attachmentName(path)) ? Media.fileUrl(path) : ""
+}
+
+// One row per Attachment: its path, its text, its Attachment Thumbnail, and whether it is marked as not sendable.
 function attachmentRows(state) {
   var marks = (state.openChat && state.openChat.unsendable) || []
   return draftOf(state).attachments.map(function(path) {
     var bad = marks.indexOf(path) >= 0
-    return { path: path, bad: bad, label: (bad ? "Not sendable: " : "Attached: ") + attachmentName(path) }
+    return { path: path, bad: bad, label: (bad ? "Not sendable: " : "Attached: ") + attachmentName(path), thumbnail: attachmentThumbnail(path) }
   })
 }
 

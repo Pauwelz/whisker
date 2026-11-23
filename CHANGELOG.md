@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- A PNG, JPEG or WebP Attachment now shows an Attachment Thumbnail in the Draft, so you can check the image before you send it.
+
 ### Fixed
 
 - Pasted text now appears once in the composer when the bar runs on more than one monitor.
