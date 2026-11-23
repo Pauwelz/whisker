@@ -944,19 +944,30 @@ Panel {
             font.pixelSize: Style.font.body
           }
 
-          // One row per Attachment, each with its own ✕. A row that the Daemon refused shows in the error colour. After 4 rows the list scrolls.
+          // One row per Attachment, each with its own ✕. A row that the Daemon refused shows in the error colour. After 3 rows the list scrolls.
           ListView {
             id: attachmentList
             visible: Draft.hasAttachment(root.draft)
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(count, 4) * 28
+            Layout.preferredHeight: Math.min(count, 3) * 40
             clip: true
             model: Draft.attachmentRows(root.view)
             delegate: RowLayout {
               id: attachmentRow
               required property var modelData
               width: attachmentList.width
-              height: 28
+              height: 40
+              // shortcut: another app can overwrite a copied file after the paste, so this image can be stale; reload it if users send the wrong image.
+              Image {
+                Layout.preferredWidth: 36
+                Layout.preferredHeight: 36
+                visible: status === Image.Ready // a missing or broken image leaves a text-only row
+                source: attachmentRow.modelData.thumbnail
+                fillMode: Image.PreserveAspectFit
+                autoTransform: true // a photo shows upright from its EXIF Orientation
+                sourceSize: Qt.size(72, 72) // twice the box for a scaled screen. A constant size lets a rebuilt row reuse the Qt image cache.
+                asynchronous: true
+              }
               Text {
                 Layout.fillWidth: true
                 elide: Text.ElideMiddle
