@@ -230,6 +230,29 @@ test("a paste of files and text asks first, and a switch of Chat drops the quest
   assert.equal(Draft.pasteQuestion(Timeline.openChat(state, { jid: "2@s.whatsapp.net", name: "Bo", kind: "direct" })), null);
 });
 
+test("each draft.paste reply goes to the composer that sent the request, in any order", () => {
+  const pending = Draft.pasteStarted(Draft.pasteStarted({}, 7, "left"), 8, "right");
+  const second = Draft.pasteReplied(pending, { id: 8, result: { chat: chat.jid, pasted: [] } });
+  assert.equal(second.origin, "right");
+  const first = Draft.pasteReplied(second.pending, { id: 7, result: { chat: chat.jid, pasted: [] } });
+  assert.equal(first.origin, "left");
+  assert.equal(Object.keys(first.pending).length, 0);
+});
+
+test("a frame that answers no draft.paste has no origin and keeps the pending pastes", () => {
+  const pending = Draft.pasteStarted({}, 7, "left");
+  for (const frame of [{ id: 9, result: {} }, { method: "messageAdded", params: {} }]) {
+    const replied = Draft.pasteReplied(pending, frame);
+    assert.equal(replied.origin, null);
+    assert.equal(Object.keys(replied.pending).length, 1);
+  }
+});
+
+test("an error reply to draft.paste drops its pending paste", () => {
+  const replied = Draft.pasteReplied(Draft.pasteStarted({}, 7, "left"), { id: 7, error: { code: -32013, message: "x" } });
+  assert.equal(Object.keys(replied.pending).length, 0);
+});
+
 test("a question is open for the paste question or the Open question", () => {
   const open = { message, path: "/a" };
   assert.equal(Draft.questionOpen(opened(), null), false);

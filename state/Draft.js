@@ -135,6 +135,22 @@ function pastedAttachment(state, frame) {
   return frame.result.pasted
 }
 
+// Each monitor has a composer on the one Draft, so a text paste must go to one composer only.
+// `pending` maps the id of each open draft.paste request to its origin, the composer that sent it.
+function pasteStarted(pending, id, origin) {
+  var started = {}
+  started[id] = origin
+  return Common.withChanges(pending, started)
+}
+
+// The origin of the draft.paste that `frame` answers, or null, and `pending` without that request. An error reply also ends it.
+function pasteReplied(pending, frame) {
+  if (!Object.prototype.hasOwnProperty.call(pending, frame.id)) return { origin: null, pending: pending }
+  var rest = Common.withChanges(pending, {})
+  delete rest[frame.id]
+  return { origin: pending[frame.id], pending: rest }
+}
+
 // A draft.paste reply with files and text asks the user first: the state keeps the files until the answer.
 function pasteAsked(state, paths) {
   return Common.withChanges(state, { pasteChoice: { jid: state.openChat.jid, paths: paths } })
