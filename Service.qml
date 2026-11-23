@@ -26,7 +26,7 @@ Item {
   property bool replacing: false
 
   // A Ctrl+V that gave no Attachment: the composer pastes text.
-  signal pasteText()
+  signal pasteText(var origin)
 
   // The Plugin never runs a Daemon with another version. It never restarts a Daemon that exited.
   // A wrong or missing binary is fetched once; a running wrong Daemon is stopped first.
@@ -431,19 +431,23 @@ Item {
     send(Message.reactRequest, view.openChat.jid, message.id, Message.reactionChoice(message, emoji))
   }
 
-  // Called by Ctrl+V in the composer. Copied files become Attachments; anything else comes back as pasteText.
-  function pasteIntoComposer() {
+  // The composer of each open draft.paste request (Draft.pasteStarted). It holds QML objects, so it stays out of `view`.
+  property var pasteOrigins: ({})
+
+  // Called by Ctrl+V in `origin`, a composer. Copied files become Attachments; anything else comes back as pasteText.
+  function pasteIntoComposer(origin) {
+    pasteOrigins = Draft.pasteStarted(pasteOrigins, nextRequestId, origin) // the id that send() gives this request
     send(Draft.pasteRequest, view.openChat.jid)
   }
 
   // Called by Attach or Paste text in the question about pasted files and text.
-  // attach: true attaches the files, false pastes the text.
-  function answerPaste(attach) {
+  // attach: true attaches the files, false pastes the text into `origin`, the composer whose question was answered.
+  function answerPaste(attach, origin) {
     var question = Draft.pasteQuestion(view)
     view = Draft.pasteAnswered(view)
     if (!question) return
     if (attach) changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(view), question.paths) })
-    else pasteText()
+    else pasteText(origin)
   }
 
   // Called by a text field that cut text over the limit.
@@ -548,7 +552,9 @@ Item {
         root.handleMediaFrame(frame)
         root.handleNotificationFrame(frame)
         var pasted = Draft.pastedAttachment(root.view, frame)
-        if (pasted !== null && pasted.length === 0) root.pasteText()
+        var replied = Draft.pasteReplied(root.pasteOrigins, frame)
+        root.pasteOrigins = replied.pending
+        if (pasted !== null && pasted.length === 0) root.pasteText(replied.origin)
         else if (pasted !== null && frame.result.alsoText) root.view = Draft.pasteAsked(root.view, pasted)
         else if (pasted !== null) root.changeDraft({ attachments: Draft.appendAttachments(Draft.draftOf(root.view), pasted) })
         if (Daemon.resendsAttention(frame)) root.syncAttention()

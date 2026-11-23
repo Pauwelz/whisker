@@ -7,6 +7,10 @@ and whisker uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- Pasted text now appears once in the composer when the bar runs on more than one monitor.
+
 ## [1.4.0] - 2026-11-16
 
 ### Changed

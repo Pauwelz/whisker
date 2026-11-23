@@ -107,8 +107,8 @@ FocusScope {
     panel: composer.panel
     text: composer.pasteQuestion ? composer.pasteQuestion.text : ""
     answers: [
-      { label: "attach", run: function() { composer.service.answerPaste(true); input.forceActiveFocus() } },
-      { label: "paste text", run: function() { composer.service.answerPaste(false); input.forceActiveFocus() } },
+      { label: "attach", run: function() { composer.service.answerPaste(true, composer); input.forceActiveFocus() } },
+      { label: "paste text", run: function() { composer.service.answerPaste(false, composer); input.forceActiveFocus() } },
       { label: "cancel", run: function() { composer.service.cancelQuestion(); input.forceActiveFocus() } }
     ]
   }
@@ -235,12 +235,12 @@ FocusScope {
         if (action === "default") return
         event.accepted = true
         if (action === "send") composer.service.submitComposer(text)
-        if (action === "paste") composer.service.pasteIntoComposer()
+        if (action === "paste") composer.service.pasteIntoComposer(composer)
       }
 
       Connections {
         target: composer.service
-        function onPasteText() { input.paste() }
+        function onPasteText(origin) { if (origin === composer) input.paste() }
       }
 
       Text {
